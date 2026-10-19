@@ -51,6 +51,37 @@ final class ConfigTest extends TestCase
         Config::fromArray($raw);
     }
 
+    public function testDerivesA32ByteKeyFromALongPassphrase(): void
+    {
+        $raw = self::valid();
+        $raw['app_key'] = str_repeat('Ab3$', 10);
+
+        $key = Config::fromArray($raw)->appKey;
+
+        self::assertSame(SODIUM_CRYPTO_SECRETBOX_KEYBYTES, strlen($key));
+        self::assertSame($key, Config::fromArray($raw)->appKey, 'Derivation must be deterministic.');
+        $raw['app_key'] = str_repeat('Ab3$', 10) . 'x';
+        self::assertNotSame($key, Config::fromArray($raw)->appKey);
+    }
+
+    public function testKeepsABase64KeyAsIs(): void
+    {
+        $bytes = random_bytes(32);
+        $raw = self::valid();
+        $raw['app_key'] = base64_encode($bytes);
+
+        self::assertSame($bytes, Config::fromArray($raw)->appKey);
+    }
+
+    public function testRejectsShortPassphrase(): void
+    {
+        $raw = self::valid();
+        $raw['app_key'] = str_repeat('a', Config::MIN_PASSPHRASE_LENGTH - 1);
+
+        $this->expectException(RuntimeException::class);
+        Config::fromArray($raw);
+    }
+
     public function testRejectsShortSetupToken(): void
     {
         $raw = self::valid();

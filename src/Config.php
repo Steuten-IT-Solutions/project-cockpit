@@ -11,6 +11,8 @@ use RuntimeException;
  */
 final class Config
 {
+    public const MIN_PASSPHRASE_LENGTH = 40;
+
     /**
      * @param array{dsn: string, user: string, password: string} $database
      */
@@ -49,10 +51,7 @@ final class Config
             throw new RuntimeException('base_url must be an origin without a trailing slash.');
         }
 
-        $appKey = base64_decode(self::string($raw, 'app_key'), true);
-        if ($appKey === false || strlen($appKey) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
-            throw new RuntimeException('app_key must be 32 random bytes, base64-encoded.');
-        }
+        $appKey = self::appKey(self::string($raw, 'app_key'));
 
         $setupToken = is_string($raw['setup_token'] ?? null) ? $raw['setup_token'] : '';
         if ($setupToken !== '' && strlen($setupToken) < 32) {
@@ -79,6 +78,30 @@ final class Config
         }
 
         return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone);
+    }
+
+    /**
+     * Accepts either 32 random bytes, base64-encoded, or a random passphrase of at
+     * least MIN_PASSPHRASE_LENGTH characters. A passphrase can be generated in a
+     * password manager without any tooling; SHA-256 turns it into a 32-byte key.
+     * That is sound only because the passphrase itself is random: a hash adds no
+     * strength to a guessable value, hence the length requirement.
+     */
+    private static function appKey(string $value): string
+    {
+        $decoded = base64_decode($value, true);
+        if ($decoded !== false && strlen($decoded) === SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
+            return $decoded;
+        }
+
+        if (strlen($value) < self::MIN_PASSPHRASE_LENGTH) {
+            throw new RuntimeException(sprintf(
+                'app_key must be 32 random bytes, base64-encoded, or a random passphrase of at least %d characters.',
+                self::MIN_PASSPHRASE_LENGTH,
+            ));
+        }
+
+        return hash('sha256', 'project-cockpit app_key v1' . "\0" . $value, true);
     }
 
     /**
