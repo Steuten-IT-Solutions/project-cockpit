@@ -49,7 +49,10 @@ in case the document root is ever pointed at the project root by mistake.
    `cockpit/config/config.php`, fill in the values and `chmod 600` it. `app_key` (≥ 40
    characters) and `setup_token` (≥ 32 characters, letters and digits only, because it is
    part of the setup URL) can be random passwords from a password manager. Never commit or paste these values anywhere.
-6. **Cron:** in the IONOS cron manager, run `cron/run.php` with PHP 8.4 every 15 minutes.
+6. **Cron:** in the IONOS cron manager create a *UnixCron* job. Its command field takes one
+   absolute path without spaces, so enter the path of `cron/run.sh` exactly as the dashboard
+   shows it under *Cron-Befehl*; the wrapper runs `cron/run.php` with the newest PHP 8.3/8.4
+   CLI (`/usr/bin/php` is PHP 4.4 on IONOS). Schedule: minutes `*/15`, all other fields `*`.
    The dashboard shows the last run and the PHP version it used.
 7. **First user:** open `https://cockpit.steuten-it-solutions.de/setup?token=<setup_token>`,
    create the account, enrol the authenticator app and store the recovery codes.
