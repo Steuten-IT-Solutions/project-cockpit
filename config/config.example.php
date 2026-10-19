@@ -48,11 +48,11 @@ return [
     // GitHub App (read-only) whose installations list the projects. Remove the
     // section to switch the sync off. Upload the app's private key over SFTP next
     // to this file and chmod 600 it; deployments never touch config/*.pem.
-    // Installations on accounts not listed here are ignored, because the app is
-    // public (it must be installable on both the organisation and the user account).
+    // Installations on accounts not listed here are ignored, which matters if the
+    // app is ever made public.
     // 'github' => [
     //     'client_id' => 'Iv23-CHANGE-ME',
     //     'private_key_file' => __DIR__ . '/github-app.pem',
-    //     'accounts' => ['Steuten-IT-Solutions', 'ChrisSteuten'],
+    //     'accounts' => ['Steuten-IT-Solutions'],
     // ],
 ];
