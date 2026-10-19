@@ -9,9 +9,11 @@ name: Deploy
 #   SFTP_KNOWN_HOSTS  the server's host key line(s), so the connection is verified;
 #                     obtain with `ssh-keyscan -p 22 <host>` and compare the fingerprint
 #                     with the one IONOS publishes before saving it
-#   SFTP_TARGET_DIR   absolute path of the cockpit folder on the webspace, e.g. /cockpit
+#   SFTP_TARGET_DIR   path of the cockpit folder as the SFTP user sees it, e.g. /cockpit;
+#                     the subdomain's document root must be <that folder>/public
 #
 # Never deployed or deleted on the server: config/config.php and var/.
+# bin/deploy-sftp.sh refuses to deploy into a folder with foreign content.
 
 on:
   push:
@@ -50,6 +52,7 @@ jobs:
           cp -R public src templates migrations cron vendor build/
           cp .htaccess composer.json build/
           cp config/config.example.php build/config/
+          echo "Deployed by project-cockpit. Marks this directory as a deployment target; see bin/deploy-sftp.sh." > build/.cockpit-deploy
 
       - name: Check that all secrets are set
         env:
@@ -75,12 +78,5 @@ jobs:
           install -d -m 700 ~/.ssh
           printf '%s\n' "$SFTP_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
-          # --env-password reads LFTP_PASSWORD, so the password never appears in the process list.
-          # Excluded paths are neither uploaded nor deleted by --delete.
-          lftp --env-password -u "$SFTP_USER" "sftp://$SFTP_HOST" <<EOF
-          set sftp:connect-program "ssh -a -x -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
-          set net:max-retries 3
-          set net:timeout 30
-          mirror --reverse --delete --verbose=1 --exclude-glob config/config.php --exclude-glob var/ build/ "$SFTP_TARGET_DIR"
-          bye
-          EOF
+          # Refuses to touch a directory that is not an earlier deployment of this project.
+          bin/deploy-sftp.sh
