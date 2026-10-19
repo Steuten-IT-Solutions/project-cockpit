@@ -74,7 +74,7 @@ final class Client
     {
         [$status, , $body] = $this->request('POST', '/app/installations/' . $installationId . '/access_tokens', $this->jwt($now));
         if ($status !== 201 || !is_array($body) || !is_string($body['token'] ?? null)) {
-            throw new RuntimeException(sprintf('GitHub returned %d for an installation token.', $status));
+            throw new RuntimeException(sprintf('GitHub returned %d for an installation token%s.', $status, self::reason($body)));
         }
 
         return $body['token'];
@@ -103,7 +103,7 @@ final class Client
         for ($page = 0; $url !== null && $page < $maxPages; $page++) {
             [$status, $headers, $body] = $this->request('GET', $url, $token);
             if ($status !== 200) {
-                throw new RuntimeException(sprintf('GitHub returned %d for %s.', $status, strtok($path, '?')));
+                throw new RuntimeException(sprintf('GitHub returned %d for %s%s.', $status, strtok($path, '?'), self::reason($body)));
             }
             $list = $key === null ? $body : (is_array($body) ? ($body[$key] ?? null) : null);
             if (!is_array($list)) {
@@ -116,6 +116,19 @@ final class Client
         }
 
         return $items;
+    }
+
+    /**
+     * GitHub's own explanation of an error response, e.g. "Integration not found" or a
+     * hint about the JWT's time claims. It never contains credentials. Shortened and
+     * reduced to printable characters because it ends up on the dashboard.
+     */
+    public static function reason(mixed $body): string
+    {
+        $message = is_array($body) && is_string($body['message'] ?? null) ? $body['message'] : '';
+        $message = trim((string)preg_replace('/[^\P{C}]+/u', ' ', $message));
+
+        return $message === '' ? '' : ': ' . mb_substr($message, 0, 120);
     }
 
     public static function nextLink(string $header): ?string

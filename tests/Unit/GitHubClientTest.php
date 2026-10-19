@@ -101,6 +101,21 @@ final class GitHubClientTest extends TestCase
         $client->installationToken(99, 1000);
     }
 
+    public function testErrorsCarryGitHubsReason(): void
+    {
+        $transport = static fn (string $m, string $u, array $h): array => [401, [], (string)json_encode(['message' => "A JSON web token could not be decoded\n"])];
+        $client = new Client('Iv23test', self::$privateKey, 'https://api.github.com', $transport(...));
+
+        try {
+            $client->installations(1000);
+            self::fail('Expected an exception.');
+        } catch (RuntimeException $e) {
+            self::assertSame('GitHub returned 401 for /app/installations: A JSON web token could not be decoded.', $e->getMessage());
+        }
+        self::assertSame('', Client::reason(null));
+        self::assertSame('', Client::reason(['message' => 42]));
+    }
+
     public function testNextLinkParsing(): void
     {
         self::assertNull(Client::nextLink(''));
