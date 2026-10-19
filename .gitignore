@@ -3,6 +3,7 @@
 
 # Real configuration lives only on the server, never in Git.
 /config/config.php
+/config/*.pem
 
 # Runtime data (sessions, logs).
 /var/*

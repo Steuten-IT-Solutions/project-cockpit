@@ -4,8 +4,8 @@
  * Cron job, called by cron/run.sh (see there) every 15 minutes, or directly:
  *   php /path/to/cockpit/cron/run.php
  *
- * Phase 1 applies pending migrations and records the run, so the dashboard
- * proves that the scheduler works and shows which PHP version it uses.
+ * Applies pending migrations, syncs the GitHub repositories (if configured) and
+ * records the run, so the dashboard shows that the scheduler works and which PHP it uses.
  */
 
 declare(strict_types=1);
@@ -13,6 +13,9 @@ declare(strict_types=1);
 use Cockpit\Config;
 use Cockpit\Database\Connection;
 use Cockpit\Database\Migrator;
+use Cockpit\GitHub\Client;
+use Cockpit\GitHub\Sync;
+use Cockpit\Projects\ProjectRepository;
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -48,14 +51,38 @@ $insert->execute([$start, PHP_VERSION, PHP_SAPI, 'running']);
 $runId = (int)$pdo->lastInsertId();
 
 $status = 'ok';
-$message = $applied === [] ? null : 'Migrationen angewendet: ' . implode(', ', $applied);
+// Shown on the dashboard, so in German.
+$messages = [];
+if ($applied !== []) {
+    $messages[] = 'Migrationen angewendet: ' . implode(', ', $applied);
+}
 
 if (version_compare(PHP_VERSION, '8.3.0', '<')) {
     $status = 'warn';
-    $message = 'PHP ' . PHP_VERSION . ' ist zu alt; im Cron-Manager PHP 8.4 wählen.';
+    $messages[] = 'PHP ' . PHP_VERSION . ' ist zu alt; im Cron-Manager PHP 8.4 wählen.';
 }
-// Later phases add their jobs here (GitHub, Vercel, status reports), each with
-// its own error handling so one failing source does not stop the others.
+
+// Each source has its own error handling, so one failing source does not stop the others.
+if ($config->github !== null) {
+    try {
+        $key = @file_get_contents($config->github['private_key_file']);
+        if ($key === false) {
+            throw new RuntimeException('Schlüsseldatei der GitHub App nicht lesbar.');
+        }
+        $client = new Client($config->github['client_id'], $key, $config->github['api_base']);
+        $result = (new Sync($client, new ProjectRepository($pdo), $config->github['accounts']))->run(time());
+        $messages[] = sprintf('GitHub: %d Repos aktualisiert', $result['repos']);
+        if ($result['errors'] !== []) {
+            $status = 'warn';
+            $messages[] = sprintf('%d Fehler, z. B. %s', count($result['errors']), $result['errors'][0]);
+        }
+    } catch (Throwable $e) {
+        $status = 'warn';
+        $messages[] = 'GitHub: ' . $e->getMessage();
+    }
+}
+
+$message = $messages === [] ? null : mb_substr(implode(' · ', $messages), 0, 255);
 
 $pdo->prepare('UPDATE cron_runs SET finished_at = ?, status = ?, message = ? WHERE id = ?')
     ->execute([gmdate('Y-m-d H:i:s'), $status, $message, $runId]);

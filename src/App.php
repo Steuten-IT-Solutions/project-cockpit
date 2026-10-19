@@ -14,6 +14,8 @@ use Cockpit\Database\Migrator;
 use Cockpit\Http\Request;
 use Cockpit\Http\Response;
 use Cockpit\Http\Router;
+use Cockpit\Projects\NoteRepository;
+use Cockpit\Projects\ProjectRepository;
 use Cockpit\Security\Crypto;
 use Cockpit\Security\Csrf;
 use chillerlan\QRCode\QRCode;
@@ -66,6 +68,9 @@ final class App
     {
         $router = new Router();
         $router->add('GET', '/', $this->dashboard(...));
+        $router->add('GET', '/project', $this->project(...));
+        $router->add('POST', '/project/note', $this->saveNote(...));
+        $router->add('POST', '/project/visibility', $this->setVisibility(...));
         $router->add('GET', '/login', $this->loginForm(...));
         $router->add('POST', '/login', $this->login(...));
         $router->add('GET', '/login/code', $this->codeForm(...));
@@ -102,9 +107,29 @@ final class App
         $stmt->execute();
         $lastCron = $stmt->fetch() ?: null;
 
+        $projects = null;
+        $lastSync = null;
+        try {
+            $repository = new ProjectRepository($this->pdo);
+            $projects = $repository->all();
+            $lastSync = $repository->lastSync();
+        } catch (\PDOException) {
+            // The projects table appears with the next cron run after a deployment.
+        }
+        $showHidden = $request->query('all') === '1';
+        $hiddenCount = $projects === null ? 0 : count(array_filter($projects, static fn (array $p): bool => $p['hidden']));
+        if ($projects !== null && !$showHidden) {
+            $projects = array_values(array_filter($projects, static fn (array $p): bool => !$p['hidden']));
+        }
+
         return $this->page('dashboard', [
             'title' => 'Übersicht',
             'user' => $user,
+            'projects' => $projects,
+            'hiddenCount' => $hiddenCount,
+            'showHidden' => $showHidden,
+            'lastSync' => $lastSync,
+            'githubConfigured' => $this->config->github !== null,
             'phpVersion' => PHP_VERSION,
             'schemaVersion' => (new Migrator($this->pdo, $this->root . '/migrations'))->currentVersion(),
             // Absolute path for the IONOS cron manager, which only accepts a bare path.
@@ -113,6 +138,63 @@ final class App
             'recoveryLeft' => $this->users->remainingRecoveryCodes($user['id']),
             'events' => $this->log->recent($user['id'], 8),
         ]);
+    }
+
+    private function project(Request $request): Response
+    {
+        $user = $this->currentUser();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        $project = ctype_digit($request->query('id')) ? (new ProjectRepository($this->pdo))->find((int)$request->query('id')) : null;
+        if ($project === null) {
+            return new Response(404);
+        }
+        $notes = new NoteRepository($this->pdo);
+
+        return $this->page('project', [
+            'title' => $project['name'],
+            'project' => $project,
+            'history' => $notes->history($project['id'], 20),
+        ]);
+    }
+
+    private function saveNote(Request $request): Response
+    {
+        $user = $this->currentUser();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        $project = ctype_digit($request->input('id')) ? (new ProjectRepository($this->pdo))->find((int)$request->input('id')) : null;
+        if ($project === null) {
+            return new Response(404);
+        }
+        $body = $request->input('body');
+        if (mb_strlen($body) > NoteRepository::MAX_LENGTH) {
+            $this->session->flash('Die Notiz ist zu lang und wurde nicht gespeichert.');
+        } else {
+            $saved = (new NoteRepository($this->pdo))->save($project['id'], $body, $user['id']);
+            $this->session->flash($saved ? 'Notiz gespeichert.' : 'Keine Änderung – nichts gespeichert.');
+        }
+
+        return Response::redirect('/project?id=' . $project['id']);
+    }
+
+    private function setVisibility(Request $request): Response
+    {
+        if ($this->currentUser() === null) {
+            return Response::redirect('/login');
+        }
+        $repository = new ProjectRepository($this->pdo);
+        $project = ctype_digit($request->input('id')) ? $repository->find((int)$request->input('id')) : null;
+        if ($project === null) {
+            return new Response(404);
+        }
+        $hidden = $request->input('hidden') === '1';
+        $repository->setHidden($project['id'], $hidden);
+        $this->session->flash($hidden ? $project['name'] . ' ausgeblendet.' : $project['name'] . ' wird wieder angezeigt.');
+
+        return Response::redirect('/project?id=' . $project['id']);
     }
 
     private function loginForm(Request $request): Response

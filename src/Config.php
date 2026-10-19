@@ -15,6 +15,7 @@ final class Config
 
     /**
      * @param array{dsn: string, user: string, password: string} $database
+     * @param array{client_id: string, private_key_file: string, accounts: list<string>, api_base: string}|null $github
      */
     private function __construct(
         public readonly string $baseUrl,
@@ -24,6 +25,7 @@ final class Config
         public readonly int $idleTimeout,
         public readonly int $absoluteTimeout,
         public readonly string $timezone,
+        public readonly ?array $github = null,
     ) {
     }
 
@@ -77,7 +79,7 @@ final class Config
             throw new RuntimeException('timezone is not a valid identifier.');
         }
 
-        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone);
+        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw));
     }
 
     /**
@@ -102,6 +104,48 @@ final class Config
         }
 
         return hash('sha256', 'project-cockpit app_key v1' . "\0" . $value, true);
+    }
+
+    /**
+     * The optional github section. The private key file is only read when the cron
+     * job syncs, so a missing file cannot take the web interface down.
+     *
+     * @param array<mixed> $raw
+     * @return array{client_id: string, private_key_file: string, accounts: list<string>, api_base: string}|null
+     */
+    private static function github(array $raw): ?array
+    {
+        $github = $raw['github'] ?? null;
+        if ($github === null) {
+            return null;
+        }
+        if (!is_array($github)) {
+            throw new RuntimeException('github must be an array.');
+        }
+
+        $accounts = $github['accounts'] ?? null;
+        if (!is_array($accounts) || $accounts === []) {
+            throw new RuntimeException('github.accounts must list at least one account.');
+        }
+        $logins = [];
+        foreach ($accounts as $account) {
+            if (!is_string($account) || !preg_match('/^[A-Za-z0-9-]{1,39}$/', $account)) {
+                throw new RuntimeException('github.accounts must contain GitHub logins.');
+            }
+            $logins[] = $account;
+        }
+
+        $apiBase = is_string($github['api_base'] ?? null) ? $github['api_base'] : 'https://api.github.com';
+        if (!preg_match('#^https?://[^/]+$#', $apiBase)) {
+            throw new RuntimeException('github.api_base must be an origin without a trailing slash.');
+        }
+
+        return [
+            'client_id' => self::string($github, 'client_id'),
+            'private_key_file' => self::string($github, 'private_key_file'),
+            'accounts' => $logins,
+            'api_base' => $apiBase,
+        ];
     }
 
     /**
