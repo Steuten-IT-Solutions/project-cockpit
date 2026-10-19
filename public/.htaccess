@@ -1,0 +1,18 @@
+# Only this directory is meant to be the document root.
+Require all granted
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Never serve dotfiles.
+    RewriteRule (^|/)\. - [F]
+
+    # Everything that is not an existing asset goes to the front controller.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+</IfModule>

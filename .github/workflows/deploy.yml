@@ -1,0 +1,86 @@
+name: Deploy
+
+# Uploads the application to the IONOS webspace over SFTP after CI passed on main.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   SFTP_HOST         e.g. access-xxxxxxxx.webspace-host.com (shown in the IONOS panel)
+#   SFTP_USER         a dedicated SFTP user, ideally restricted to the cockpit folder
+#   SFTP_PASSWORD     its password
+#   SFTP_KNOWN_HOSTS  the server's host key line(s), so the connection is verified;
+#                     obtain with `ssh-keyscan -p 22 <host>` and compare the fingerprint
+#                     with the one IONOS publishes before saving it
+#   SFTP_TARGET_DIR   absolute path of the cockpit folder on the webspace, e.g. /cockpit
+#
+# Never deployed or deleted on the server: config/config.php and var/.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl, mbstring, openssl, pdo, pdo_mysql, sodium
+          coverage: none
+
+      - name: Install production dependencies
+        run: composer install --no-dev --no-interaction --no-progress --prefer-dist --classmap-authoritative
+
+      - name: Assemble build
+        run: |
+          mkdir -p build/config
+          cp -R public src templates migrations cron vendor build/
+          cp .htaccess composer.json build/
+          cp config/config.example.php build/config/
+
+      - name: Check that all secrets are set
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_USER: ${{ secrets.SFTP_USER }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          SFTP_KNOWN_HOSTS: ${{ secrets.SFTP_KNOWN_HOSTS }}
+          SFTP_TARGET_DIR: ${{ secrets.SFTP_TARGET_DIR }}
+        run: |
+          for name in SFTP_HOST SFTP_USER SFTP_PASSWORD SFTP_KNOWN_HOSTS SFTP_TARGET_DIR; do
+            if [ -z "${!name}" ]; then echo "::error::Secret $name is not set."; exit 1; fi
+          done
+
+      - name: Upload over SFTP
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_USER: ${{ secrets.SFTP_USER }}
+          SFTP_KNOWN_HOSTS: ${{ secrets.SFTP_KNOWN_HOSTS }}
+          SFTP_TARGET_DIR: ${{ secrets.SFTP_TARGET_DIR }}
+          LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SFTP_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          # --env-password reads LFTP_PASSWORD, so the password never appears in the process list.
+          # Excluded paths are neither uploaded nor deleted by --delete.
+          lftp --env-password -u "$SFTP_USER" "sftp://$SFTP_HOST" <<EOF
+          set sftp:connect-program "ssh -a -x -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+          set net:max-retries 3
+          set net:timeout 30
+          mirror --reverse --delete --verbose=1 --exclude-glob config/config.php --exclude-glob var/ build/ "$SFTP_TARGET_DIR"
+          bye
+          EOF

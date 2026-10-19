@@ -1,0 +1,16 @@
+# Dependencies are installed by CI and deployed with the build.
+/vendor/
+
+# Real configuration lives only on the server, never in Git.
+/config/config.php
+
+# Runtime data (sessions, logs).
+/var/*
+!/var/.gitkeep
+
+# Tooling
+/.phpunit.cache/
+/.phpstan.cache/
+.DS_Store
+.idea/
+.vscode/

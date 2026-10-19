@@ -1,0 +1,8 @@
+parameters:
+    level: 8
+    paths:
+        - src
+        - public
+        - cron
+        - tests
+    tmpDir: .phpstan.cache
