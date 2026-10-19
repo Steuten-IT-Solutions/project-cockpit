@@ -34,11 +34,16 @@ in case the document root is ever pointed at the project root by mistake.
 ## Server setup (one-time)
 
 1. **Subdomain:** `cockpit.steuten-it-solutions.de` → folder `cockpit/public`, SSL on.
+   Keep `cockpit/` outside any other domain's document root (e.g. at the webspace root next to
+   the main site's folder), so the code is never inside a web-served directory.
 2. **Database:** create a MariaDB database in the IONOS panel.
 3. **Deployment secrets** in GitHub (Settings → Secrets and variables → Actions):
    `SFTP_HOST`, `SFTP_USER`, `SFTP_PASSWORD`, `SFTP_KNOWN_HOSTS`, `SFTP_TARGET_DIR`.
    See the header of `.github/workflows/deploy.yml`. Verify the host key fingerprint
    before storing `SFTP_KNOWN_HOSTS`.
+   `SFTP_TARGET_DIR` is the `cockpit` folder as the SFTP user sees it. `bin/deploy-sftp.sh`
+   refuses to deploy into a folder that holds anything but an earlier deployment, because the
+   upload deletes whatever is not part of the build.
 4. **Deploy:** merge to `main` (or run the *Deploy* workflow manually).
 5. **Configuration:** on the server, copy `cockpit/config/config.example.php` to
    `cockpit/config/config.php`, fill in the values and `chmod 600` it. Generate the
