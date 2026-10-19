@@ -46,8 +46,9 @@ in case the document root is ever pointed at the project root by mistake.
    upload deletes whatever is not part of the build.
 4. **Deploy:** merge to `main` (or run the *Deploy* workflow manually).
 5. **Configuration:** on the server, copy `cockpit/config/config.example.php` to
-   `cockpit/config/config.php`, fill in the values and `chmod 600` it. Generate the
-   keys locally as described in the file. Never commit or paste these values anywhere.
+   `cockpit/config/config.php`, fill in the values and `chmod 600` it. `app_key` (≥ 40
+   characters) and `setup_token` (≥ 32 characters) can be random passwords from a password
+   manager. Never commit or paste these values anywhere.
 6. **Cron:** in the IONOS cron manager, run `cron/run.php` with PHP 8.4 every 15 minutes.
    The dashboard shows the last run and the PHP version it used.
 7. **First user:** open `https://cockpit.steuten-it-solutions.de/setup?token=<setup_token>`,
