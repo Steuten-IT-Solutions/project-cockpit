@@ -82,6 +82,22 @@ final class ConfigTest extends TestCase
         Config::fromArray($raw);
     }
 
+    public function testGithubSectionIsOptionalAndValidated(): void
+    {
+        self::assertNull(Config::fromArray(self::valid())->github);
+
+        $raw = self::valid();
+        $raw['github'] = ['client_id' => 'Iv23abc', 'private_key_file' => '/x/app.pem', 'accounts' => ['Steuten-IT-Solutions', 'ChrisSteuten']];
+        $github = Config::fromArray($raw)->github;
+        self::assertNotNull($github);
+        self::assertSame('https://api.github.com', $github['api_base']);
+        self::assertSame(['Steuten-IT-Solutions', 'ChrisSteuten'], $github['accounts']);
+
+        $raw['github']['accounts'] = ['not a login!'];
+        $this->expectException(RuntimeException::class);
+        Config::fromArray($raw);
+    }
+
     public function testRejectsShortSetupToken(): void
     {
         $raw = self::valid();

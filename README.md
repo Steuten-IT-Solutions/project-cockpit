@@ -5,9 +5,12 @@ Private management cockpit for all Steuten IT Solutions projects, served at
 
 The user interface is German; code, comments, commits and documentation are English.
 
-**Phase 1 (this state):** foundation — login with password and TOTP second factor,
-recovery codes, throttling, security log, cron heartbeat and SFTP deployment.
-Project data (GitHub, Vercel, company-app status reports) follows in later phases.
+- **Phase 1:** login with password and TOTP second factor, recovery codes, throttling,
+  security log, cron heartbeat and SFTP deployment.
+- **Phase 2 (this state):** project cards from a read-only GitHub App (CI status of the
+  default branch, latest release, open issues and pull requests, last push), a page per
+  project with links and a note that keeps every saved version, and hiding projects.
+- Later: Vercel deployments, company-app status reports, costs.
 
 ## Stack
 
@@ -57,6 +60,25 @@ in case the document root is ever pointed at the project root by mistake.
 7. **First user:** open `https://cockpit.steuten-it-solutions.de/setup?token=<setup_token>`,
    create the account, enrol the authenticator app and store the recovery codes.
    Then remove `setup_token` from `config.php`. The page answers 404 as soon as a user exists.
+
+## GitHub App (phase 2)
+
+The cron job reads the repositories through a GitHub App and stores them in MariaDB;
+pages only read the database.
+
+1. Organisation *Steuten-IT-Solutions* → Settings → Developer settings → GitHub Apps →
+   *New GitHub App*. Webhook *Active*: off. Repository permissions, all **read-only**:
+   *Actions*, *Contents*, *Metadata*, *Pull requests*. Installable on **Any account** — a
+   private app can only be installed on the account that owns it, and the cockpit needs
+   the organisation and the user account `ChrisSteuten`.
+2. Install the app on both accounts and select the repositories to show.
+3. Generate a private key, upload it over SFTP to `cockpit/config/github-app.pem`,
+   `chmod 600`. Deployments never upload or delete `config/*.pem`.
+4. Add the `github` section to `config.php` (see `config.example.php`). Only installations
+   on the listed `accounts` are read; anyone else installing the public app is ignored.
+
+Repositories that are no longer granted keep their row and notes but disappear from the
+dashboard. *Hidden* is a dashboard setting and survives every sync.
 
 ## Security model
 

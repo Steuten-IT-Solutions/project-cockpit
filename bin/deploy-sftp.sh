@@ -51,5 +51,5 @@ if ! printf '%s\n' "$entries" | grep -qxF '.cockpit-deploy'; then
   fi
 fi
 
-# Excluded paths are neither uploaded nor deleted by --delete.
-run_lftp "mirror --reverse --delete --verbose=1 --exclude-glob config/config.php --exclude-glob var/ build/ \"$target\""
+# Excluded paths (server-only secrets and runtime data) are neither uploaded nor deleted by --delete.
+run_lftp "mirror --reverse --delete --verbose=1 --exclude-glob config/config.php --exclude-glob 'config/*.pem' --exclude-glob var/ build/ \"$target\""
