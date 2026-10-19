@@ -68,6 +68,24 @@ return [
     //     'org' => 'Steuten-IT-Solutions',
     // ],
 
+    // Alerts of the status reports (optional): e-mail via PHP mail() when an installation turns red,
+    // goes silent or reports a severe error, and again when the problem is gone. "from" must be an
+    // address of this domain (IONOS sends only from own addresses).
+    // 'alerts' => [
+    //     'email' => 'CHANGE-ME@example.org',
+    //     'from' => 'Cockpit <cockpit@steuten-it-solutions.de>',
+    // ],
+
+    // Web push to the cockpit on your phone (optional). Create the key locally and upload it over
+    // SFTP next to this file, then chmod 600 it:
+    //   openssl ecparam -name prime256v1 -genkey -noout -out vapid.pem
+    // Subscribe on the page "Warnungen" of each device. On iPhones push works only after adding the
+    // cockpit to the home screen.
+    // 'push' => [
+    //     'private_key_file' => __DIR__ . '/vapid.pem',
+    //     'subject' => 'mailto:CHANGE-ME@example.org',
+    // ],
+
     // 'github' => [
     //     'client_id' => 'Iv23-CHANGE-ME',
     //     'private_key_file' => __DIR__ . '/github-app.pem',

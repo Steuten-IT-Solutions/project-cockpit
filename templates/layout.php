@@ -16,6 +16,7 @@
 <meta name="color-scheme" content="light dark">
 <title><?= $e($title) ?> · Cockpit</title>
 <link rel="stylesheet" href="/assets/app.css">
+<link rel="manifest" href="/manifest.webmanifest">
 </head>
 <body>
 <header class="topbar">
@@ -23,6 +24,7 @@
   <?php if ($loggedIn): ?>
     <nav class="topnav" aria-label="Hauptnavigation">
       <a href="/">Projekte</a>
+      <a href="/alerts">Warnungen</a>
       <a href="/costs">Kosten</a>
       <form method="post" action="/logout">
         <input type="hidden" name="_csrf" value="<?= $e($csrf) ?>">

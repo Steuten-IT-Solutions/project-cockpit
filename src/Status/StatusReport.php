@@ -17,9 +17,27 @@ namespace Cockpit\Status;
  *     update_ok: ?int, update_at: ?string, update_to: ?string, update_check_ok: int,
  *     gallery_ok: ?int, gallery_at: ?string, sent_at: ?string
  * }
+ * @phpstan-type Format2 array{
+ *     kompanie: string, variant: string, version: string, php: string, db_driver: string,
+ *     update_ok: ?int, update_at: ?string, update_to: ?string, update_check_ok: int,
+ *     gallery_ok: ?int, gallery_at: ?string, sent_at: ?string,
+ *     installation: string, kind: string, event: ?string, checks: array<string, string>,
+ *     errors: array<string, int>, cron_kind: string, cron_last: ?string, features: list<string>,
+ *     sent: int, nonce: string, key: ?string
+ * }
  */
 final class StatusReport
 {
+    /** Traffic-light levels of a check. */
+    public const LEVELS = ['ok', 'warn', 'error', 'off'];
+    /** How background tasks are triggered: real cron, page views only, or WP-Cron. */
+    public const CRON_KINDS = ['real', 'pseudo', 'wp'];
+    /** Error and event codes (fixed codes, never texts). */
+    private const CODE = '/^[A-Z0-9_]{1,40}$/D';
+    private const MAX_CHECKS = 20;
+    private const MAX_ERRORS = 30;
+    private const MAX_FEATURES = 10;
+
     /** Earliest timestamp taken from a report (2020-01-01); older values are dropped. */
     private const MIN_TIMESTAMP = 1577836800;
     /** Clock skew tolerated for timestamps in the future. */
@@ -62,6 +80,136 @@ final class StatusReport
             'gallery_at' => $gallery === null ? null : self::time($gallery['at'] ?? null, $now),
             'sent_at' => self::time($in['sent'] ?? null, $now),
         ];
+    }
+
+    /**
+     * Validates a format 2 report (Kompanie-App-Template docs/STATUSMELDUNGEN.md) strictly against a
+     * whitelist. Signature, replay window and nonce are checked by the Receiver.
+     *
+     * @return Format2|null null if the report is not a valid format 2 report of the organisation
+     */
+    public static function fromFormat2(mixed $in, string $org, int $now): ?array
+    {
+        if (!is_array($in) || ($in['format'] ?? null) !== 2) {
+            return null;
+        }
+        $base = self::fromPayload(['format' => 1] + $in, $org, $now);
+        $installation = $in['installation'] ?? null;
+        $nonce = $in['nonce'] ?? null;
+        $kind = $in['kind'] ?? null;
+        $sent = $in['sent'] ?? null;
+        if ($base === null || !is_string($installation) || !preg_match('/^[0-9a-f]{32}$/D', $installation)
+            || !is_string($nonce) || !preg_match('/^[0-9a-f]{16}$/D', $nonce)
+            || !in_array($kind, ['heartbeat', 'event'], true) || !is_int($sent)) {
+            return null;
+        }
+        $event = null;
+        if ($kind === 'event') {
+            $event = $in['event'] ?? null;
+            if (!is_string($event) || !preg_match(self::CODE, $event)) {
+                return null;
+            }
+        }
+        $key = $in['key'] ?? null;
+        if ($key !== null && (!is_string($key) || !preg_match('/^[0-9a-f]{64}$/D', $key))) {
+            return null;
+        }
+
+        $checks = self::checks($in['checks'] ?? null);
+        $errors = self::errors($in['errors'] ?? null);
+        $features = self::features($in['features'] ?? null);
+        $cron = is_array($in['cron'] ?? null) ? $in['cron'] : [];
+        $cronKind = $cron['kind'] ?? null;
+        if ($checks === null || $errors === null || $features === null || !is_string($cronKind) || !in_array($cronKind, self::CRON_KINDS, true)) {
+            return null;
+        }
+
+        return $base + [
+            'installation' => $installation,
+            'kind' => $kind,
+            'event' => $event,
+            'checks' => $checks,
+            'errors' => $errors,
+            'cron_kind' => $cronKind,
+            'cron_last' => self::time($cron['last'] ?? null, $now),
+            'features' => $features,
+            'sent' => $sent,
+            'nonce' => $nonce,
+            'key' => $key,
+        ];
+    }
+
+    /**
+     * Traffic lights: key → level, only simple keys and known levels.
+     *
+     * @return array<string, string>|null
+     */
+    private static function checks(mixed $value): ?array
+    {
+        if (!self::isObject($value, self::MAX_CHECKS)) {
+            return null;
+        }
+        $out = [];
+        foreach ($value as $key => $level) {
+            if (!is_string($key) || !preg_match('/^[a-z][a-z0-9_]{0,31}$/D', $key) || !is_string($level) || !in_array($level, self::LEVELS, true)) {
+                return null;
+            }
+            $out[$key] = $level;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Error codes of the last 24 hours with their counts.
+     *
+     * @return array<string, int>|null
+     */
+    private static function errors(mixed $value): ?array
+    {
+        if (!self::isObject($value, self::MAX_ERRORS)) {
+            return null;
+        }
+        $out = [];
+        foreach ($value as $code => $count) {
+            if (!is_string($code) || !preg_match(self::CODE, $code) || !is_int($count) || $count <= 0 || $count > 1000000) {
+                return null;
+            }
+            $out[$code] = $count;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Enabled areas, keys only.
+     *
+     * @return list<string>|null
+     */
+    private static function features(mixed $value): ?array
+    {
+        if (!is_array($value) || !array_is_list($value) || count($value) > self::MAX_FEATURES) {
+            return null;
+        }
+        $out = [];
+        foreach ($value as $feature) {
+            if (!is_string($feature) || !preg_match('/^[a-z]{1,20}$/D', $feature)) {
+                return null;
+            }
+            $out[] = $feature;
+        }
+
+        return $out;
+    }
+
+    /**
+     * A JSON object with at most $max entries (an empty object decodes to an empty array).
+     *
+     * @phpstan-assert-if-true array<mixed> $value
+     */
+    private static function isObject(mixed $value, int $max): bool
+    {
+        return is_array($value) && count($value) <= $max && ($value === [] || !array_is_list($value));
     }
 
     /**

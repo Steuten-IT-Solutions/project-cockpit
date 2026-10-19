@@ -9,6 +9,12 @@ use Cockpit\Database\Migrator;
 use Cockpit\GitHub\Client;
 use Cockpit\GitHub\Sync;
 use Cockpit\Projects\ProjectRepository;
+use Cockpit\Notify\PushSubscriptionRepository;
+use Cockpit\Notify\WebPush;
+use Cockpit\Status\AlertRepository;
+use Cockpit\Status\Alerts;
+use Cockpit\Status\InstallationRepository;
+use Cockpit\Status\Notifier;
 use Cockpit\Status\Receiver;
 use Cockpit\Status\StatusRepository;
 use Cockpit\Costs\Cost;
@@ -149,6 +155,26 @@ final class Runner
             }
         }
 
+        // Status reports format 2: evaluate, alert, prune (history 90 days).
+        if ($this->config->statusReports !== null) {
+            try {
+                $installations = new InstallationRepository($this->pdo);
+                $installations->prune(gmdate('Y-m-d H:i:s', time() - Alerts::KEEP_DAYS * 86400), gmdate('Y-m-d H:i:s', time() - 2 * Receiver::REPLAY_WINDOW));
+                $pushError = null;
+                $result = (new Alerts($installations, new AlertRepository($this->pdo), $this->notifier($pushError)))->run(time());
+                if ($pushError !== null) {
+                    $status = 'warn';
+                    $messages[] = 'Push: ' . $pushError;
+                }
+                if ($result['opened'] > 0 || $result['resolved'] > 0) {
+                    $messages[] = sprintf('Warnungen: %d neu, %d behoben', $result['opened'], $result['resolved']);
+                }
+            } catch (Throwable $e) {
+                $status = 'warn';
+                $messages[] = 'Warnungen: ' . $e->getMessage();
+            }
+        }
+
         $message = $messages === [] ? null : mb_substr(implode(' · ', $messages), 0, 255);
         $this->pdo->prepare('UPDATE cron_runs SET finished_at = ?, status = ?, message = ? WHERE id = ?')
             ->execute([gmdate('Y-m-d H:i:s'), $status, $message, $runId]);
@@ -160,6 +186,36 @@ final class Runner
         (new StatusRepository($this->pdo))->pruneBefore(gmdate('Y-m-d H:i:s', time() - Receiver::KEEP_DAYS * 86400));
 
         return ['status' => $status, 'message' => $message];
+    }
+
+    /**
+     * E-mail and push as configured; null if neither is. A broken push key does not stop the e-mails.
+     *
+     * @param ?string $pushError set to the reason when push is configured but unusable
+     */
+    private function notifier(?string &$pushError): ?Notifier
+    {
+        $push = null;
+        if ($this->config->push !== null) {
+            $pem = @file_get_contents($this->config->push['private_key_file']);
+            try {
+                $push = $pem === false ? null : new WebPush($pem, $this->config->push['subject']);
+                $pushError = $pem === false ? 'VAPID-Schlüssel nicht lesbar.' : null;
+            } catch (RuntimeException $e) {
+                $pushError = 'VAPID-Schlüssel ungültig (EC P-256 im PEM-Format erwartet).';
+            }
+        }
+        if ($push === null && $this->config->alerts === null) {
+            return null;
+        }
+
+        return new Notifier(
+            $this->config->baseUrl,
+            $this->config->alerts['email'] ?? null,
+            $this->config->alerts['from'] ?? null,
+            $push,
+            $push !== null ? new PushSubscriptionRepository($this->pdo) : null,
+        );
     }
 
     private function lock(): bool
