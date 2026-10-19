@@ -98,6 +98,19 @@ final class ConfigTest extends TestCase
         Config::fromArray($raw);
     }
 
+    public function testVercelSectionIsOptionalAndValidated(): void
+    {
+        $raw = self::valid();
+        $raw['vercel'] = ['token' => 'abc', 'team_id' => 'team_jkt3tKFdYxXmWsEi0Wigz9a7'];
+        $vercel = Config::fromArray($raw)->vercel;
+        self::assertNotNull($vercel);
+        self::assertSame('https://api.vercel.com', $vercel['api_base']);
+
+        $raw['vercel']['team_id'] = 'steuten';
+        $this->expectException(RuntimeException::class);
+        Config::fromArray($raw);
+    }
+
     public function testRejectsShortSetupToken(): void
     {
         $raw = self::valid();

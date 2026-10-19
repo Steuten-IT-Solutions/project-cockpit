@@ -33,6 +33,24 @@ final class ProjectView
     }
 
     /**
+     * Label and badge class for the state of the latest production deployment on Vercel.
+     *
+     * @return array{string, string}
+     */
+    public static function vercel(?string $state): array
+    {
+        return match ($state) {
+            'READY' => ['Vercel live', 'ok'],
+            'ERROR' => ['Vercel Fehler', 'fail'],
+            'BUILDING', 'QUEUED', 'INITIALIZING' => ['Vercel baut', 'neutral'],
+            'CANCELED' => ['Vercel abgebrochen', 'warn'],
+            'BLOCKED' => ['Vercel blockiert', 'warn'],
+            null => ['Vercel: kein Deployment', 'neutral'],
+            default => ['Vercel ' . strtolower($state), 'warn'],
+        };
+    }
+
+    /**
      * Relative age in German, e.g. "vor 3 Tagen", from a UTC timestamp.
      */
     public static function age(?string $utc, int $now): string

@@ -9,6 +9,9 @@ use Cockpit\Database\Migrator;
 use Cockpit\GitHub\Client;
 use Cockpit\GitHub\Sync;
 use Cockpit\Projects\ProjectRepository;
+use Cockpit\Vercel\Client as VercelClient;
+use Cockpit\Vercel\Sync as VercelSync;
+use Cockpit\Vercel\VercelRepository;
 use PDO;
 use RuntimeException;
 use Throwable;
@@ -105,6 +108,22 @@ final class Runner
             } catch (Throwable $e) {
                 $status = 'warn';
                 $messages[] = 'GitHub: ' . $e->getMessage();
+            }
+        }
+
+        if ($this->config->vercel !== null) {
+            try {
+                $vercel = $this->config->vercel;
+                $client = new VercelClient($vercel['token'], $vercel['team_id'], $vercel['api_base']);
+                $result = (new VercelSync($client, new VercelRepository($this->pdo)))->run(time());
+                $messages[] = sprintf('Vercel: %d Projekte', $result['projects']);
+                if ($result['errors'] !== []) {
+                    $status = 'warn';
+                    $messages[] = sprintf('%d Fehler, z. B. %s', count($result['errors']), $result['errors'][0]);
+                }
+            } catch (Throwable $e) {
+                $status = 'warn';
+                $messages[] = 'Vercel: ' . $e->getMessage();
             }
         }
 

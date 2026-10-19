@@ -17,6 +17,7 @@ use Cockpit\Http\Router;
 use Cockpit\Jobs\Runner;
 use Cockpit\Projects\NoteRepository;
 use Cockpit\Projects\ProjectRepository;
+use Cockpit\Vercel\VercelRepository;
 use Cockpit\Security\Crypto;
 use Cockpit\Security\Csrf;
 use chillerlan\QRCode\QRCode;
@@ -113,12 +114,15 @@ final class App
 
         $projects = null;
         $lastSync = null;
+        $vercelByRepo = [];
+        $vercelUnmatched = [];
         try {
             $repository = new ProjectRepository($this->pdo);
             $projects = $repository->all();
             $lastSync = $repository->lastSync();
+            [$vercelByRepo, $vercelUnmatched] = $this->vercelProjects($projects);
         } catch (\PDOException) {
-            // The projects table appears with the next cron run after a deployment.
+            // New tables appear with the next cron run after a deployment.
         }
         $showHidden = $request->query('all') === '1';
         $hiddenCount = $projects === null ? 0 : count(array_filter($projects, static fn (array $p): bool => $p['hidden']));
@@ -134,6 +138,8 @@ final class App
             'showHidden' => $showHidden,
             'lastSync' => $lastSync,
             'githubConfigured' => $this->config->github !== null,
+            'vercelByRepo' => $vercelByRepo,
+            'vercelUnmatched' => $vercelUnmatched,
             'phpVersion' => PHP_VERSION,
             'schemaVersion' => (new Migrator($this->pdo, $this->root . '/migrations'))->currentVersion(),
             // Absolute path for the IONOS cron manager, which only accepts a bare path.
@@ -155,10 +161,16 @@ final class App
             return new Response(404);
         }
         $notes = new NoteRepository($this->pdo);
+        try {
+            [$vercelByRepo] = $this->vercelProjects([$project]);
+        } catch (\PDOException) {
+            $vercelByRepo = [];
+        }
 
         return $this->page('project', [
             'title' => $project['name'],
             'project' => $project,
+            'vercel' => $vercelByRepo[$project['id']] ?? [],
             'history' => $notes->history($project['id'], 20),
         ]);
     }
@@ -450,6 +462,28 @@ final class App
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /**
+     * Vercel projects grouped by the GitHub project they deploy, plus those that match no card.
+     *
+     * @param list<array<string, mixed>> $projects
+     * @return array{array<int, list<array<string, mixed>>>, list<array<string, mixed>>}
+     */
+    private function vercelProjects(array $projects): array
+    {
+        $vercel = (new VercelRepository($this->pdo))->all();
+        $repos = array_map(static fn (array $p): array => ['id' => (int)$p['id'], 'full_name' => (string)$p['full_name']], $projects);
+        $byRepo = VercelRepository::byRepository($vercel, $repos);
+        $matched = [];
+        foreach ($byRepo as $list) {
+            foreach ($list as $v) {
+                $matched[$v['id']] = true;
+            }
+        }
+        $unmatched = array_values(array_filter($vercel, static fn (array $v): bool => !isset($matched[$v['id']])));
+
+        return [$byRepo, $unmatched];
+    }
 
     /**
      * @return array{id: int, username: string, password_hash: string, totp_secret_enc: string, totp_last_step: ?int}|null

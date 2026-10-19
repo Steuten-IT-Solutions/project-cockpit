@@ -50,6 +50,14 @@ return [
     // to this file and chmod 600 it; deployments never touch config/*.pem.
     // Installations on accounts not listed here are ignored, which matters if the
     // app is ever made public.
+    // Vercel (optional): an access token with scope = the team, created under
+    // Account Settings → Tokens, with an expiry. Vercel documents no read-only
+    // tokens, so treat it like a password: it lives only in this file on the server.
+    // 'vercel' => [
+    //     'token' => 'CHANGE-ME',
+    //     'team_id' => 'team_CHANGE-ME',
+    // ],
+
     // 'github' => [
     //     'client_id' => 'Iv23-CHANGE-ME',
     //     'private_key_file' => __DIR__ . '/github-app.pem',

@@ -5,6 +5,7 @@
  * @var string $timezone
  * @var array<string, mixed> $project
  * @var list<array{id: int, body: string, created_at: string}> $history
+ * @var list<array<string, mixed>> $vercel
  */
 
 use Cockpit\Projects\ProjectView;
@@ -48,6 +49,18 @@ $links = [
     <dd><?= $e($p['open_issues']) ?> Issues · <?= $e($p['open_prs']) ?> Pull Requests</dd>
     <dt>Letzter Push</dt>
     <dd><?= $e(View::localTime($p['pushed_at'], $timezone)) ?></dd>
+    <?php foreach ($vercel as $v): ?>
+      <?php [$vLabel, $vClass] = ProjectView::vercel($v['deploy_state']); ?>
+      <dt>Vercel (<?= $e($v['name']) ?>)</dt>
+      <dd>
+        <span class="badge <?= $e($vClass) ?>"><?= $e($vLabel) ?></span>
+        <?= $e(ProjectView::age($v['deploy_created_at'], time())) ?>
+        <?php if ($v['deploy_inspector_url'] !== null): ?> · <a href="<?= $e($v['deploy_inspector_url']) ?>" rel="noopener noreferrer" target="_blank">Deployment öffnen</a><?php endif; ?>
+        <?php if ($v['production_domain'] !== null): ?><br><a href="https://<?= $e($v['production_domain']) ?>" rel="noopener noreferrer" target="_blank"><?= $e($v['production_domain']) ?></a><?php endif; ?>
+        <?php if ($v['deploy_commit'] !== null): ?><br><small class="muted"><?= $e($v['deploy_commit']) ?></small><?php endif; ?>
+        <?php if ($v['deploy_error'] !== null): ?><br><small class="error"><?= $e($v['deploy_error']) ?></small><?php endif; ?>
+      </dd>
+    <?php endforeach; ?>
     <dt>Abgerufen</dt>
     <dd><?= $e(View::localTime($p['synced_at'], $timezone)) ?><?php if ($p['sync_error'] !== null): ?><br><small class="error"><?= $e($p['sync_error']) ?></small><?php endif; ?></dd>
   </dl>

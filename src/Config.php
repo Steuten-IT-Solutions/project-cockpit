@@ -16,6 +16,7 @@ final class Config
     /**
      * @param array{dsn: string, user: string, password: string} $database
      * @param array{client_id: string, private_key_file: string, accounts: list<string>, api_base: string}|null $github
+     * @param array{token: string, team_id: string, api_base: string}|null $vercel
      */
     private function __construct(
         public readonly string $baseUrl,
@@ -26,6 +27,7 @@ final class Config
         public readonly int $absoluteTimeout,
         public readonly string $timezone,
         public readonly ?array $github = null,
+        public readonly ?array $vercel = null,
     ) {
     }
 
@@ -79,7 +81,7 @@ final class Config
             throw new RuntimeException('timezone is not a valid identifier.');
         }
 
-        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw));
+        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw), self::vercel($raw));
     }
 
     /**
@@ -146,6 +148,34 @@ final class Config
             'accounts' => $logins,
             'api_base' => $apiBase,
         ];
+    }
+
+    /**
+     * The optional vercel section: an access token scoped to the team, and the team id.
+     *
+     * @param array<mixed> $raw
+     * @return array{token: string, team_id: string, api_base: string}|null
+     */
+    private static function vercel(array $raw): ?array
+    {
+        $vercel = $raw['vercel'] ?? null;
+        if ($vercel === null) {
+            return null;
+        }
+        if (!is_array($vercel)) {
+            throw new RuntimeException('vercel must be an array.');
+        }
+
+        $teamId = self::string($vercel, 'team_id');
+        if (!preg_match('/^team_[A-Za-z0-9]+$/', $teamId)) {
+            throw new RuntimeException('vercel.team_id must look like team_…');
+        }
+        $apiBase = is_string($vercel['api_base'] ?? null) ? $vercel['api_base'] : 'https://api.vercel.com';
+        if (!preg_match('#^https?://[^/]+$#', $apiBase)) {
+            throw new RuntimeException('vercel.api_base must be an origin without a trailing slash.');
+        }
+
+        return ['token' => self::string($vercel, 'token'), 'team_id' => $teamId, 'api_base' => $apiBase];
     }
 
     /**
