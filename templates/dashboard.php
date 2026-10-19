@@ -6,6 +6,7 @@
  * @var string $phpVersion
  * @var ?string $schemaVersion
  * @var array<string, mixed>|null $lastCron
+ * @var string $cronCommand
  * @var int $recoveryLeft
  * @var list<array{event: string, created_at: string}> $events
  */
@@ -48,6 +49,14 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
         · PHP <?= $e($lastCron['php_version'] ?? '') ?> (<?= $e($lastCron['php_sapi'] ?? '') ?>)
         <?php if (!empty($lastCron['message'])): ?><br><small><?= $e($lastCron['message']) ?></small><?php endif; ?>
       <?php endif; ?>
+    </dd>
+    <dt>Cron-Befehl</dt>
+    <dd>
+      <code class="path"><?= $e($cronCommand) ?></code>
+      <?php if (!preg_match('#^[A-Za-z0-9_./-]+$#', $cronCommand)): ?>
+        <br><small class="error">Der Pfad enthält Zeichen, die der IONOS Cron-Manager nicht annimmt.</small>
+      <?php endif; ?>
+      <br><small class="muted">Im IONOS Cron-Manager als UnixCron eintragen, Minuten <code>*/15</code>, alle anderen Felder <code>*</code>.</small>
     </dd>
     <dt>Wiederherstellungscodes</dt>
     <dd><span class="badge <?= $recoveryLeft >= 3 ? 'ok' : 'warn' ?>"><?= $e($recoveryLeft) ?> übrig</span></dd>

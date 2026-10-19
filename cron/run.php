@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Cron entry point. Run by the IONOS cron manager, e.g. every 15 minutes:
+ * Cron job, called by cron/run.sh (see there) every 15 minutes, or directly:
  *   php /path/to/cockpit/cron/run.php
  *
  * Phase 1 applies pending migrations and records the run, so the dashboard
