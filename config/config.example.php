@@ -58,6 +58,13 @@ return [
     //     'team_id' => 'team_CHANGE-ME',
     // ],
 
+    // Status reports of the company apps (optional). With this section the status
+    // subdomain (document root: receiver/) accepts reports from repositories of this
+    // organisation; without it, it answers 404.
+    // 'status_reports' => [
+    //     'org' => 'Steuten-IT-Solutions',
+    // ],
+
     // 'github' => [
     //     'client_id' => 'Iv23-CHANGE-ME',
     //     'private_key_file' => __DIR__ . '/github-app.pem',

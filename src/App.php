@@ -17,6 +17,7 @@ use Cockpit\Http\Router;
 use Cockpit\Jobs\Runner;
 use Cockpit\Projects\NoteRepository;
 use Cockpit\Projects\ProjectRepository;
+use Cockpit\Status\StatusRepository;
 use Cockpit\Vercel\VercelRepository;
 use Cockpit\Security\Crypto;
 use Cockpit\Security\Csrf;
@@ -116,14 +117,19 @@ final class App
         $lastSync = null;
         $vercelByRepo = [];
         $vercelUnmatched = [];
+        $reports = [];
+        $reportsByRepo = [];
         try {
             $repository = new ProjectRepository($this->pdo);
             $projects = $repository->all();
             $lastSync = $repository->lastSync();
             [$vercelByRepo, $vercelUnmatched] = $this->vercelProjects($projects);
+            $reports = (new StatusRepository($this->pdo))->all();
+            $reportsByRepo = StatusRepository::byRepository($reports, self::repoRefs($projects));
         } catch (\PDOException) {
             // New tables appear with the next cron run after a deployment.
         }
+        $releaseByRepo = self::releaseByRepo($projects ?? []);
         $showHidden = $request->query('all') === '1';
         $hiddenCount = $projects === null ? 0 : count(array_filter($projects, static fn (array $p): bool => $p['hidden']));
         if ($projects !== null && !$showHidden) {
@@ -140,6 +146,10 @@ final class App
             'githubConfigured' => $this->config->github !== null,
             'vercelByRepo' => $vercelByRepo,
             'vercelUnmatched' => $vercelUnmatched,
+            'reports' => $reports,
+            'reportsByRepo' => $reportsByRepo,
+            'releaseByRepo' => $releaseByRepo,
+            'statusReceiver' => $this->config->statusReports !== null,
             'phpVersion' => PHP_VERSION,
             'schemaVersion' => (new Migrator($this->pdo, $this->root . '/migrations'))->currentVersion(),
             // Absolute path for the IONOS cron manager, which only accepts a bare path.
@@ -166,11 +176,17 @@ final class App
         } catch (\PDOException) {
             $vercelByRepo = [];
         }
+        try {
+            $reportsByRepo = StatusRepository::byRepository((new StatusRepository($this->pdo))->all(), self::repoRefs([$project]));
+        } catch (\PDOException) {
+            $reportsByRepo = [];
+        }
 
         return $this->page('project', [
             'title' => $project['name'],
             'project' => $project,
             'vercel' => $vercelByRepo[$project['id']] ?? [],
+            'reports' => $reportsByRepo[$project['id']] ?? [],
             'history' => $notes->history($project['id'], 20),
         ]);
     }
@@ -464,6 +480,33 @@ final class App
     // ------------------------------------------------------------------ helpers
 
     /**
+     * @param list<array<string, mixed>> $projects
+     * @return list<array{id: int, full_name: string}>
+     */
+    private static function repoRefs(array $projects): array
+    {
+        return array_map(static fn (array $p): array => ['id' => (int)$p['id'], 'full_name' => (string)$p['full_name']], $projects);
+    }
+
+    /**
+     * Latest release tag by lower-cased repository name, to compare installed versions with.
+     *
+     * @param list<array<string, mixed>> $projects
+     * @return array<string, string>
+     */
+    private static function releaseByRepo(array $projects): array
+    {
+        $tags = [];
+        foreach ($projects as $p) {
+            if (is_string($p['release_tag'] ?? null)) {
+                $tags[strtolower((string)$p['full_name'])] = $p['release_tag'];
+            }
+        }
+
+        return $tags;
+    }
+
+    /**
      * Vercel projects grouped by the GitHub project they deploy, plus those that match no card.
      *
      * @param list<array<string, mixed>> $projects
@@ -472,8 +515,7 @@ final class App
     private function vercelProjects(array $projects): array
     {
         $vercel = (new VercelRepository($this->pdo))->all();
-        $repos = array_map(static fn (array $p): array => ['id' => (int)$p['id'], 'full_name' => (string)$p['full_name']], $projects);
-        $byRepo = VercelRepository::byRepository($vercel, $repos);
+        $byRepo = VercelRepository::byRepository($vercel, self::repoRefs($projects));
         $matched = [];
         foreach ($byRepo as $list) {
             foreach ($list as $v) {

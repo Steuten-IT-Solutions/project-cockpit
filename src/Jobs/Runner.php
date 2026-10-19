@@ -9,6 +9,8 @@ use Cockpit\Database\Migrator;
 use Cockpit\GitHub\Client;
 use Cockpit\GitHub\Sync;
 use Cockpit\Projects\ProjectRepository;
+use Cockpit\Status\Receiver;
+use Cockpit\Status\StatusRepository;
 use Cockpit\Vercel\Client as VercelClient;
 use Cockpit\Vercel\Sync as VercelSync;
 use Cockpit\Vercel\VercelRepository;
@@ -134,6 +136,8 @@ final class Runner
         // Keep 30 days of history.
         $this->pdo->prepare('DELETE FROM cron_runs WHERE started_at < ?')
             ->execute([gmdate('Y-m-d H:i:s', time() - 30 * 86400)]);
+        // The receiver prunes too, but only when a report arrives.
+        (new StatusRepository($this->pdo))->pruneBefore(gmdate('Y-m-d H:i:s', time() - Receiver::KEEP_DAYS * 86400));
 
         return ['status' => $status, 'message' => $message];
     }

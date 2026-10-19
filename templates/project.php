@@ -6,9 +6,11 @@
  * @var array<string, mixed> $project
  * @var list<array{id: int, body: string, created_at: string}> $history
  * @var list<array<string, mixed>> $vercel
+ * @var list<array<string, mixed>> $reports
  */
 
 use Cockpit\Projects\ProjectView;
+use Cockpit\Status\StatusView;
 use Cockpit\View;
 
 $p = $project;
@@ -59,6 +61,19 @@ $links = [
         <?php if ($v['production_domain'] !== null): ?><br><a href="https://<?= $e($v['production_domain']) ?>" rel="noopener noreferrer" target="_blank"><?= $e($v['production_domain']) ?></a><?php endif; ?>
         <?php if ($v['deploy_commit'] !== null): ?><br><small class="muted"><?= $e($v['deploy_commit']) ?></small><?php endif; ?>
         <?php if ($v['deploy_error'] !== null): ?><br><small class="error"><?= $e($v['deploy_error']) ?></small><?php endif; ?>
+      </dd>
+    <?php endforeach; ?>
+    <?php foreach ($reports as $r): ?>
+      <?php $problems = StatusView::problems($r, time()); $newer = StatusView::newerRelease($r['version'], $p['release_tag']); ?>
+      <dt>Installation (<?= $e(StatusView::variant($r['variant'])) ?>)</dt>
+      <dd>
+        <span class="badge <?= $problems === [] ? 'ok' : 'warn' ?>"><?= $problems === [] ? 'in Ordnung' : 'Problem' ?></span>
+        Version <?= $e($r['version']) ?><?php if ($newer !== null): ?> (<?= $e($newer) ?> veröffentlicht)<?php endif; ?>
+        · PHP <?= $e($r['php']) ?> / <?= $e($r['db_driver']) ?>
+        <br><small class="muted">Meldung <?= $e(View::localTime($r['received_at'], $timezone)) ?>
+          <?php if ($r['update_at'] !== null): ?> · letztes Update <?= $e(View::localTime($r['update_at'], $timezone)) ?><?php endif; ?>
+          <?php if ($r['gallery_at'] !== null): ?> · Galerie-Abgleich <?= $e(View::localTime($r['gallery_at'], $timezone)) ?><?php endif; ?></small>
+        <?php if ($problems !== []): ?><br><small class="error"><?= $e(implode('; ', $problems)) ?></small><?php endif; ?>
       </dd>
     <?php endforeach; ?>
     <dt>Abgerufen</dt>
