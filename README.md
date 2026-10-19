@@ -10,8 +10,8 @@ The user interface is German; code, comments, commits and documentation are Engl
 - **Phase 2:** project cards from a read-only GitHub App (CI status of the default branch,
   latest release, open issues and pull requests, last push), a page per project with links
   and a note that keeps every saved version, hiding projects, a refresh button.
-- **Phase 3 (in progress):** latest Vercel production deployment on each card; next:
-  company-app status reports, costs.
+- **Phase 3 (in progress):** latest Vercel production deployment on each card; status
+  reports of the company apps (Kompanie-Apps); next: costs.
 
 ## Stack
 
@@ -23,7 +23,8 @@ The user interface is German; code, comments, commits and documentation are Engl
 ## Layout
 
 ```
-public/       document root of the subdomain (index.php, assets, .htaccess)
+public/       document root of the cockpit subdomain (index.php, assets, .htaccess)
+receiver/     document root of the status subdomain (accepts status reports only)
 src/          application code (namespace Cockpit\)
 templates/    PHP templates; every dynamic value is escaped with $e()
 migrations/   NNNN_name.sql, applied in order by cron/run.php and the setup page
@@ -32,7 +33,7 @@ config/       config.example.php in Git; config.php only on the server
 var/          sessions (server only, never deployed)
 ```
 
-Only `public/` may be reachable from the web. A root `.htaccess` denies everything
+Only `public/` and `receiver/` may be reachable from the web. A root `.htaccess` denies everything
 in case the document root is ever pointed at the project root by mistake.
 
 ## Server setup (one-time)
@@ -97,6 +98,36 @@ card are listed under *Vercel ohne GitHub-Karte*.
    expiry. Vercel documents no read-only tokens, so it stays in `config.php` only.
 2. Add the `vercel` section to `config.php` (see `config.example.php`) with the token and
    the team id (`team_…`, shown under Team Settings → General).
+
+## Status reports (phase 3)
+
+Company apps (Kompanie-Apps, built from `Steuten-IT-Solutions/Kompanie-App-Template`) send
+a short report once a day, and only after an admin agreed under *Einstellungen → Updates*:
+company, version, variant, PHP version, database type, result of the last update, whether
+the update check and the gallery sync work. The format is defined by
+`packages/core/src/Update/StatusReporter.php` there. This replaces `tools/status-empfang`
+from that repository; the overview is in the cockpit behind its login instead of HTTP Basic
+authentication.
+
+1. **Subdomain:** `status.steuten-it-solutions.de` → folder `cockpit/receiver`, SSL on.
+2. Add the `status_reports` section to `config.php` (see `config.example.php`). Without it
+   the subdomain answers 404 to everything.
+3. In `Kompanie-App-Template` set the repository variable `KOMPANIE_STATUS_URL` to
+   `https://status.steuten-it-solutions.de/`. Every company gets a new version with that
+   address at the next sync.
+
+Limits, as in the template's receiver:
+
+- Reports are **not signed**; anyone can send one. The overview is a hint, not proof.
+- Only reports for repositories of the configured organisation are accepted, at most 4 KiB
+  each, 2000 per hour in total and 2000 stored rows; rows without a new report for 60 days
+  are removed. Someone flooding the table with invented companies can keep new ones out
+  for up to 60 days (then empty `status_reports`).
+- One row per company and variant: several installations of the same company and variant
+  overwrite each other.
+- The receiver stores no IP addresses, but the web server's access log does. Check the
+  log settings of the hosting package and mention the reports in the companies' privacy
+  policy (`docs/OFFENE-PUNKTE.md`, section 3, in the template).
 
 ## Security model
 

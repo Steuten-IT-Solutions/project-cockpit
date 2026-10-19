@@ -20,11 +20,12 @@ architecture, server setup and security model.
 ## Rules
 
 - Never commit secrets. `config/config.php` exists only on the server.
-- Only `public/` is web-reachable. Do not add PHP files to `public/` other than
-  `index.php`; everything else is routed through it.
+- Only `public/` (cockpit) and `receiver/` (status subdomain) are web-reachable. Do not
+  add PHP files to either other than their `index.php`; everything else is routed through it.
 - Escape every dynamic value in templates with `$e()`. No inline scripts or styles:
   the CSP forbids them.
-- Every POST needs the `_csrf` field. State changes only via POST.
+- Every POST needs the `_csrf` field (except the receiver's report endpoint, which has no
+  session). State changes only via POST.
 - Store timestamps in UTC (`gmdate`); convert for display with `View::localTime()`.
 - Schema changes are new files in `migrations/` (`NNNN_name.sql`), never edits of applied ones.
   There is no SSH on the host: migrations run from `cron/run.php` and the setup page.

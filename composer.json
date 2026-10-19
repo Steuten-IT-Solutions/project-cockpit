@@ -28,7 +28,7 @@
         }
     },
     "scripts": {
-        "lint": "find src public cron config templates tests -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null",
+        "lint": "find src public receiver cron config templates tests -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null",
         "analyse": "phpstan analyse --no-progress",
         "test": "phpunit",
         "check": [

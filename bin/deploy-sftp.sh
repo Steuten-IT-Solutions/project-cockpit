@@ -36,7 +36,7 @@ if [ ! -f build/config/config.example.php ] || [ ! -f build/.cockpit-deploy ]; t
 fi
 
 # Names a deployment of this project may leave in the target directory.
-allowed=(.htaccess .cockpit-deploy composer.json config cron migrations public src templates vendor var)
+allowed=(.htaccess .cockpit-deploy composer.json config cron migrations public receiver src templates vendor var)
 
 listing="$(run_lftp "mkdir -p -f \"$target\"; cls -1 -a --basename \"$target/\"")"
 entries="$(printf '%s\n' "$listing" | sed 's#/$##' | grep -vx -e '' -e '\.' -e '\.\.' || true)"

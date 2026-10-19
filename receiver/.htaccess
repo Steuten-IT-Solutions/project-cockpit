@@ -1,0 +1,8 @@
+# Document root of the status subdomain: every request goes to index.php.
+Require all granted
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(?!index\.php$) index.php [L]
+</IfModule>

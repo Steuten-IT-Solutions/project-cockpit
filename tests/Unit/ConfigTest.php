@@ -111,6 +111,19 @@ final class ConfigTest extends TestCase
         Config::fromArray($raw);
     }
 
+    public function testStatusReportsSectionIsOptionalAndValidated(): void
+    {
+        self::assertNull(Config::fromArray(self::valid())->statusReports);
+
+        $raw = self::valid();
+        $raw['status_reports'] = ['org' => 'Steuten-IT-Solutions'];
+        self::assertSame(['org' => 'Steuten-IT-Solutions'], Config::fromArray($raw)->statusReports);
+
+        $raw['status_reports']['org'] = 'a/b';
+        $this->expectException(RuntimeException::class);
+        Config::fromArray($raw);
+    }
+
     public function testRejectsShortSetupToken(): void
     {
         $raw = self::valid();

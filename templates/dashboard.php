@@ -17,9 +17,14 @@
  * @var string $csrf
  * @var array<int, list<array<string, mixed>>> $vercelByRepo
  * @var list<array<string, mixed>> $vercelUnmatched
+ * @var list<array<string, mixed>> $reports
+ * @var array<int, list<array<string, mixed>>> $reportsByRepo
+ * @var array<string, string> $releaseByRepo
+ * @var bool $statusReceiver
  */
 
 use Cockpit\Projects\ProjectView;
+use Cockpit\Status\StatusView;
 use Cockpit\View;
 
 $eventLabels = [
@@ -31,6 +36,14 @@ $eventLabels = [
     'logout' => 'Abmeldung',
     'setup' => 'Konto eingerichtet',
 ];
+$now = time();
+// Project card of each reporting company, to link the installation to it.
+$reportProject = [];
+foreach ($reportsByRepo as $repoId => $list) {
+    foreach ($list as $r) {
+        $reportProject[$r['kompanie'] . '|' . $r['variant']] = $repoId;
+    }
+}
 $cronAge = null;
 if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
     $cronAge = time() - (int)strtotime($lastCron['started_at'] . ' UTC');
@@ -62,6 +75,10 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
             <?php [$vLabel, $vClass] = ProjectView::vercel($v['deploy_state']); ?>
             <?php if ($v['deploy_inspector_url'] !== null): ?><a class="badge <?= $e($vClass) ?>" href="<?= $e($v['deploy_inspector_url']) ?>" rel="noopener noreferrer" target="_blank"><?= $e($vLabel) ?></a><?php else: ?><span class="badge <?= $e($vClass) ?>"><?= $e($vLabel) ?></span><?php endif; ?>
           <?php endforeach; ?>
+          <?php if (($reportsByRepo[$p['id']] ?? []) !== []): ?>
+            <?php $failing = array_filter($reportsByRepo[$p['id']], static fn (array $r): bool => StatusView::problems($r, $now) !== []); ?>
+            <a class="badge <?= $failing === [] ? 'ok' : 'warn' ?>" href="#installationen"><?= $failing === [] ? 'Installation ok' : 'Installation: Problem' ?></a>
+          <?php endif; ?>
           <?php if ($p['release_tag'] !== null): ?><span class="badge neutral"><?= $e($p['release_tag']) ?></span><?php endif; ?>
           <?php if ($p['has_note']): ?><span class="badge neutral">Notiz</span><?php endif; ?>
         </p>
@@ -87,6 +104,34 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
       </article>
     <?php endforeach; ?>
   </div>
+<?php endif; ?>
+
+<?php if ($statusReceiver || $reports !== []): ?>
+  <h2 class="section" id="installationen">Kompanie-Installationen</h2>
+  <p class="muted">Je Kompanie und Variante die letzte Statusmeldung. Meldungen sind nicht signiert, also nur ein Hinweis.</p>
+  <?php if ($reports === []): ?>
+    <p class="muted">Noch keine Meldungen. Installationen melden sich einmal täglich, sobald ein Admin unter <em>Einstellungen → Updates</em> zugestimmt hat.</p>
+  <?php else: ?>
+    <div class="projects">
+      <?php foreach ($reports as $r): ?>
+        <?php
+        $problems = StatusView::problems($r, $now);
+        $newer = StatusView::newerRelease($r['version'], $releaseByRepo[strtolower($r['kompanie'])] ?? null);
+        $repoId = $reportProject[$r['kompanie'] . '|' . $r['variant']] ?? null;
+        ?>
+        <article class="card project">
+          <h2><?php if ($repoId !== null): ?><a href="/project?id=<?= $e($repoId) ?>"><?= $e(StatusView::name($r['kompanie'])) ?></a><?php else: ?><?= $e(StatusView::name($r['kompanie'])) ?><?php endif; ?></h2>
+          <p class="owner"><?= $e(StatusView::variant($r['variant'])) ?> · Version <?= $e($r['version']) ?> · PHP <?= $e($r['php']) ?> / <?= $e($r['db_driver']) ?></p>
+          <p class="badges">
+            <?php if ($problems === []): ?><span class="badge ok">in Ordnung</span><?php endif; ?>
+            <?php foreach ($problems as $problem): ?><span class="badge warn"><?= $e($problem) ?></span><?php endforeach; ?>
+            <?php if ($newer !== null): ?><span class="badge neutral"><?= $e($newer) ?> veröffentlicht</span><?php endif; ?>
+          </p>
+          <p class="stats">Meldung <?= $e(ProjectView::age($r['received_at'], $now)) ?><?php if ($r['update_at'] !== null): ?> · Update <?= $e(ProjectView::age($r['update_at'], $now)) ?><?php endif; ?></p>
+        </article>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
 <?php endif; ?>
 
 <h2 class="section">System</h2>
