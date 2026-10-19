@@ -197,10 +197,26 @@ final class App
         } catch (\PDOException) {
             $vercelByRepo = [];
         }
+        $installations = [];
+        $openAlerts = [];
         try {
             $reportsByRepo = StatusRepository::byRepository((new StatusRepository($this->pdo))->all(), self::repoRefs([$project]));
+            $installations = array_values(array_filter(
+                (new InstallationRepository($this->pdo))->all(),
+                static fn (array $i): bool => strcasecmp($i['kompanie'], (string)$project['full_name']) === 0,
+            ));
+            $openAlerts = (new AlertRepository($this->pdo))->open();
         } catch (\PDOException) {
-            $reportsByRepo = [];
+            $reportsByRepo = $reportsByRepo ?? [];
+        }
+        // Format 1 rows of a variant that already sends format 2 are outdated.
+        $variants = array_column($installations, 'variant');
+        $reports = array_values(array_filter($reportsByRepo[$project['id']] ?? [], static fn (array $r): bool => !in_array($r['variant'], $variants, true)));
+        $alertsByInstallation = [];
+        foreach ($openAlerts as $a) {
+            if ($a['installation_id'] !== null) {
+                $alertsByInstallation[$a['installation_id']][] = $a;
+            }
         }
         try {
             $costs = (new CostRepository($this->pdo))->all($project['id']);
@@ -212,7 +228,9 @@ final class App
             'title' => $project['name'],
             'project' => $project,
             'vercel' => $vercelByRepo[$project['id']] ?? [],
-            'reports' => $reportsByRepo[$project['id']] ?? [],
+            'reports' => $reports,
+            'installations' => $installations,
+            'alertsByInstallation' => $alertsByInstallation,
             'costs' => $costs,
             'history' => $notes->history($project['id'], 20),
         ]);

@@ -61,8 +61,10 @@ final class Notifier
             foreach ($this->subscriptions->all() as $sub) {
                 try {
                     $status = $this->push->send($sub['endpoint'], $now > 0 ? $now : time());
-                    // 404/410: subscription gone; 403: made with another VAPID key (the device subscribes again on its next visit).
-                    if ($status === 404 || $status === 410 || $status === 403) {
+                    // 404/410: subscription gone. 403 from FCM: made with another VAPID key (the device subscribes
+                    // again on its next visit). Other services also answer 403 for a bad token (configuration):
+                    // keep those and show the error on the page "Warnungen".
+                    if ($status === 404 || $status === 410 || ($status === 403 && str_starts_with($sub['endpoint'], 'https://fcm.googleapis.com/'))) {
                         $this->subscriptions->remove($sub['endpoint']);
                     } elseif ($status >= 200 && $status < 300) {
                         $delivered = true;

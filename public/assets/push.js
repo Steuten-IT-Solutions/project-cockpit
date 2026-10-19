@@ -40,7 +40,9 @@
     body.set('endpoint', endpoint);
     return fetch(path, { method: 'POST', body: body, credentials: 'same-origin' }).then(function (res) {
       if (!res.ok) {
-        throw new Error('HTTP ' + res.status);
+        var err = new Error('HTTP ' + res.status);
+        err.rejected = res.status >= 400 && res.status < 500;
+        throw err;
       }
     });
   }
@@ -69,7 +71,14 @@
       show(!!sub);
       // Tell the server again: it may have dropped the subscription (e.g. gone at the push service).
       if (sub) {
-        post('/push/subscribe', sub.endpoint).catch(function () {});
+        post('/push/subscribe', sub.endpoint).catch(function (err) {
+          // The cockpit does not accept this subscription (e.g. unknown push service): switch it off here too.
+          if (err.rejected) {
+            sub.unsubscribe().then(function () {
+              show(false, 'Dieses Gerät kann keine Push-Nachrichten des Cockpits bekommen.');
+            });
+          }
+        });
       }
     })
     .catch(function () {
@@ -88,7 +97,12 @@
         return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key(box.dataset.key) });
       })
       .then(function (sub) {
-        return post('/push/subscribe', sub.endpoint);
+        return post('/push/subscribe', sub.endpoint).catch(function (err) {
+          // Not stored on the server: do not leave a subscription behind that never gets anything.
+          return sub.unsubscribe().then(function () {
+            throw err;
+          });
+        });
       })
       .then(function () {
         show(true);
