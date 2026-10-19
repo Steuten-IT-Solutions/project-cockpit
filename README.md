@@ -68,14 +68,19 @@ pages only read the database.
 
 1. Organisation *Steuten-IT-Solutions* → Settings → Developer settings → GitHub Apps →
    *New GitHub App*. Webhook *Active*: off. Repository permissions, all **read-only**:
-   *Actions*, *Contents*, *Metadata*, *Pull requests*. Installable on **Any account** — a
-   private app can only be installed on the account that owns it, and the cockpit needs
-   the organisation and the user account `ChrisSteuten`.
-2. Install the app on both accounts and select the repositories to show.
+   *Actions*, *Contents*, *Metadata*, *Pull requests*. Installable **only on this account**:
+   the projects live in the organisation. A private app can only be installed on the
+   account that owns it; to also cover a personal account, make the app public (Advanced →
+   Make public) or register a second app there — the code reads every installation on the
+   configured `accounts`.
+2. Install the app on the organisation and select the repositories to show; the selection
+   is the project list.
 3. Generate a private key, upload it over SFTP to `cockpit/config/github-app.pem`,
    `chmod 600`. Deployments never upload or delete `config/*.pem`.
 4. Add the `github` section to `config.php` (see `config.example.php`). Only installations
-   on the listed `accounts` are read; anyone else installing the public app is ignored.
+   on the listed `accounts` are read, so a public app installed by someone else is ignored.
+   The client ID is shown on the app's *General* page; a wrong character there makes
+   GitHub answer 401 on `/app/installations`.
 
 Repositories that are no longer granted keep their row and notes but disappear from the
 dashboard. *Hidden* is a dashboard setting and survives every sync.
