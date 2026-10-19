@@ -14,6 +14,7 @@ use Cockpit\Database\Migrator;
 use Cockpit\Http\Request;
 use Cockpit\Http\Response;
 use Cockpit\Http\Router;
+use Cockpit\Jobs\Runner;
 use Cockpit\Projects\NoteRepository;
 use Cockpit\Projects\ProjectRepository;
 use Cockpit\Security\Crypto;
@@ -27,6 +28,8 @@ final class App
     private const ISSUER = 'Steuten IT Cockpit';
     /** Seconds between the password step and the second factor. */
     private const PENDING_TTL = 300;
+    /** Minimum seconds between two runs started with the refresh button. */
+    private const REFRESH_INTERVAL = 60;
 
     private readonly Crypto $crypto;
     private readonly UserRepository $users;
@@ -71,6 +74,7 @@ final class App
         $router->add('GET', '/project', $this->project(...));
         $router->add('POST', '/project/note', $this->saveNote(...));
         $router->add('POST', '/project/visibility', $this->setVisibility(...));
+        $router->add('POST', '/refresh', $this->refresh(...));
         $router->add('GET', '/login', $this->loginForm(...));
         $router->add('POST', '/login', $this->login(...));
         $router->add('GET', '/login/code', $this->codeForm(...));
@@ -195,6 +199,33 @@ final class App
         $this->session->flash($hidden ? $project['name'] . ' ausgeblendet.' : $project['name'] . ' wird wieder angezeigt.');
 
         return Response::redirect('/project?id=' . $project['id']);
+    }
+
+    /**
+     * Runs the background jobs now instead of waiting for the next cron run.
+     */
+    private function refresh(Request $request): Response
+    {
+        if ($this->currentUser() === null) {
+            return Response::redirect('/login');
+        }
+
+        $runner = new Runner($this->config, $this->pdo, $this->root);
+        $since = $runner->secondsSinceLastRun(time());
+        if ($since !== null && $since < self::REFRESH_INTERVAL) {
+            $this->session->flash(sprintf('Gerade erst aktualisiert. Bitte in %d Sekunden erneut versuchen.', self::REFRESH_INTERVAL - $since));
+
+            return Response::redirect('/');
+        }
+
+        $result = $runner->run('Manuell gestartet');
+        $this->session->flash(match (true) {
+            $result === null => 'Es läuft gerade schon eine Aktualisierung. Bitte gleich neu laden.',
+            $result['status'] === 'ok' => 'Aktualisiert.',
+            default => 'Aktualisiert, aber mit Warnung – Details unter „Letzter Cron-Lauf“.',
+        });
+
+        return Response::redirect('/');
     }
 
     private function loginForm(Request $request): Response

@@ -14,6 +14,7 @@
  * @var bool $showHidden
  * @var ?string $lastSync
  * @var bool $githubConfigured
+ * @var string $csrf
  */
 
 use Cockpit\Projects\ProjectView;
@@ -33,7 +34,13 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
     $cronAge = time() - (int)strtotime($lastCron['started_at'] . ' UTC');
 }
 ?>
-<h1>Projekte</h1>
+<div class="page-head">
+  <h1>Projekte</h1>
+  <form method="post" action="/refresh">
+    <input type="hidden" name="_csrf" value="<?= $e($csrf) ?>">
+    <button type="submit" class="secondary compact">Jetzt aktualisieren</button>
+  </form>
+</div>
 <?php if (!$githubConfigured): ?>
   <p class="notice">Die GitHub App ist noch nicht in <code>config.php</code> eingetragen. Projekte erscheinen nach dem Eintragen beim nächsten Cron-Lauf.</p>
 <?php elseif ($projects === null || ($projects === [] && $hiddenCount === 0)): ?>
