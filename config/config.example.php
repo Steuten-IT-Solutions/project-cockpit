@@ -5,10 +5,10 @@
  * config.php is git-ignored and is never deployed: CI excludes config/config.php.
  * Restrict it to the owner: chmod 600 config/config.php
  *
- * Both secrets can be generated in a password manager as random passwords
- * (letters, digits and symbols, but no single quote ' and no backslash):
- *   app_key      at least 40 characters
- *   setup_token  at least 32 characters
+ * Both secrets can be generated in a password manager as random passwords:
+ *   app_key      at least 40 characters; symbols are fine except ' and \
+ *   setup_token  at least 32 characters, letters and digits ONLY: it is part of
+ *                the setup URL, where # & + % ? / would alter or cut it off
  * Alternatively, with PHP: php -r 'echo base64_encode(random_bytes(32)), PHP_EOL;'
  * Keep app_key in the password manager as well; it cannot be recovered.
  */
@@ -25,7 +25,7 @@ return [
     'app_key' => 'CHANGE-ME',
 
     // One-time token for the initial setup page (/setup?token=...).
-    // At least 32 characters. The page is disabled as soon as a user exists;
+    // At least 32 characters, letters and digits only (it goes into a URL). The page is disabled as soon as a user exists;
     // remove the value afterwards.
     'setup_token' => '',
 
