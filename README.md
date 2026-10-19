@@ -7,10 +7,11 @@ The user interface is German; code, comments, commits and documentation are Engl
 
 - **Phase 1:** login with password and TOTP second factor, recovery codes, throttling,
   security log, cron heartbeat and SFTP deployment.
-- **Phase 2 (this state):** project cards from a read-only GitHub App (CI status of the
-  default branch, latest release, open issues and pull requests, last push), a page per
-  project with links and a note that keeps every saved version, and hiding projects.
-- Later: Vercel deployments, company-app status reports, costs.
+- **Phase 2:** project cards from a read-only GitHub App (CI status of the default branch,
+  latest release, open issues and pull requests, last push), a page per project with links
+  and a note that keeps every saved version, hiding projects, a refresh button.
+- **Phase 3 (in progress):** latest Vercel production deployment on each card; next:
+  company-app status reports, costs.
 
 ## Stack
 
@@ -84,6 +85,18 @@ pages only read the database.
 
 Repositories that are no longer granted keep their row and notes but disappear from the
 dashboard. *Hidden* is a dashboard setting and survives every sync.
+
+## Vercel (phase 3)
+
+The cron job lists the team's Vercel projects and reads each one's latest production
+deployment. A project is shown on the card of the GitHub repository it is linked to
+(matched by GitHub repository id, else by owner/name); projects whose repository has no
+card are listed under *Vercel ohne GitHub-Karte*.
+
+1. Vercel → Account Settings → Tokens → create a token with scope = the team and an
+   expiry. Vercel documents no read-only tokens, so it stays in `config.php` only.
+2. Add the `vercel` section to `config.php` (see `config.example.php`) with the token and
+   the team id (`team_…`, shown under Team Settings → General).
 
 ## Security model
 

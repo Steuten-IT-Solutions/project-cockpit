@@ -15,6 +15,8 @@
  * @var ?string $lastSync
  * @var bool $githubConfigured
  * @var string $csrf
+ * @var array<int, list<array<string, mixed>>> $vercelByRepo
+ * @var list<array<string, mixed>> $vercelUnmatched
  */
 
 use Cockpit\Projects\ProjectView;
@@ -56,11 +58,32 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
         <p class="owner"><?= $e($p['owner']) ?><?php if ($p['is_private']): ?> · privat<?php endif; ?><?php if ($p['is_archived']): ?> · archiviert<?php endif; ?><?php if ($p['is_fork']): ?> · Fork<?php endif; ?><?php if ($p['hidden']): ?> · ausgeblendet<?php endif; ?></p>
         <p class="badges">
           <?php if ($p['ci_url'] !== null): ?><a class="badge <?= $e($ciClass) ?>" href="<?= $e($p['ci_url']) ?>" rel="noopener noreferrer" target="_blank"><?= $e($ciLabel) ?></a><?php else: ?><span class="badge <?= $e($ciClass) ?>"><?= $e($ciLabel) ?></span><?php endif; ?>
+          <?php foreach ($vercelByRepo[$p['id']] ?? [] as $v): ?>
+            <?php [$vLabel, $vClass] = ProjectView::vercel($v['deploy_state']); ?>
+            <?php if ($v['deploy_inspector_url'] !== null): ?><a class="badge <?= $e($vClass) ?>" href="<?= $e($v['deploy_inspector_url']) ?>" rel="noopener noreferrer" target="_blank"><?= $e($vLabel) ?></a><?php else: ?><span class="badge <?= $e($vClass) ?>"><?= $e($vLabel) ?></span><?php endif; ?>
+          <?php endforeach; ?>
           <?php if ($p['release_tag'] !== null): ?><span class="badge neutral"><?= $e($p['release_tag']) ?></span><?php endif; ?>
           <?php if ($p['has_note']): ?><span class="badge neutral">Notiz</span><?php endif; ?>
         </p>
         <p class="stats"><?= $e($p['open_issues']) ?> Issues · <?= $e($p['open_prs']) ?> PRs · Push <?= $e(ProjectView::age($p['pushed_at'], time())) ?></p>
         <?php if ($p['sync_error'] !== null): ?><p class="error"><small>Abruf fehlgeschlagen: <?= $e($p['sync_error']) ?></small></p><?php endif; ?>
+      </article>
+    <?php endforeach; ?>
+  </div>
+<?php endif; ?>
+
+<?php if ($vercelUnmatched !== []): ?>
+  <h2 class="section">Vercel ohne GitHub-Karte</h2>
+  <div class="projects">
+    <?php foreach ($vercelUnmatched as $v): ?>
+      <?php [$vLabel, $vClass] = ProjectView::vercel($v['deploy_state']); ?>
+      <article class="card project">
+        <h2><?= $e($v['name']) ?></h2>
+        <p class="owner"><?= $v['repo_full_name'] !== null ? $e($v['repo_full_name']) . ' · für die GitHub App nicht freigegeben' : 'ohne Git-Verbindung' ?></p>
+        <p class="badges">
+          <?php if ($v['deploy_inspector_url'] !== null): ?><a class="badge <?= $e($vClass) ?>" href="<?= $e($v['deploy_inspector_url']) ?>" rel="noopener noreferrer" target="_blank"><?= $e($vLabel) ?></a><?php else: ?><span class="badge <?= $e($vClass) ?>"><?= $e($vLabel) ?></span><?php endif; ?>
+        </p>
+        <p class="stats">Deployment <?= $e(ProjectView::age($v['deploy_created_at'], time())) ?><?php if ($v['production_domain'] !== null): ?> · <a href="https://<?= $e($v['production_domain']) ?>" rel="noopener noreferrer" target="_blank"><?= $e($v['production_domain']) ?></a><?php endif; ?></p>
       </article>
     <?php endforeach; ?>
   </div>
