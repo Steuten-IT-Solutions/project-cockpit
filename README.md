@@ -11,7 +11,8 @@ The user interface is German; code, comments, commits and documentation are Engl
   latest release, open issues and pull requests, last push), a page per project with links
   and a note that keeps every saved version, hiding projects, a refresh button.
 - **Phase 3 (in progress):** latest Vercel production deployment on each card; status
-  reports of the company apps (Kompanie-Apps); next: costs.
+  reports of the company apps (Kompanie-Apps); costs (entered by hand, plus Vercel's
+  charges of the current month).
 
 ## Stack
 
@@ -98,6 +99,19 @@ card are listed under *Vercel ohne GitHub-Karte*.
    expiry. Vercel documents no read-only tokens, so it stays in `config.php` only.
 2. Add the `vercel` section to `config.php` (see `config.example.php`) with the token and
    the team id (`team_…`, shown under Team Settings → General).
+
+## Costs (phase 3)
+
+*Kosten* lists costs entered by hand (domains, webspace, subscriptions) with an amount,
+currency (EUR or USD) and interval, optionally linked to a project, and sums them per month
+and per year. Currencies are never converted: a rate would be a guess that goes stale.
+
+With a `vercel` section the cron job also reads `GET /v1/billing/charges` (FOCUS 1.3, JSON
+Lines) for the current calendar month (UTC) and shows the charges summed per category,
+service and project. Vercel documents the endpoint for Pro and Enterprise teams. A failure
+is shown on the page and in the cron status, and the last successful result stays;
+`'billing' => false` in the `vercel` section switches the call off. The figures are what the
+API reports, not the invoice.
 
 ## Status reports (phase 3)
 

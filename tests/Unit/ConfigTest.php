@@ -105,6 +105,9 @@ final class ConfigTest extends TestCase
         $vercel = Config::fromArray($raw)->vercel;
         self::assertNotNull($vercel);
         self::assertSame('https://api.vercel.com', $vercel['api_base']);
+        self::assertTrue($vercel['billing']);
+        $raw['vercel']['billing'] = false;
+        self::assertFalse(Config::fromArray($raw)->vercel['billing'] ?? null);
 
         $raw['vercel']['team_id'] = 'steuten';
         $this->expectException(RuntimeException::class);

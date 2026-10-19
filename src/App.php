@@ -9,6 +9,8 @@ use Cockpit\Auth\RecoveryCodes;
 use Cockpit\Auth\Throttle;
 use Cockpit\Auth\Totp;
 use Cockpit\Auth\UserRepository;
+use Cockpit\Costs\Cost;
+use Cockpit\Costs\CostRepository;
 use Cockpit\Database\Connection;
 use Cockpit\Database\Migrator;
 use Cockpit\Http\Request;
@@ -18,6 +20,7 @@ use Cockpit\Jobs\Runner;
 use Cockpit\Projects\NoteRepository;
 use Cockpit\Projects\ProjectRepository;
 use Cockpit\Status\StatusRepository;
+use Cockpit\Vercel\BillingRepository;
 use Cockpit\Vercel\VercelRepository;
 use Cockpit\Security\Crypto;
 use Cockpit\Security\Csrf;
@@ -77,6 +80,9 @@ final class App
         $router->add('POST', '/project/note', $this->saveNote(...));
         $router->add('POST', '/project/visibility', $this->setVisibility(...));
         $router->add('POST', '/refresh', $this->refresh(...));
+        $router->add('GET', '/costs', $this->costs(...));
+        $router->add('POST', '/costs', $this->addCost(...));
+        $router->add('POST', '/costs/delete', $this->deleteCost(...));
         $router->add('GET', '/login', $this->loginForm(...));
         $router->add('POST', '/login', $this->login(...));
         $router->add('GET', '/login/code', $this->codeForm(...));
@@ -181,12 +187,18 @@ final class App
         } catch (\PDOException) {
             $reportsByRepo = [];
         }
+        try {
+            $costs = (new CostRepository($this->pdo))->all($project['id']);
+        } catch (\PDOException) {
+            $costs = [];
+        }
 
         return $this->page('project', [
             'title' => $project['name'],
             'project' => $project,
             'vercel' => $vercelByRepo[$project['id']] ?? [],
             'reports' => $reportsByRepo[$project['id']] ?? [],
+            'costs' => $costs,
             'history' => $notes->history($project['id'], 20),
         ]);
     }
@@ -254,6 +266,74 @@ final class App
         });
 
         return Response::redirect('/');
+    }
+
+    private function costs(Request $request): Response
+    {
+        if ($this->currentUser() === null) {
+            return Response::redirect('/login');
+        }
+
+        return $this->costsPage([], null);
+    }
+
+    private function addCost(Request $request): Response
+    {
+        if ($this->currentUser() === null) {
+            return Response::redirect('/login');
+        }
+        $fields = [];
+        foreach (['name', 'provider', 'amount', 'currency', 'interval', 'project', 'note'] as $key) {
+            $fields[$key] = $request->input($key);
+        }
+        $projectIds = array_map(static fn (array $p): int => (int)$p['id'], (new ProjectRepository($this->pdo))->all());
+        $cost = Cost::fromForm($fields, $projectIds);
+        if (is_string($cost)) {
+            // Show the form again with what was entered.
+            return $this->costsPage($fields, $cost, 422);
+        }
+        (new CostRepository($this->pdo))->add($cost, gmdate('Y-m-d H:i:s'));
+        $this->session->flash($cost['name'] . ' hinzugefügt.');
+
+        return Response::redirect('/costs');
+    }
+
+    private function deleteCost(Request $request): Response
+    {
+        if ($this->currentUser() === null) {
+            return Response::redirect('/login');
+        }
+        $deleted = ctype_digit($request->input('id')) && (new CostRepository($this->pdo))->delete((int)$request->input('id'));
+        $this->session->flash($deleted ? 'Kosten gelöscht.' : 'Der Eintrag existiert nicht mehr.');
+
+        return Response::redirect('/costs');
+    }
+
+    /**
+     * @param array<string, string> $form values to show in the form again
+     */
+    private function costsPage(array $form, ?string $error, int $status = 200): Response
+    {
+        $billing = new BillingRepository($this->pdo);
+        try {
+            $data = [
+                'costs' => (new CostRepository($this->pdo))->all(),
+                'projects' => (new ProjectRepository($this->pdo))->all(),
+                'billing' => $billing->state(),
+                'charges' => $billing->charges(),
+                'ready' => true,
+            ];
+        } catch (\PDOException) {
+            // New tables appear with the next cron run after a deployment.
+            $data = ['costs' => [], 'projects' => [], 'billing' => null, 'charges' => [], 'ready' => false];
+        }
+
+        return $this->page('costs', $data + [
+            'title' => 'Kosten',
+            'vercelConfigured' => $this->config->vercel !== null && $this->config->vercel['billing'],
+            'form' => $form,
+            'error' => $error,
+        ], $status);
     }
 
     private function loginForm(Request $request): Response

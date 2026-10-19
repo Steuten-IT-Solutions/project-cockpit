@@ -16,7 +16,7 @@ final class Config
     /**
      * @param array{dsn: string, user: string, password: string} $database
      * @param array{client_id: string, private_key_file: string, accounts: list<string>, api_base: string}|null $github
-     * @param array{token: string, team_id: string, api_base: string}|null $vercel
+     * @param array{token: string, team_id: string, api_base: string, billing: bool}|null $vercel
      * @param array{org: string}|null $statusReports
      */
     private function __construct(
@@ -156,7 +156,7 @@ final class Config
      * The optional vercel section: an access token scoped to the team, and the team id.
      *
      * @param array<mixed> $raw
-     * @return array{token: string, team_id: string, api_base: string}|null
+     * @return array{token: string, team_id: string, api_base: string, billing: bool}|null
      */
     private static function vercel(array $raw): ?array
     {
@@ -177,7 +177,12 @@ final class Config
             throw new RuntimeException('vercel.api_base must be an origin without a trailing slash.');
         }
 
-        return ['token' => self::string($vercel, 'token'), 'team_id' => $teamId, 'api_base' => $apiBase];
+        $billing = $vercel['billing'] ?? true;
+        if (!is_bool($billing)) {
+            throw new RuntimeException('vercel.billing must be true or false.');
+        }
+
+        return ['token' => self::string($vercel, 'token'), 'team_id' => $teamId, 'api_base' => $apiBase, 'billing' => $billing];
     }
 
     /**
