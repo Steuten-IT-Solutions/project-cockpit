@@ -107,6 +107,10 @@ final class Receiver
         }
 
         $store = ($this->installations)();
+        // Counted before any other database work, rejected attempts included.
+        if ($store->countInHour(gmdate('YmdH', $now), gmdate('YmdH', $now - 86400)) > self::MAX_PER_HOUR) {
+            return self::json(429, ['error' => 'too many reports', 'code' => 'rate_limited']);
+        }
         $at = gmdate('Y-m-d H:i:s', $now);
         $known = $store->find($report['installation']);
         if ($known === null) {
@@ -116,27 +120,25 @@ final class Receiver
             if (!hash_equals(self::sign($body, $report['key']), $signature)) {
                 return self::json(401, ['error' => 'bad signature', 'code' => 'bad_signature']);
             }
-        } else {
-            // The stored secret decides; a "key" in the report is ignored.
-            if (!hash_equals(self::sign($body, $this->crypto->decrypt($known['secret_enc'])), $signature)) {
-                return self::json(401, ['error' => 'bad signature', 'code' => 'bad_signature']);
+            // Only companies with a repository of ours: otherwise anyone could register installations.
+            if (!$store->companyKnown($report['kompanie'])) {
+                return self::json(403, ['error' => 'unknown company', 'code' => 'unknown_company']);
             }
-            if (strcasecmp($known['kompanie'], $report['kompanie']) !== 0 || $known['variant'] !== $report['variant']) {
-                return self::json(400, ['error' => 'installation belongs to another company', 'code' => 'invalid']);
+            if ($store->count() >= self::MAX_INSTALLATIONS) {
+                return self::json(507, ['error' => 'full', 'code' => 'full']);
+            }
+            if (!$store->register($report, $this->crypto->encrypt($report['key']), $at)) {
+                // Registered by a parallel first report: its secret decides.
+                $known = $store->find($report['installation']);
             }
         }
-
-        if ($store->countInHour(gmdate('YmdH', $now), gmdate('YmdH', $now - 86400)) > self::MAX_PER_HOUR) {
-            return self::json(429, ['error' => 'too many reports', 'code' => 'rate_limited']);
-        }
-        if ($known === null && $store->count() >= self::MAX_INSTALLATIONS) {
-            return self::json(507, ['error' => 'full', 'code' => 'full']);
+        // The stored secret decides; a "key" in the report never replaces it. The signature proves the
+        // installation, so a renamed company or a changed variant is taken over.
+        if ($known !== null && !hash_equals(self::sign($body, $this->crypto->decrypt($known['secret_enc'])), $signature)) {
+            return self::json(401, ['error' => 'bad signature', 'code' => 'bad_signature']);
         }
         if (!$store->claimNonce($report['installation'], $report['nonce'], $at)) {
             return self::json(409, ['error' => 'report seen before', 'code' => 'replay']);
-        }
-        if ($known === null) {
-            $store->register($report, $this->crypto->encrypt((string)$report['key']), $at);
         }
         $store->record($report, $at);
 

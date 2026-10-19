@@ -171,7 +171,8 @@ final class Runner
                 }
             } catch (Throwable $e) {
                 $status = 'warn';
-                $messages[] = 'Warnungen: ' . $e->getMessage();
+                $messages[] = 'Warnungen: Auswertung fehlgeschlagen (Details im Fehlerprotokoll).';
+                error_log(sprintf('[cockpit alerts] %s: %s in %s:%d', $e::class, $e->getMessage(), $e->getFile(), $e->getLine()));
             }
         }
 

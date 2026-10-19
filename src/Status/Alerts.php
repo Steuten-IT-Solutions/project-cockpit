@@ -45,9 +45,10 @@ final class Alerts
 
         $notified = false;
         $pending = $this->alerts->unnotified();
-        if ($pending !== [] && $this->notifier !== null) {
-            // Marked as notified even if a channel failed: otherwise every run would send again.
-            $notified = $this->notifier->send($pending, $now);
+        if ($pending !== []) {
+            // Marked as notified even if a channel failed or none is set up: otherwise every run (or the first
+            // run after setting up e-mail) would send everything again.
+            $notified = $this->notifier?->send($pending, $now) ?? false;
             $this->alerts->markNotified(array_map(static fn (array $a): int => $a['id'], $pending), $at);
         }
         $this->alerts->prune(gmdate('Y-m-d H:i:s', $now - self::KEEP_DAYS * 86400));

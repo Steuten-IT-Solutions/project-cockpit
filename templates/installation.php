@@ -59,7 +59,7 @@ $levelClass = static fn (string $level): string => match ($level) {
     <ul class="events">
       <?php foreach ($alerts as $a): ?>
         <li>
-          <span><span class="badge <?= $a['resolved_at'] === null ? 'fail' : 'neutral' ?>"><?= $e(StatusView::alertLabel($a['alert_key'])) ?></span></span>
+          <span><span class="badge <?= $e($a['resolved_at'] === null ? 'fail' : 'neutral') ?>"><?= $e(StatusView::alertLabel($a['alert_key'])) ?></span></span>
           <time><?= $e(View::localTime($a['opened_at'], $timezone)) ?><?php if ($a['resolved_at'] !== null): ?> – <?= $e(View::localTime($a['resolved_at'], $timezone)) ?><?php endif; ?></time>
         </li>
       <?php endforeach; ?>

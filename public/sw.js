@@ -15,9 +15,17 @@ self.addEventListener('notificationclick', function (event) {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
       for (var i = 0; i < list.length; i++) {
-        if ('focus' in list[i]) {
-          list[i].navigate('/alerts');
-          return list[i].focus();
+        var client = list[i];
+        if ('focus' in client && 'navigate' in client) {
+          // navigate() fails for tabs this worker does not control: then open a new window.
+          return client
+            .navigate('/alerts')
+            .then(function (c) {
+              return (c || client).focus();
+            })
+            .catch(function () {
+              return self.clients.openWindow('/alerts');
+            });
         }
       }
       return self.clients.openWindow('/alerts');

@@ -11,7 +11,7 @@ use Cockpit\Status\InstallationStore;
  *
  * @phpstan-import-type Format2 from \Cockpit\Status\StatusReport
  */
-final class InMemoryInstallationStore implements InstallationStore
+class InMemoryInstallationStore implements InstallationStore
 {
     /** @var array<string, array{kompanie: string, variant: string, secret_enc: string}> */
     public array $installations = [];
@@ -30,6 +30,14 @@ final class InMemoryInstallationStore implements InstallationStore
         return count($this->installations);
     }
 
+    /** @var list<string> companies with a project card; empty: every company counts as known */
+    public array $companies = [];
+
+    public function companyKnown(string $kompanie): bool
+    {
+        return $this->companies === [] || in_array(strtolower($kompanie), array_map('strtolower', $this->companies), true);
+    }
+
     public function countInHour(string $hour, string $dayAgo): int
     {
         return 1;
@@ -45,9 +53,14 @@ final class InMemoryInstallationStore implements InstallationStore
         return true;
     }
 
-    public function register(array $report, string $secretEnc, string $now): void
+    public function register(array $report, string $secretEnc, string $now): bool
     {
+        if (isset($this->installations[$report['installation']])) {
+            return false;
+        }
         $this->installations[$report['installation']] = ['kompanie' => $report['kompanie'], 'variant' => $report['variant'], 'secret_enc' => $secretEnc];
+
+        return true;
     }
 
     public function record(array $report, string $now): void

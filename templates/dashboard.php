@@ -58,6 +58,12 @@ $repoByName = [];
 foreach ($projects ?? [] as $p) {
     $repoByName[strtolower((string)$p['full_name'])] = (int)$p['id'];
 }
+// Format 1 rows of companies that already send format 2 are outdated.
+$format2 = [];
+foreach ($installations as $i) {
+    $format2[strtolower($i['kompanie']) . '|' . $i['variant']] = true;
+}
+$reports = array_values(array_filter($reports, static fn (array $r): bool => !isset($format2[strtolower($r['kompanie']) . '|' . $r['variant']])));
 $installationsByRepo = [];
 foreach ($installations as $i) {
     $repoId = $repoByName[strtolower($i['kompanie'])] ?? null;

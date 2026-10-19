@@ -61,7 +61,8 @@ final class Notifier
             foreach ($this->subscriptions->all() as $sub) {
                 try {
                     $status = $this->push->send($sub['endpoint'], $now > 0 ? $now : time());
-                    if ($status === 404 || $status === 410) {
+                    // 404/410: subscription gone; 403: made with another VAPID key (the device subscribes again on its next visit).
+                    if ($status === 404 || $status === 410 || $status === 403) {
                         $this->subscriptions->remove($sub['endpoint']);
                     } elseif ($status >= 200 && $status < 300) {
                         $delivered = true;

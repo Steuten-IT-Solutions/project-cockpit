@@ -139,11 +139,58 @@ final class StatusFormat2Test extends TestCase
         $other = str_repeat('c', 64);
         self::assertSame([401, 'bad_signature'], self::send($receiver, self::payload(['key' => $other]), $other));
         self::assertSame([401, 'bad_signature'], self::send($receiver, self::payload(), null));
-        // A known installation cannot switch company.
-        self::assertSame([400, 'invalid'], self::send($receiver, self::payload(['kompanie' => 'Steuten-IT-Solutions/andere'])));
+        // The signature proves the installation: a renamed company repository is taken over.
+        self::assertSame([201, ''], self::send($receiver, self::payload(['kompanie' => 'Steuten-IT-Solutions/kompanie-neu'])));
 
-        self::assertCount(2, $store->records);
+        self::assertCount(3, $store->records);
         self::assertSame('UPDATE_FAILED', $store->records[1]['event']);
+        self::assertSame('Steuten-IT-Solutions/kompanie-neu', $store->records[2]['kompanie']);
+    }
+
+    public function testOnlyCompaniesWithARepositoryCanRegister(): void
+    {
+        $store = self::store();
+        $store->companies = ['Steuten-IT-Solutions/kompanie-musterstadt'];
+        $receiver = self::receiver($store);
+        $other = bin2hex(random_bytes(16));
+        self::assertSame([403, 'unknown_company'], self::send($receiver, self::payload(['installation' => $other, 'kompanie' => 'Steuten-IT-Solutions/erfunden', 'key' => self::SECRET])));
+        self::assertCount(0, $store->installations);
+        self::assertSame([201, ''], self::send($receiver, self::payload(['kompanie' => 'Steuten-IT-Solutions/Kompanie-Musterstadt', 'key' => self::SECRET])), 'case-insensitive');
+    }
+
+    public function testParallelFirstReportUsesTheStoredSecret(): void
+    {
+        $store = self::store();
+        $receiver = self::receiver($store);
+        // Another request registered the installation between find() and register(): simulated by a
+        // store whose find() reports nothing on the first call.
+        $racing = new class ($store) extends InMemoryInstallationStore {
+            private bool $first = true;
+
+            public function __construct(private readonly InMemoryInstallationStore $inner)
+            {
+            }
+
+            public function find(string $id): ?array
+            {
+                if ($this->first) {
+                    $this->first = false;
+
+                    return null;
+                }
+
+                return $this->inner->find($id);
+            }
+
+            public function register(array $report, string $secretEnc, string $now): bool
+            {
+                return $this->inner->register($report, $secretEnc, $now);
+            }
+        };
+        self::assertSame(201, self::send($receiver, self::payload(['key' => self::SECRET]))[0]);
+        $other = str_repeat('d', 64);
+        self::assertSame([401, 'bad_signature'], self::send(self::receiver($racing), self::payload(['key' => $other]), $other),
+            'the stored secret decides, the parallel key is not taken');
     }
 
     public function testReceiverBlocksReplays(): void
@@ -187,21 +234,32 @@ final class StatusFormat2Test extends TestCase
         $b = self::installation(str_repeat('b', 32), 'kompanie-b', 'real', 3 * 3600);
         $c = self::installation(str_repeat('c', 32), 'kompanie-c', 'pseudo', 3 * 3600);
         $d = self::installation(str_repeat('d', 32), 'kompanie-d', 'real', 600, ['gallery' => 'error', 'backup' => 'warn']);
+        $e = self::installation(str_repeat('e', 32), 'kompanie-e');
+        $e['first_seen'] = gmdate('Y-m-d H:i:s', self::NOW - 3600); // registered an hour ago
         $events = [
             ['installation_id' => self::ID, 'code' => 'UPDATE_FAILED', 'version' => '1.4.0.3', 'received_at' => gmdate('Y-m-d H:i:s', self::NOW - 1800)],
             ['installation_id' => $b['id'], 'code' => 'PHP_FATAL', 'version' => '1.4.0.3', 'received_at' => gmdate('Y-m-d H:i:s', self::NOW - 2 * 86400)],
+            ['installation_id' => $d['id'], 'code' => 'CHECK_ERROR', 'version' => '1.4.0.3', 'received_at' => gmdate('Y-m-d H:i:s', self::NOW - 600)],
+            ['installation_id' => $e['id'], 'code' => 'DB_ERROR', 'version' => '1.4.0.3', 'received_at' => gmdate('Y-m-d H:i:s', self::NOW - 600)],
         ];
-        $wanted = AlertRules::wanted([$a, $b, $c, $d], $events, self::NOW);
+        $wanted = AlertRules::wanted([$a, $b, $c, $d, $e], $events, self::NOW);
         $keys = array_keys($wanted);
         sort($keys);
         self::assertSame([
-            '*|release:1.4.0.3',
             self::ID . '|event:UPDATE_FAILED',
             str_repeat('b', 32) . '|silent',
             str_repeat('d', 32) . '|check:gallery',
-        ], $keys, 'silent after 2 h with real cron, not yet with pseudo-cron; old events expire; warn raises nothing');
+            str_repeat('e', 32) . '|event:DB_ERROR',
+        ], $keys, 'silent after 2 h with real cron, not yet with pseudo-cron; old events expire; warn and CHECK_ERROR raise nothing; '
+            . 'no release alert: a red light is no release error and kompanie-e is new');
+
+        // Two installations known for a day with severe errors on the same version: release alert.
+        $e['first_seen'] = gmdate('Y-m-d H:i:s', self::NOW - 2 * 86400);
+        $wanted = AlertRules::wanted([$a, $b, $c, $d, $e], $events, self::NOW);
+        self::assertArrayHasKey('*|release:1.4.0.3', $wanted);
         self::assertStringContainsString('kompanie-a', $wanted['*|release:1.4.0.3']['detail']);
-        self::assertStringContainsString('kompanie-d', $wanted['*|release:1.4.0.3']['detail']);
+        self::assertStringContainsString('kompanie-e', $wanted['*|release:1.4.0.3']['detail']);
+        self::assertStringNotContainsString('kompanie-d', $wanted['*|release:1.4.0.3']['detail']);
 
         // Lifecycle: open new, keep existing, resolve gone.
         $open = [
@@ -211,7 +269,7 @@ final class StatusFormat2Test extends TestCase
         $diff = AlertRules::diff($wanted, $open);
         self::assertSame([['id' => 1, 'detail' => 'Update gescheitert']], $diff['touch']);
         self::assertSame([2], $diff['resolve']);
-        self::assertCount(3, $diff['open']);
+        self::assertCount(4, $diff['open']);
     }
 
     public function testNotificationMessage(): void
@@ -281,8 +339,12 @@ final class StatusFormat2Test extends TestCase
         $public = openssl_pkey_get_details($key)['key'] ?? '';
         self::assertSame(1, openssl_verify($h . '.' . $c, $der, $public, OPENSSL_ALGO_SHA256));
 
-        self::assertFalse(WebPush::validEndpoint('http://example.org/push'));
-        self::assertFalse(WebPush::validEndpoint('https://user:pw@example.org/push'));
+        self::assertTrue(WebPush::validEndpoint('https://updates.push.services.mozilla.com/wpush/v2/abc'));
+        self::assertTrue(WebPush::validEndpoint('https://web.push.apple.com/abc'));
+        self::assertFalse(WebPush::validEndpoint('http://fcm.googleapis.com/fcm/send/abc'), 'https only');
+        self::assertFalse(WebPush::validEndpoint('https://intranet.example.org/push'), 'only known push services');
+        self::assertFalse(WebPush::validEndpoint('https://evilpush.apple.com.example.org/x'));
+        self::assertFalse(WebPush::validEndpoint('https://user:pw@fcm.googleapis.com/fcm/send/abc'));
     }
 
     public function testLabels(): void

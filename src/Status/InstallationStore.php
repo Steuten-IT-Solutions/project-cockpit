@@ -19,6 +19,12 @@ interface InstallationStore
     public function count(): int;
 
     /**
+     * Whether the company is one of our repositories (projects from the GitHub sync). Without any
+     * synced projects (GitHub App not set up) every company of the organisation counts as known.
+     */
+    public function companyKnown(string $kompanie): bool;
+
+    /**
      * Counts one report in the given UTC hour (YYYYMMDDHH) and returns the hour's total so far.
      */
     public function countInHour(string $hour, string $dayAgo): int;
@@ -29,11 +35,12 @@ interface InstallationStore
     public function claimNonce(string $installation, string $nonce, string $now): bool;
 
     /**
-     * Stores a new installation with its encrypted secret (trust on first use).
+     * Stores a new installation with its encrypted secret (trust on first use). False if another
+     * request registered the same id in the meantime (then the stored secret decides).
      *
      * @param Format2 $report
      */
-    public function register(array $report, string $secretEnc, string $now): void;
+    public function register(array $report, string $secretEnc, string $now): bool;
 
     /**
      * Stores the state of a report and appends it to the history (heartbeat or event).

@@ -42,6 +42,15 @@ final class InstallationRepository implements InstallationStore
         return (int)$stmt->fetchColumn();
     }
 
+    public function companyKnown(string $kompanie): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) AS projects, SUM(LOWER(full_name) = LOWER(?)) AS matching FROM projects');
+        $stmt->execute([$kompanie]);
+        $row = $stmt->fetch();
+
+        return !is_array($row) || (int)$row['projects'] === 0 || (int)$row['matching'] > 0;
+    }
+
     public function countInHour(string $hour, string $dayAgo): int
     {
         // Shares the hourly counter with format 1 reports.
@@ -56,15 +65,18 @@ final class InstallationRepository implements InstallationStore
         return $stmt->rowCount() === 1;
     }
 
-    public function register(array $report, string $secretEnc, string $now): void
+    public function register(array $report, string $secretEnc, string $now): bool
     {
-        $this->pdo->prepare(
-            'INSERT INTO installations (id, kompanie, variant, secret_enc, version, php, db_driver, cron_kind, checks, errors, features,
+        $stmt = $this->pdo->prepare(
+            'INSERT IGNORE INTO installations (id, kompanie, variant, secret_enc, version, php, db_driver, cron_kind, checks, errors, features,
                 update_check_ok, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        )->execute([
+        );
+        $stmt->execute([
             $report['installation'], $report['kompanie'], $report['variant'], $secretEnc, $report['version'], $report['php'],
             $report['db_driver'], $report['cron_kind'], '{}', '{}', '', $report['update_check_ok'], $now, $now,
         ]);
+
+        return $stmt->rowCount() === 1;
     }
 
     public function record(array $report, string $now): void
@@ -73,11 +85,11 @@ final class InstallationRepository implements InstallationStore
         $errors = self::json($report['errors']);
         $heartbeat = $report['kind'] === 'heartbeat';
         $this->pdo->prepare(
-            'UPDATE installations SET version = ?, php = ?, db_driver = ?, cron_kind = ?, cron_last = ?, checks = ?, errors = ?,
+            'UPDATE installations SET kompanie = ?, variant = ?, version = ?, php = ?, db_driver = ?, cron_kind = ?, cron_last = ?, checks = ?, errors = ?,
                 features = ?, update_ok = ?, update_at = ?, update_to = ?, update_check_ok = ?, gallery_ok = ?, gallery_at = ?,
                 last_seen = ?' . ($heartbeat ? ', last_heartbeat = ?' : '') . ' WHERE id = ?'
         )->execute([
-            $report['version'], $report['php'], $report['db_driver'], $report['cron_kind'], $report['cron_last'], $checks, $errors,
+            $report['kompanie'], $report['variant'], $report['version'], $report['php'], $report['db_driver'], $report['cron_kind'], $report['cron_last'], $checks, $errors,
             implode(',', $report['features']), $report['update_ok'], $report['update_at'], $report['update_to'],
             $report['update_check_ok'], $report['gallery_ok'], $report['gallery_at'], $now,
             ...($heartbeat ? [$now, $report['installation']] : [$report['installation']]),
@@ -165,7 +177,9 @@ final class InstallationRepository implements InstallationStore
         $this->pdo->prepare('DELETE FROM status_heartbeats WHERE received_at < ?')->execute([$historyCutoff]);
         $this->pdo->prepare('DELETE FROM status_events WHERE received_at < ?')->execute([$historyCutoff]);
         $this->pdo->prepare('DELETE FROM status_nonces WHERE received_at < ?')->execute([$nonceCutoff]);
-        // An installation that has not reported for the whole retention period (e.g. consent withdrawn).
+        // An installation that has not reported for the whole retention period (e.g. consent withdrawn),
+        // with its alerts: otherwise the next evaluation would report them as resolved.
+        $this->pdo->prepare('DELETE FROM alerts WHERE installation_id IN (SELECT id FROM installations WHERE last_seen < ?)')->execute([$historyCutoff]);
         $this->pdo->prepare('DELETE FROM installations WHERE last_seen < ?')->execute([$historyCutoff]);
     }
 

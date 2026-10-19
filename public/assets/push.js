@@ -21,6 +21,19 @@
     return out;
   }
 
+  function same(buffer, bytes) {
+    var a = new Uint8Array(buffer);
+    if (a.length !== bytes.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] !== bytes[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   function post(path, endpoint) {
     var body = new URLSearchParams();
     body.set('_csrf', box.dataset.csrf);
@@ -47,7 +60,17 @@
       return reg.pushManager.getSubscription();
     })
     .then(function (sub) {
+      // Made with an older VAPID key: no longer deliverable, switch it off so it can be renewed.
+      if (sub && sub.options && sub.options.applicationServerKey && !same(sub.options.applicationServerKey, key(box.dataset.key))) {
+        return sub.unsubscribe().then(function () {
+          show(false, 'Der Schlüssel des Cockpits hat sich geändert. Bitte Push neu einschalten.');
+        });
+      }
       show(!!sub);
+      // Tell the server again: it may have dropped the subscription (e.g. gone at the push service).
+      if (sub) {
+        post('/push/subscribe', sub.endpoint).catch(function () {});
+      }
     })
     .catch(function () {
       show(false, 'Push ist in diesem Browser nicht verfügbar.');

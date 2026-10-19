@@ -57,7 +57,7 @@ final class WebPush
         if (!self::validEndpoint($endpoint) || !is_array($parts) || !isset($parts['host'])) {
             throw new RuntimeException('Invalid push endpoint.');
         }
-        $audience = 'https://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+        $audience = 'https://' . $parts['host'];
 
         return ($this->transport)($endpoint, [
             'TTL' => (string)self::TTL,
@@ -67,13 +67,25 @@ final class WebPush
         ]);
     }
 
-    /** Only https endpoints without credentials. */
+    /** Hosts of the push services of Chrome/Android, Firefox, Safari/iOS and Edge/Windows. */
+    private const PUSH_HOSTS = ['/^fcm\.googleapis\.com$/', '/(^|\.)push\.services\.mozilla\.com$/', '/(^|\.)push\.apple\.com$/', '/(^|\.)notify\.windows\.com$/'];
+
+    /** Only https endpoints of the known push services, without credentials. */
     public static function validEndpoint(string $endpoint): bool
     {
         $parts = parse_url($endpoint);
+        if (!is_array($parts) || ($parts['scheme'] ?? '') !== 'https' || isset($parts['user']) || isset($parts['pass'])
+            || isset($parts['port']) || strlen($endpoint) > 500) {
+            return false;
+        }
+        $host = strtolower($parts['host'] ?? '');
+        foreach (self::PUSH_HOSTS as $pattern) {
+            if (preg_match($pattern, $host)) {
+                return true;
+            }
+        }
 
-        return is_array($parts) && ($parts['scheme'] ?? '') === 'https' && ($parts['host'] ?? '') !== ''
-            && !isset($parts['user']) && !isset($parts['pass']) && strlen($endpoint) <= 500;
+        return false;
     }
 
     /** VAPID JWT (ES256), valid for 12 hours. */
@@ -150,7 +162,7 @@ final class WebPush
         $error = curl_error($ch);
         curl_close($ch);
         if ($result === false) {
-            throw new RuntimeException('Push failed: ' . $error);
+            throw new RuntimeException('Push fehlgeschlagen: ' . $error);
         }
 
         return $status;

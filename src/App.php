@@ -253,16 +253,23 @@ final class App
         }
         $id = $request->query('id');
         $repository = new InstallationRepository($this->pdo);
-        $installation = preg_match('/^[0-9a-f]{32}$/D', $id) ? $repository->get($id) : null;
-        if ($installation === null) {
+        try {
+            $installation = preg_match('/^[0-9a-f]{32}$/D', $id) ? $repository->get($id) : null;
+            if ($installation === null) {
+                return new Response(404);
+            }
+            $history = $repository->history($id, gmdate('Y-m-d H:i:s', time() - Alerts::KEEP_DAYS * 86400), 200);
+            $alerts = (new AlertRepository($this->pdo))->forInstallation($id, 50);
+        } catch (\PDOException) {
+            // New tables appear with the next cron run after a deployment.
             return new Response(404);
         }
 
         return $this->page('installation', [
             'title' => $installation['kompanie'],
             'installation' => $installation,
-            'history' => $repository->history($id, gmdate('Y-m-d H:i:s', time() - Alerts::KEEP_DAYS * 86400), 200),
-            'alerts' => (new AlertRepository($this->pdo))->forInstallation($id, 50),
+            'history' => $history,
+            'alerts' => $alerts,
         ]);
     }
 
