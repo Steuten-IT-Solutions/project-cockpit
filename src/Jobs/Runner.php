@@ -11,6 +11,9 @@ use Cockpit\GitHub\Sync;
 use Cockpit\Projects\ProjectRepository;
 use Cockpit\Status\Receiver;
 use Cockpit\Status\StatusRepository;
+use Cockpit\Costs\Cost;
+use Cockpit\Vercel\BillingRepository;
+use Cockpit\Vercel\BillingSync;
 use Cockpit\Vercel\Client as VercelClient;
 use Cockpit\Vercel\Sync as VercelSync;
 use Cockpit\Vercel\VercelRepository;
@@ -126,6 +129,23 @@ final class Runner
             } catch (Throwable $e) {
                 $status = 'warn';
                 $messages[] = 'Vercel: ' . $e->getMessage();
+            }
+
+            if ($vercel['billing']) {
+                $billing = new BillingRepository($this->pdo);
+                try {
+                    $client = new VercelClient($vercel['token'], $vercel['team_id'], $vercel['api_base']);
+                    $totals = (new BillingSync($client, $billing))->run(time());
+                    $amounts = [];
+                    foreach ($totals as $currency => $amount) {
+                        $amounts[] = Cost::money($amount * 100, $currency);
+                    }
+                    $messages[] = 'Vercel-Kosten seit Monatsbeginn: ' . ($amounts === [] ? 'keine' : implode(', ', $amounts));
+                } catch (Throwable $e) {
+                    $status = 'warn';
+                    $messages[] = 'Vercel-Kosten: ' . $e->getMessage();
+                    $billing->fail($e->getMessage(), gmdate('Y-m-d H:i:s'));
+                }
             }
         }
 

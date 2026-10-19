@@ -21,10 +21,14 @@
 <header class="topbar">
   <a class="brand" href="/">Cockpit</a>
   <?php if ($loggedIn): ?>
-    <form method="post" action="/logout">
-      <input type="hidden" name="_csrf" value="<?= $e($csrf) ?>">
-      <button type="submit" class="link">Abmelden</button>
-    </form>
+    <nav class="topnav" aria-label="Hauptnavigation">
+      <a href="/">Projekte</a>
+      <a href="/costs">Kosten</a>
+      <form method="post" action="/logout">
+        <input type="hidden" name="_csrf" value="<?= $e($csrf) ?>">
+        <button type="submit" class="link">Abmelden</button>
+      </form>
+    </nav>
   <?php endif; ?>
 </header>
 <main>

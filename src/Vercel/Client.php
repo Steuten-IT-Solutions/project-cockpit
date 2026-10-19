@@ -32,14 +32,24 @@ final class Client
      */
     public function get(string $path, array $query = []): array
     {
+        [$status, $raw] = $this->getRaw($path, $query, 'application/json');
+
+        return [$status, $raw === '' ? null : json_decode($raw, true)];
+    }
+
+    /**
+     * @param array<string, string|int> $query
+     * @return array{int, string} status and undecoded body, e.g. JSON Lines
+     */
+    public function getRaw(string $path, array $query, string $accept): array
+    {
         $url = $this->apiBase . $path . '?' . http_build_query($query + ['teamId' => $this->teamId], '', '&', PHP_QUERY_RFC3986);
-        [$status, $raw] = ($this->transport)($url, [
-            'Accept: application/json',
+
+        return ($this->transport)($url, [
+            'Accept: ' . $accept,
             'Authorization: Bearer ' . $this->token,
             'User-Agent: steuten-it-project-cockpit',
         ]);
-
-        return [$status, $raw === '' ? null : json_decode($raw, true)];
     }
 
     /**

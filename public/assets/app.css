@@ -242,3 +242,37 @@ h3 { font-size: 1rem; margin: 20px 0 8px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .page-head h1 { margin-bottom: 8px; }
 .page-head form > button.compact { width: auto; margin: 0; padding: 8px 14px; min-height: 40px; }
+
+.topnav { display: flex; align-items: center; gap: 16px; }
+.topnav a { text-decoration: none; font-weight: 500; }
+
+select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Amount, currency and interval share a row from small tablets up. */
+.fields { display: grid; gap: 0 12px; }
+@media (min-width: 480px) {
+  .fields { grid-template-columns: 2fr 1fr 1.4fr; }
+}
+
+.costs { list-style: none; margin: 16px 0 0; padding: 0; }
+.costs li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.costs form { flex-shrink: 0; }
+.costs form > button.compact { width: auto; margin: 0; padding: 6px 12px; min-height: 40px; white-space: nowrap; }

@@ -7,8 +7,10 @@
  * @var list<array{id: int, body: string, created_at: string}> $history
  * @var list<array<string, mixed>> $vercel
  * @var list<array<string, mixed>> $reports
+ * @var list<array<string, mixed>> $costs
  */
 
+use Cockpit\Costs\Cost;
 use Cockpit\Projects\ProjectView;
 use Cockpit\Status\StatusView;
 use Cockpit\View;
@@ -76,6 +78,15 @@ $links = [
         <?php if ($problems !== []): ?><br><small class="error"><?= $e(implode('; ', $problems)) ?></small><?php endif; ?>
       </dd>
     <?php endforeach; ?>
+    <?php if ($costs !== []): ?>
+      <dt>Kosten</dt>
+      <dd>
+        <?php foreach ($costs as $c): ?>
+          <?= $e($c['name']) ?>: <?= $e(Cost::money((float)$c['amount_cents'], (string)$c['currency'])) ?> <?= $e(Cost::INTERVALS[$c['billing_interval']] ?? '') ?><br>
+        <?php endforeach; ?>
+        <small><a href="/costs">Alle Kosten</a></small>
+      </dd>
+    <?php endif; ?>
     <dt>Abgerufen</dt>
     <dd><?= $e(View::localTime($p['synced_at'], $timezone)) ?><?php if ($p['sync_error'] !== null): ?><br><small class="error"><?= $e($p['sync_error']) ?></small><?php endif; ?></dd>
   </dl>

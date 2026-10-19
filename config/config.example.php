@@ -53,9 +53,12 @@ return [
     // Vercel (optional): an access token with scope = the team, created under
     // Account Settings → Tokens, with an expiry. Vercel documents no read-only
     // tokens, so treat it like a password: it lives only in this file on the server.
+    // The cron job also reads the month's charges (GET /v1/billing/charges); set
+    // 'billing' => false to switch that off.
     // 'vercel' => [
     //     'token' => 'CHANGE-ME',
     //     'team_id' => 'team_CHANGE-ME',
+    //     'billing' => true,
     // ],
 
     // Status reports of the company apps (optional). With this section the status
