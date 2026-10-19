@@ -14,11 +14,13 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 
 $request = Request::fromGlobals();
-Headers::send($request->secure);
 
 try {
-    App::boot($root, $request)->handle($request)->send();
+    $app = App::boot($root, $request);
+    Headers::send($app->secure);
+    $app->handle($request)->send();
 } catch (Throwable $e) {
+    Headers::send($request->secure);
     // Details go to the server log only, never to the browser.
     error_log(sprintf('[cockpit] %s: %s in %s:%d', $e::class, $e->getMessage(), $e->getFile(), $e->getLine()));
     (new Response(500, "Interner Fehler. Details stehen im Fehlerprotokoll des Servers.\n", ['Content-Type' => 'text/plain; charset=utf-8']))->send();

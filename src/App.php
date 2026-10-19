@@ -37,6 +37,7 @@ final class App
         private readonly PDO $pdo,
         private readonly Session $session,
         private readonly string $root,
+        public readonly bool $secure,
     ) {
         $this->crypto = new Crypto($config->appKey);
         $this->users = new UserRepository($pdo);
@@ -50,10 +51,15 @@ final class App
         $config = Config::load($root . '/config/config.php');
         date_default_timezone_set('UTC');
 
-        $session = new Session($root . '/var/sessions', $request->secure, $config->idleTimeout, $config->absoluteTimeout);
+        // The configured origin is authoritative: behind a TLS-terminating proxy
+        // $_SERVER['HTTPS'] can be unset although the browser talks HTTPS, and the
+        // session cookie must still be Secure and HSTS still be sent.
+        $secure = $request->secure || str_starts_with($config->baseUrl, 'https://');
+
+        $session = new Session($root . '/var/sessions', $secure, $config->idleTimeout, $config->absoluteTimeout);
         $session->start();
 
-        return new self($config, Connection::create($config->database), $session, $root);
+        return new self($config, Connection::create($config->database), $session, $root, $secure);
     }
 
     public function handle(Request $request): Response
