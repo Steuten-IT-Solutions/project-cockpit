@@ -18,6 +18,8 @@ final class Config
      * @param array{client_id: string, private_key_file: string, accounts: list<string>, api_base: string}|null $github
      * @param array{token: string, team_id: string, api_base: string, billing: bool}|null $vercel
      * @param array{org: string}|null $statusReports
+     * @param array{email: string, from: string}|null $alerts
+     * @param array{private_key_file: string, subject: string}|null $push
      */
     private function __construct(
         public readonly string $baseUrl,
@@ -30,6 +32,8 @@ final class Config
         public readonly ?array $github = null,
         public readonly ?array $vercel = null,
         public readonly ?array $statusReports = null,
+        public readonly ?array $alerts = null,
+        public readonly ?array $push = null,
     ) {
     }
 
@@ -83,7 +87,7 @@ final class Config
             throw new RuntimeException('timezone is not a valid identifier.');
         }
 
-        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw), self::vercel($raw), self::statusReports($raw));
+        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw), self::vercel($raw), self::statusReports($raw), self::alerts($raw), self::push($raw));
     }
 
     /**
@@ -207,6 +211,57 @@ final class Config
         }
 
         return ['org' => $org];
+    }
+
+    /**
+     * The optional alerts section: where alert e-mails go and who sends them (PHP mail()).
+     * "from" must be an address of the cockpit's own domain, or the host's mail server refuses it.
+     *
+     * @param array<mixed> $raw
+     * @return array{email: string, from: string}|null
+     */
+    private static function alerts(array $raw): ?array
+    {
+        $section = $raw['alerts'] ?? null;
+        if ($section === null) {
+            return null;
+        }
+        if (!is_array($section)) {
+            throw new RuntimeException('alerts must be an array.');
+        }
+        $email = self::string($section, 'email');
+        $from = self::string($section, 'from');
+        $fromAddress = preg_match('/^[^<>\r\n]*<([^<>\r\n]+)>$/', $from, $m) ? $m[1] : $from;
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || filter_var($fromAddress, FILTER_VALIDATE_EMAIL) === false
+            || preg_match('/[\r\n]/', $from)) {
+            throw new RuntimeException('alerts.email and alerts.from must be e-mail addresses.');
+        }
+
+        return ['email' => $email, 'from' => $from];
+    }
+
+    /**
+     * The optional push section: VAPID key (EC P-256, PEM file next to config.php) and a contact
+     * for the push services. The key file is only read when needed.
+     *
+     * @param array<mixed> $raw
+     * @return array{private_key_file: string, subject: string}|null
+     */
+    private static function push(array $raw): ?array
+    {
+        $section = $raw['push'] ?? null;
+        if ($section === null) {
+            return null;
+        }
+        if (!is_array($section)) {
+            throw new RuntimeException('push must be an array.');
+        }
+        $subject = self::string($section, 'subject');
+        if (!preg_match('#^(mailto:[^\s@]+@[^\s@]+|https://\S+)$#', $subject)) {
+            throw new RuntimeException('push.subject must be a mailto: or https:// address.');
+        }
+
+        return ['private_key_file' => self::string($section, 'private_key_file'), 'subject' => $subject];
     }
 
     /**

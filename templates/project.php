@@ -6,7 +6,9 @@
  * @var array<string, mixed> $project
  * @var list<array{id: int, body: string, created_at: string}> $history
  * @var list<array<string, mixed>> $vercel
- * @var list<array<string, mixed>> $reports
+ * @var list<array<string, mixed>> $reports format 1
+ * @var list<array<string, mixed>> $installations format 2
+ * @var array<string, list<array<string, mixed>>> $alertsByInstallation
  * @var list<array<string, mixed>> $costs
  */
 
@@ -63,6 +65,17 @@ $links = [
         <?php if ($v['production_domain'] !== null): ?><br><a href="https://<?= $e($v['production_domain']) ?>" rel="noopener noreferrer" target="_blank"><?= $e($v['production_domain']) ?></a><?php endif; ?>
         <?php if ($v['deploy_commit'] !== null): ?><br><small class="muted"><?= $e($v['deploy_commit']) ?></small><?php endif; ?>
         <?php if ($v['deploy_error'] !== null): ?><br><small class="error"><?= $e($v['deploy_error']) ?></small><?php endif; ?>
+      </dd>
+    <?php endforeach; ?>
+    <?php foreach ($installations as $i): ?>
+      <?php $alerts = $alertsByInstallation[$i['id']] ?? []; $light = StatusView::light($i, $alerts !== []); $newer = StatusView::newerRelease($i['version'], $p['release_tag']); ?>
+      <dt>Installation (<?= $e(StatusView::variant($i['variant'])) ?>)</dt>
+      <dd>
+        <span class="badge <?= $e(['ok' => 'ok', 'warn' => 'warn', 'error' => 'fail'][$light]) ?>"><?= $e(['ok' => 'in Ordnung', 'warn' => 'Hinweise', 'error' => 'Warnung'][$light]) ?></span>
+        <a href="/installation?id=<?= $e($i['id']) ?>">Version <?= $e($i['version']) ?></a><?php if ($newer !== null): ?> (<?= $e($newer) ?> veröffentlicht)<?php endif; ?>
+        · PHP <?= $e($i['php']) ?> / <?= $e($i['db_driver']) ?>
+        <br><small class="muted">Lebenszeichen <?= $e(View::localTime($i['last_heartbeat'] ?? $i['last_seen'], $timezone)) ?></small>
+        <?php foreach ($alerts as $a): ?><br><small class="error"><?= $e(StatusView::alertLabel($a['alert_key'])) ?></small><?php endforeach; ?>
       </dd>
     <?php endforeach; ?>
     <?php foreach ($reports as $r): ?>

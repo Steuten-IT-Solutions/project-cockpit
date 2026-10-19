@@ -57,6 +57,88 @@ final class StatusView
         return version_compare($released, $version, '>') ? $releaseTag : null;
     }
 
+    /** German labels of the fixed error and event codes (Kompanie-App-Template Telemetry\Code). */
+    private const CODES = [
+        'UPDATE_FAILED' => 'Update gescheitert',
+        'ROLLBACK' => 'Zurückgerollt bzw. Version gewechselt',
+        'UPDATE_CHECK' => 'Update-Liste nicht abrufbar',
+        'CALENDAR_FETCH' => 'Kalender nicht abrufbar',
+        'GALLERY_SYNC' => 'Galerie-Abgleich mit Fehler',
+        'GALLERY_403' => 'Galerie: kein Zugriff auf Google Drive',
+        'TASK_FAILED' => 'Hintergrundaufgabe abgebrochen',
+        'SERVER_ERROR' => 'Interner Fehler bei einer Anfrage',
+        'DB_ERROR' => 'Datenbankfehler',
+        'PHP_FATAL' => 'Schwerer PHP-Fehler',
+        'DISK_LOW' => 'Wenig Speicherplatz',
+        'CHECK_ERROR' => 'Ampel auf Rot gesprungen',
+    ];
+
+    /** German labels of the traffic lights of an installation (StatusService and health checks). */
+    private const CHECKS = [
+        'updates' => 'Updates',
+        'gallery' => 'Galerie',
+        'calendar' => 'Kalender',
+        'backup' => 'Datensicherung',
+        'server' => 'Server',
+        'cron' => 'Hintergrundaufgaben',
+        'data' => 'Schutz der Daten',
+    ];
+
+    /** Unknown codes are shown as they are. */
+    public static function codeLabel(string $code): string
+    {
+        return self::CODES[$code] ?? $code;
+    }
+
+    public static function checkLabel(string $key): string
+    {
+        return self::CHECKS[$key] ?? $key;
+    }
+
+    public static function cronLabel(string $kind): string
+    {
+        return match ($kind) {
+            'real' => 'Cronjob',
+            'pseudo' => 'nur bei Seitenaufrufen',
+            'wp' => 'WP-Cron',
+            default => $kind,
+        };
+    }
+
+    /**
+     * Traffic light of a format 2 installation: error (open alert), warn (yellow light or error codes
+     * in the last 24 h) or ok.
+     *
+     * @param array{checks: array<string, string>, errors: array<string, int>} $installation
+     */
+    public static function light(array $installation, bool $openAlert): string
+    {
+        if ($openAlert) {
+            return 'error';
+        }
+        if (in_array('warn', $installation['checks'], true) || $installation['errors'] !== []) {
+            return 'warn';
+        }
+
+        return 'ok';
+    }
+
+    /**
+     * German text of an alert key, e.g. "check:gallery" → "Galerie".
+     */
+    public static function alertLabel(string $key): string
+    {
+        [$type, $value] = array_pad(explode(':', $key, 2), 2, '');
+
+        return match ($type) {
+            'silent' => 'Kein Lebenszeichen',
+            'check' => 'Ampel rot: ' . self::checkLabel($value),
+            'event' => self::codeLabel($value),
+            'release' => 'Fehlerhäufung nach Release ' . $value,
+            default => $key,
+        };
+    }
+
     /**
      * Name of the company without the organisation, e.g. "kompanie-musterstadt".
      */

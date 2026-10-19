@@ -11,8 +11,8 @@ The user interface is German; code, comments, commits and documentation are Engl
   latest release, open issues and pull requests, last push), a page per project with links
   and a note that keeps every saved version, hiding projects, a refresh button.
 - **Phase 3 (in progress):** latest Vercel production deployment on each card; status
-  reports of the company apps (Kompanie-Apps); costs (entered by hand, plus Vercel's
-  charges of the current month).
+  reports of the company apps (Kompanie-Apps) with history, traffic lights and alerts by
+  e-mail and push; costs (entered by hand, plus Vercel's charges of the current month).
 
 ## Stack
 
@@ -116,12 +116,15 @@ API reports, not the invoice.
 ## Status reports (phase 3)
 
 Company apps (Kompanie-Apps, built from `Steuten-IT-Solutions/Kompanie-App-Template`) send
-a short report once a day, and only after an admin agreed under *Einstellungen → Updates*:
-company, version, variant, PHP version, database type, result of the last update, whether
-the update check and the gallery sync work. The format is defined by
-`packages/core/src/Update/StatusReporter.php` there. This replaces `tools/status-empfang`
-from that repository; the overview is in the cockpit behind its login instead of HTTP Basic
-authentication.
+status reports only after an admin agreed under *Einstellungen → Updates*. The protocol is
+defined in `docs/STATUSMELDUNGEN.md` there.
+
+- **Format 2** (current): an hourly heartbeat with the traffic light of each area (level
+  only), error codes of the last 24 hours, how background tasks run (`cron.kind`), enabled
+  areas and the result of the last update; severe errors (`UPDATE_FAILED`, `PHP_FATAL`, …)
+  at once as events. No names, contents or error texts.
+- **Format 1** (old, daily, unsigned) is still accepted until every installation is updated
+  and shown separately as a hint.
 
 1. **Subdomain:** `status.steuten-it-solutions.de` → folder `cockpit/receiver`, SSL on.
 2. Add the `status_reports` section to `config.php` (see `config.example.php`). Without it
@@ -129,19 +132,39 @@ authentication.
 3. In `Kompanie-App-Template` set the repository variable `KOMPANIE_STATUS_URL` to
    `https://status.steuten-it-solutions.de/`. Every company gets a new version with that
    address at the next sync.
+4. Optional: `alerts` (e-mail via PHP `mail()`, sender from the cockpit's own domain) and
+   `push` (web push to the cockpit on your phone; VAPID key created locally with
+   `openssl ecparam -name prime256v1 -genkey -noout -out vapid.pem`, uploaded next to
+   `config.php`). Then switch push on per device on the page *Warnungen*. On iPhones push
+   works only after adding the cockpit to the home screen.
 
-Limits, as in the template's receiver:
+Signature and limits (format 2):
 
-- Reports are **not signed**; anyone can send one. The overview is a hint, not proof.
-- Only reports for repositories of the configured organisation are accepted, at most 4 KiB
-  each, 2000 per hour in total and 2000 stored rows; rows without a new report for 60 days
-  are removed. Someone flooding the table with invented companies can keep new ones out
-  for up to 60 days (then empty `status_reports`).
-- One row per company and variant: several installations of the same company and variant
-  overwrite each other.
+- Each installation has a random id and a secret. The first report of an unknown
+  installation carries the secret (trust on first use); the cockpit stores it encrypted with
+  the app key. Every later report must be signed with it (HMAC-SHA256 over the body, header
+  `X-Kompanie-Signature`); a secret sent again never replaces the stored one. `sent` must be
+  within 10 minutes of the cockpit's clock and `nonce` must be new (replay protection).
+- Only repositories of the configured organisation, at most 4 KiB per report, 2000 reports
+  per hour in total (both formats) and 2000 installations.
+- History: heartbeats, events and resolved alerts are kept 90 days; an installation that
+  has not reported for 90 days is removed.
 - The receiver stores no IP addresses, but the web server's access log does. Check the
   log settings of the hosting package and mention the reports in the companies' privacy
   policy (`docs/OFFENE-PUNKTE.md`, section 3, in the template).
+
+Evaluation (cron, every 15 minutes) and alerts:
+
+- **Red** (alert): a traffic light is `error`; an event in the last 24 hours; no heartbeat
+  for 2 hours (`real` cron or WP-Cron) or 24 hours (`pseudo`: tasks run only on page views,
+  so a quiet night is no outage); several installations on the same version red at once
+  ("Fehlerhäufung nach Release", the hint to withdraw that version).
+- **Yellow** (shown, no alert): a traffic light is `warn`, or error codes in the last 24 hours.
+- One e-mail and one push when alerts open and when they resolve; no repeats while they stay
+  open. Pushes carry no payload: the phone shows "Neue Warnung oder Entwarnung", the details
+  are behind the login.
+- Pages: overview with a traffic light per installation, *Warnungen* (open and resolved,
+  push per device), and a page per installation with its history.
 
 ## Security model
 

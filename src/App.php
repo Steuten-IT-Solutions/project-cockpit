@@ -17,8 +17,13 @@ use Cockpit\Http\Request;
 use Cockpit\Http\Response;
 use Cockpit\Http\Router;
 use Cockpit\Jobs\Runner;
+use Cockpit\Notify\PushSubscriptionRepository;
+use Cockpit\Notify\WebPush;
 use Cockpit\Projects\NoteRepository;
 use Cockpit\Projects\ProjectRepository;
+use Cockpit\Status\AlertRepository;
+use Cockpit\Status\Alerts;
+use Cockpit\Status\InstallationRepository;
 use Cockpit\Status\StatusRepository;
 use Cockpit\Vercel\BillingRepository;
 use Cockpit\Vercel\VercelRepository;
@@ -80,6 +85,10 @@ final class App
         $router->add('POST', '/project/note', $this->saveNote(...));
         $router->add('POST', '/project/visibility', $this->setVisibility(...));
         $router->add('POST', '/refresh', $this->refresh(...));
+        $router->add('GET', '/alerts', $this->alerts(...));
+        $router->add('GET', '/installation', $this->installation(...));
+        $router->add('POST', '/push/subscribe', $this->pushSubscribe(...));
+        $router->add('POST', '/push/unsubscribe', $this->pushUnsubscribe(...));
         $router->add('GET', '/costs', $this->costs(...));
         $router->add('POST', '/costs', $this->addCost(...));
         $router->add('POST', '/costs/delete', $this->deleteCost(...));
@@ -125,6 +134,8 @@ final class App
         $vercelUnmatched = [];
         $reports = [];
         $reportsByRepo = [];
+        $installations = [];
+        $openAlerts = [];
         try {
             $repository = new ProjectRepository($this->pdo);
             $projects = $repository->all();
@@ -132,6 +143,8 @@ final class App
             [$vercelByRepo, $vercelUnmatched] = $this->vercelProjects($projects);
             $reports = (new StatusRepository($this->pdo))->all();
             $reportsByRepo = StatusRepository::byRepository($reports, self::repoRefs($projects));
+            $installations = (new InstallationRepository($this->pdo))->all();
+            $openAlerts = (new AlertRepository($this->pdo))->open();
         } catch (\PDOException) {
             // New tables appear with the next cron run after a deployment.
         }
@@ -154,6 +167,8 @@ final class App
             'vercelUnmatched' => $vercelUnmatched,
             'reports' => $reports,
             'reportsByRepo' => $reportsByRepo,
+            'installations' => $installations,
+            'openAlerts' => $openAlerts,
             'releaseByRepo' => $releaseByRepo,
             'statusReceiver' => $this->config->statusReports !== null,
             'phpVersion' => PHP_VERSION,
@@ -182,10 +197,26 @@ final class App
         } catch (\PDOException) {
             $vercelByRepo = [];
         }
+        $installations = [];
+        $openAlerts = [];
         try {
             $reportsByRepo = StatusRepository::byRepository((new StatusRepository($this->pdo))->all(), self::repoRefs([$project]));
+            $installations = array_values(array_filter(
+                (new InstallationRepository($this->pdo))->all(),
+                static fn (array $i): bool => strcasecmp($i['kompanie'], (string)$project['full_name']) === 0,
+            ));
+            $openAlerts = (new AlertRepository($this->pdo))->open();
         } catch (\PDOException) {
-            $reportsByRepo = [];
+            $reportsByRepo = $reportsByRepo ?? [];
+        }
+        // Format 1 rows of a variant that already sends format 2 are outdated.
+        $variants = array_column($installations, 'variant');
+        $reports = array_values(array_filter($reportsByRepo[$project['id']] ?? [], static fn (array $r): bool => !in_array($r['variant'], $variants, true)));
+        $alertsByInstallation = [];
+        foreach ($openAlerts as $a) {
+            if ($a['installation_id'] !== null) {
+                $alertsByInstallation[$a['installation_id']][] = $a;
+            }
         }
         try {
             $costs = (new CostRepository($this->pdo))->all($project['id']);
@@ -197,10 +228,98 @@ final class App
             'title' => $project['name'],
             'project' => $project,
             'vercel' => $vercelByRepo[$project['id']] ?? [],
-            'reports' => $reportsByRepo[$project['id']] ?? [],
+            'reports' => $reports,
+            'installations' => $installations,
+            'alertsByInstallation' => $alertsByInstallation,
             'costs' => $costs,
             'history' => $notes->history($project['id'], 20),
         ]);
+    }
+
+    private function alerts(Request $request): Response
+    {
+        $user = $this->currentUser();
+        if ($user === null) {
+            return Response::redirect('/login');
+        }
+        try {
+            $alerts = (new AlertRepository($this->pdo))->recent(gmdate('Y-m-d H:i:s', time() - 30 * 86400), 200);
+            $subscriptions = $this->config->push !== null ? (new PushSubscriptionRepository($this->pdo))->all() : [];
+            $ready = true;
+        } catch (\PDOException) {
+            $alerts = [];
+            $subscriptions = [];
+            $ready = false;
+        }
+
+        return $this->page('alerts', [
+            'title' => 'Warnungen',
+            'alerts' => $alerts,
+            'ready' => $ready,
+            'emailTo' => $this->config->alerts['email'] ?? null,
+            'pushKey' => $this->webPush()?->publicKey(),
+            'pushConfigured' => $this->config->push !== null,
+            'subscriptions' => $subscriptions,
+            'statusReceiver' => $this->config->statusReports !== null,
+        ]);
+    }
+
+    private function installation(Request $request): Response
+    {
+        if ($this->currentUser() === null) {
+            return Response::redirect('/login');
+        }
+        $id = $request->query('id');
+        $repository = new InstallationRepository($this->pdo);
+        try {
+            $installation = preg_match('/^[0-9a-f]{32}$/D', $id) ? $repository->get($id) : null;
+            if ($installation === null) {
+                return new Response(404);
+            }
+            $history = $repository->history($id, gmdate('Y-m-d H:i:s', time() - Alerts::KEEP_DAYS * 86400), 200);
+            $alerts = (new AlertRepository($this->pdo))->forInstallation($id, 50);
+        } catch (\PDOException) {
+            // New tables appear with the next cron run after a deployment.
+            return new Response(404);
+        }
+
+        return $this->page('installation', [
+            'title' => $installation['kompanie'],
+            'installation' => $installation,
+            'history' => $history,
+            'alerts' => $alerts,
+        ]);
+    }
+
+    /**
+     * Stores the push subscription of this device (sent by assets/push.js).
+     */
+    private function pushSubscribe(Request $request): Response
+    {
+        $user = $this->currentUser();
+        if ($user === null) {
+            return new Response(401);
+        }
+        $endpoint = $request->input('endpoint');
+        if ($this->config->push === null || !WebPush::validEndpoint($endpoint)) {
+            return new Response(400, 'invalid', ['Content-Type' => 'text/plain; charset=utf-8']);
+        }
+        (new PushSubscriptionRepository($this->pdo))->add($user['id'], $endpoint, gmdate('Y-m-d H:i:s'));
+
+        return new Response(204);
+    }
+
+    private function pushUnsubscribe(Request $request): Response
+    {
+        if ($this->currentUser() === null) {
+            return new Response(401);
+        }
+        $endpoint = $request->input('endpoint');
+        if ($endpoint !== '') {
+            (new PushSubscriptionRepository($this->pdo))->remove($endpoint);
+        }
+
+        return new Response(204);
     }
 
     private function saveNote(Request $request): Response
@@ -605,6 +724,20 @@ final class App
         $unmatched = array_values(array_filter($vercel, static fn (array $v): bool => !isset($matched[$v['id']])));
 
         return [$byRepo, $unmatched];
+    }
+
+    /** The VAPID key for the browser, or null if push is not configured or the key is unusable. */
+    private function webPush(): ?WebPush
+    {
+        if ($this->config->push === null) {
+            return null;
+        }
+        $pem = @file_get_contents($this->config->push['private_key_file']);
+        try {
+            return $pem === false ? null : new WebPush($pem, $this->config->push['subject']);
+        } catch (\RuntimeException) {
+            return null;
+        }
     }
 
     /**

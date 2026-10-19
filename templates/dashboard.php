@@ -21,6 +21,8 @@
  * @var array<int, list<array<string, mixed>>> $reportsByRepo
  * @var array<string, string> $releaseByRepo
  * @var bool $statusReceiver
+ * @var list<array<string, mixed>> $installations format 2
+ * @var list<array<string, mixed>> $openAlerts
  */
 
 use Cockpit\Projects\ProjectView;
@@ -42,6 +44,31 @@ $reportProject = [];
 foreach ($reportsByRepo as $repoId => $list) {
     foreach ($list as $r) {
         $reportProject[$r['kompanie'] . '|' . $r['variant']] = $repoId;
+    }
+}
+// Format 2: open alerts per installation, project card per company.
+$alertsByInstallation = [];
+foreach ($openAlerts as $a) {
+    if ($a['installation_id'] !== null) {
+        $alertsByInstallation[$a['installation_id']][] = $a;
+    }
+}
+$releaseAlerts = array_values(array_filter($openAlerts, static fn (array $a): bool => $a['installation_id'] === null));
+$repoByName = [];
+foreach ($projects ?? [] as $p) {
+    $repoByName[strtolower((string)$p['full_name'])] = (int)$p['id'];
+}
+// Format 1 rows of companies that already send format 2 are outdated.
+$format2 = [];
+foreach ($installations as $i) {
+    $format2[strtolower($i['kompanie']) . '|' . $i['variant']] = true;
+}
+$reports = array_values(array_filter($reports, static fn (array $r): bool => !isset($format2[strtolower($r['kompanie']) . '|' . $r['variant']])));
+$installationsByRepo = [];
+foreach ($installations as $i) {
+    $repoId = $repoByName[strtolower($i['kompanie'])] ?? null;
+    if ($repoId !== null) {
+        $installationsByRepo[$repoId][] = $i;
     }
 }
 $cronAge = null;
@@ -75,7 +102,10 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
             <?php [$vLabel, $vClass] = ProjectView::vercel($v['deploy_state']); ?>
             <?php if ($v['deploy_inspector_url'] !== null): ?><a class="badge <?= $e($vClass) ?>" href="<?= $e($v['deploy_inspector_url']) ?>" rel="noopener noreferrer" target="_blank"><?= $e($vLabel) ?></a><?php else: ?><span class="badge <?= $e($vClass) ?>"><?= $e($vLabel) ?></span><?php endif; ?>
           <?php endforeach; ?>
-          <?php if (($reportsByRepo[$p['id']] ?? []) !== []): ?>
+          <?php if (($installationsByRepo[$p['id']] ?? []) !== []): ?>
+            <?php $red = array_filter($installationsByRepo[$p['id']], static fn (array $i): bool => isset($alertsByInstallation[$i['id']])); ?>
+            <a class="badge <?= $red === [] ? 'ok' : 'fail' ?>" href="#installationen"><?= $red === [] ? 'Installation ok' : 'Installation: Warnung' ?></a>
+          <?php elseif (($reportsByRepo[$p['id']] ?? []) !== []): ?>
             <?php $failing = array_filter($reportsByRepo[$p['id']], static fn (array $r): bool => StatusView::problems($r, $now) !== []); ?>
             <a class="badge <?= $failing === [] ? 'ok' : 'warn' ?>" href="#installationen"><?= $failing === [] ? 'Installation ok' : 'Installation: Problem' ?></a>
           <?php endif; ?>
@@ -106,12 +136,37 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
   </div>
 <?php endif; ?>
 
-<?php if ($statusReceiver || $reports !== []): ?>
+<?php if ($statusReceiver || $reports !== [] || $installations !== []): ?>
   <h2 class="section" id="installationen">Kompanie-Installationen</h2>
-  <p class="muted">Je Kompanie und Variante die letzte Statusmeldung. Meldungen sind nicht signiert, also nur ein Hinweis.</p>
-  <?php if ($reports === []): ?>
-    <p class="muted">Noch keine Meldungen. Installationen melden sich einmal täglich, sobald ein Admin unter <em>Einstellungen → Updates</em> zugestimmt hat.</p>
-  <?php else: ?>
+  <?php foreach ($releaseAlerts as $a): ?>
+    <p class="error"><a href="/alerts"><?= $e($a['detail']) ?></a></p>
+  <?php endforeach; ?>
+  <?php if ($installations === [] && $reports === []): ?>
+    <p class="muted">Noch keine Meldungen. Installationen melden sich stündlich, sobald ein Admin unter <em>Einstellungen → Updates</em> zugestimmt hat.</p>
+  <?php endif; ?>
+  <?php if ($installations !== []): ?>
+    <div class="projects">
+      <?php foreach ($installations as $i): ?>
+        <?php
+        $alerts = $alertsByInstallation[$i['id']] ?? [];
+        $light = StatusView::light($i, $alerts !== []);
+        $newer = StatusView::newerRelease($i['version'], $releaseByRepo[strtolower($i['kompanie'])] ?? null);
+        ?>
+        <article class="card project">
+          <h2><a href="/installation?id=<?= $e($i['id']) ?>"><?= $e(StatusView::name($i['kompanie'])) ?></a></h2>
+          <p class="owner"><?= $e(StatusView::variant($i['variant'])) ?> · Version <?= $e($i['version']) ?> · PHP <?= $e($i['php']) ?> / <?= $e($i['db_driver']) ?></p>
+          <p class="badges">
+            <?php if ($light === 'ok'): ?><span class="badge ok">in Ordnung</span><?php elseif ($light === 'warn'): ?><span class="badge warn">Hinweise</span><?php endif; ?>
+            <?php foreach ($alerts as $a): ?><span class="badge fail"><?= $e(StatusView::alertLabel($a['alert_key'])) ?></span><?php endforeach; ?>
+            <?php if ($newer !== null): ?><span class="badge neutral"><?= $e($newer) ?> veröffentlicht</span><?php endif; ?>
+          </p>
+          <p class="stats">Lebenszeichen <?= $e(ProjectView::age($i['last_heartbeat'] ?? $i['last_seen'], $now)) ?> · <?= $e(StatusView::cronLabel($i['cron_kind'])) ?></p>
+        </article>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+  <?php if ($reports !== []): ?>
+    <p class="muted">Ältere Installationen (Format 1, täglich, nicht signiert – nur ein Hinweis):</p>
     <div class="projects">
       <?php foreach ($reports as $r): ?>
         <?php

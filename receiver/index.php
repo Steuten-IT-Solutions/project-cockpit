@@ -11,6 +11,9 @@ declare(strict_types=1);
 use Cockpit\Config;
 use Cockpit\Database\Connection;
 use Cockpit\Http\Response;
+use Cockpit\Security\Crypto;
+use Cockpit\Status\InstallationRepository;
+use Cockpit\Status\InstallationStore;
 use Cockpit\Status\Receiver;
 use Cockpit\Status\StatusRepository;
 
@@ -41,8 +44,19 @@ try {
         $path = parse_url(is_string($_SERVER['REQUEST_URI'] ?? null) ? $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH);
         // One byte more than allowed, so that an oversized report is recognised without reading all of it.
         $body = $method === 'POST' ? (string)file_get_contents('php://input', false, null, 0, Receiver::MAX_BODY + 1) : '';
-        $receiver = new Receiver(static fn (): StatusRepository => new StatusRepository(Connection::create($config->database)), $org);
-        $response = $receiver->handle($method, is_string($path) ? $path : '', $body, time());
+        // One connection for both formats, opened only once a report passed validation.
+        $pdo = null;
+        $connect = static function () use (&$pdo, $config): PDO {
+            return $pdo ??= Connection::create($config->database);
+        };
+        $receiver = new Receiver(
+            static fn (): StatusRepository => new StatusRepository($connect()),
+            $org,
+            static fn (): InstallationStore => new InstallationRepository($connect()),
+            new Crypto($config->appKey),
+        );
+        $signature = is_string($_SERVER['HTTP_X_KOMPANIE_SIGNATURE'] ?? null) ? $_SERVER['HTTP_X_KOMPANIE_SIGNATURE'] : '';
+        $response = $receiver->handle($method, is_string($path) ? $path : '', $body, time(), $signature);
     }
 } catch (Throwable $e) {
     // Details go to the server log only.

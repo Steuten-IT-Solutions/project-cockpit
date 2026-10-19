@@ -2,6 +2,9 @@
 Require all granted
 Options -Indexes
 
+# Web app manifest (adding the cockpit to the home screen; needed for push on iPhones).
+AddType application/manifest+json .webmanifest
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
