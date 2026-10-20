@@ -10,6 +10,7 @@
  * @var list<array{service: string, category: string, project: ?string, billed_cost: float, effective_cost: float, currency: string}> $charges
  * @var array<string, string> $form
  * @var ?string $error
+ * @var ?int $editId
  * @var bool $ready
  */
 
@@ -71,22 +72,26 @@ $byProject = array_filter($sum(array_values(array_filter($charges, static fn (ar
                 $c['note'],
             ], static fn ($v): bool => $v !== null))) ?></small>
           </div>
-          <form method="post" action="/costs/delete">
-            <input type="hidden" name="_csrf" value="<?= $e($csrf) ?>">
-            <input type="hidden" name="id" value="<?= $e($c['id']) ?>">
-            <button type="submit" class="secondary compact" aria-label="<?= $e($c['name']) ?> löschen">Löschen</button>
-          </form>
+          <div class="actions">
+            <a class="button secondary compact" href="/costs?edit=<?= $e($c['id']) ?>#cost-form" aria-label="<?= $e($c['name']) ?> bearbeiten">Bearbeiten</a>
+            <form method="post" action="/costs/delete">
+              <input type="hidden" name="_csrf" value="<?= $e($csrf) ?>">
+              <input type="hidden" name="id" value="<?= $e($c['id']) ?>">
+              <button type="submit" class="secondary compact" aria-label="<?= $e($c['name']) ?> löschen">Löschen</button>
+            </form>
+          </div>
         </li>
       <?php endforeach; ?>
     </ul>
   <?php endif; ?>
 </section>
 
-<section class="card">
-  <h2>Eintrag hinzufügen</h2>
+<section class="card" id="cost-form">
+  <h2><?= $e($editId !== null ? 'Eintrag bearbeiten' : 'Eintrag hinzufügen') ?></h2>
   <?php if ($error !== null): ?><p class="error" role="alert"><?= $e($error) ?></p><?php endif; ?>
-  <form method="post" action="/costs">
+  <form method="post" action="<?= $e($editId !== null ? '/costs/update' : '/costs') ?>">
     <input type="hidden" name="_csrf" value="<?= $e($csrf) ?>">
+    <?php if ($editId !== null): ?><input type="hidden" name="id" value="<?= $e($editId) ?>"><?php endif; ?>
     <label for="name">Name</label>
     <input id="name" name="name" maxlength="100" required value="<?= $e($f('name')) ?>" placeholder="z. B. Domain steuten-it-solutions.de">
     <label for="provider">Anbieter <span class="muted">(optional)</span></label>
@@ -122,8 +127,9 @@ $byProject = array_filter($sum(array_values(array_filter($charges, static fn (ar
     </select>
     <label for="note">Notiz <span class="muted">(optional)</span></label>
     <input id="note" name="note" maxlength="255" value="<?= $e($f('note')) ?>" placeholder="z. B. verlängert sich am 1. März">
-    <button type="submit">Hinzufügen</button>
+    <button type="submit"><?= $e($editId !== null ? 'Speichern' : 'Hinzufügen') ?></button>
   </form>
+  <?php if ($editId !== null): ?><p><a href="/costs">Abbrechen</a></p><?php endif; ?>
 </section>
 </div>
 

@@ -91,6 +91,7 @@ final class App
         $router->add('POST', '/push/unsubscribe', $this->pushUnsubscribe(...));
         $router->add('GET', '/costs', $this->costs(...));
         $router->add('POST', '/costs', $this->addCost(...));
+        $router->add('POST', '/costs/update', $this->updateCost(...));
         $router->add('POST', '/costs/delete', $this->deleteCost(...));
         $router->add('GET', '/login', $this->loginForm(...));
         $router->add('POST', '/login', $this->login(...));
@@ -393,6 +394,18 @@ final class App
             return Response::redirect('/login');
         }
 
+        $edit = $request->query('edit');
+        if ($edit !== '') {
+            $cost = ctype_digit($edit) ? (new CostRepository($this->pdo))->find((int)$edit) : null;
+            if ($cost === null) {
+                $this->session->flash('Der Eintrag existiert nicht mehr.');
+
+                return Response::redirect('/costs');
+            }
+
+            return $this->costsPage(Cost::toForm($cost), null, 200, $cost['id']);
+        }
+
         return $this->costsPage([], null);
     }
 
@@ -401,12 +414,7 @@ final class App
         if ($this->currentUser() === null) {
             return Response::redirect('/login');
         }
-        $fields = [];
-        foreach (['name', 'provider', 'amount', 'currency', 'interval', 'project', 'note'] as $key) {
-            $fields[$key] = $request->input($key);
-        }
-        $projectIds = array_map(static fn (array $p): int => (int)$p['id'], (new ProjectRepository($this->pdo))->all());
-        $cost = Cost::fromForm($fields, $projectIds);
+        [$fields, $cost] = $this->costForm($request);
         if (is_string($cost)) {
             // Show the form again with what was entered.
             return $this->costsPage($fields, $cost, 422);
@@ -415,6 +423,44 @@ final class App
         $this->session->flash($cost['name'] . ' hinzugefügt.');
 
         return Response::redirect('/costs');
+    }
+
+    private function updateCost(Request $request): Response
+    {
+        if ($this->currentUser() === null) {
+            return Response::redirect('/login');
+        }
+        $repository = new CostRepository($this->pdo);
+        $id = $request->input('id');
+        if (!ctype_digit($id) || $repository->find((int)$id) === null) {
+            $this->session->flash('Der Eintrag existiert nicht mehr.');
+
+            return Response::redirect('/costs');
+        }
+        [$fields, $cost] = $this->costForm($request);
+        if (is_string($cost)) {
+            return $this->costsPage($fields, $cost, 422, (int)$id);
+        }
+        $repository->update((int)$id, $cost);
+        $this->session->flash($cost['name'] . ' gespeichert.');
+
+        return Response::redirect('/costs');
+    }
+
+    /**
+     * The submitted cost fields and the validated row, or the German error message.
+     *
+     * @return array{array<string, string>, array{name: string, provider: ?string, amount_cents: int, currency: string, billing_interval: string, project_id: ?int, note: ?string}|string}
+     */
+    private function costForm(Request $request): array
+    {
+        $fields = [];
+        foreach (['name', 'provider', 'amount', 'currency', 'interval', 'project', 'note'] as $key) {
+            $fields[$key] = $request->input($key);
+        }
+        $projectIds = array_map(static fn (array $p): int => (int)$p['id'], (new ProjectRepository($this->pdo))->all());
+
+        return [$fields, Cost::fromForm($fields, $projectIds)];
     }
 
     private function deleteCost(Request $request): Response
@@ -430,8 +476,9 @@ final class App
 
     /**
      * @param array<string, string> $form values to show in the form again
+     * @param ?int $editId entry the form edits; null adds a new one
      */
-    private function costsPage(array $form, ?string $error, int $status = 200): Response
+    private function costsPage(array $form, ?string $error, int $status = 200, ?int $editId = null): Response
     {
         $billing = new BillingRepository($this->pdo);
         try {
@@ -452,6 +499,7 @@ final class App
             'vercelConfigured' => $this->config->vercel !== null && $this->config->vercel['billing'],
             'form' => $form,
             'error' => $error,
+            'editId' => $editId,
         ], $status);
     }
 

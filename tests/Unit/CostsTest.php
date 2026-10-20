@@ -50,6 +50,18 @@ final class CostsTest extends TestCase
         self::assertIsArray(Cost::fromForm(['project' => ''] + $form, []));
     }
 
+    public function testEditFormRoundTrips(): void
+    {
+        $stored = ['name' => 'Webspace', 'provider' => null, 'amount_cents' => 120050, 'currency' => 'USD', 'billing_interval' => 'month', 'project_id' => 7, 'note' => 'Vertrag'];
+
+        $form = Cost::toForm($stored);
+        self::assertSame('1200,50', $form['amount']);
+        self::assertSame('', $form['provider']);
+        self::assertSame('7', $form['project']);
+        self::assertSame($stored, Cost::fromForm($form, [7]));
+        self::assertSame('0,05', Cost::toForm(['amount_cents' => 5] + $stored)['amount']);
+    }
+
     public function testTotalsPerCurrencyWithoutConversion(): void
     {
         $totals = Cost::totals([

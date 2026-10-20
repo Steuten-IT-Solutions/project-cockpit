@@ -79,6 +79,25 @@ final class Cost
     }
 
     /**
+     * Form fields for an entry being edited; the inverse of fromForm().
+     *
+     * @param array{name: string, provider: ?string, amount_cents: int, currency: string, billing_interval: string, project_id: ?int, note: ?string} $cost
+     * @return array<string, string>
+     */
+    public static function toForm(array $cost): array
+    {
+        return [
+            'name' => $cost['name'],
+            'provider' => $cost['provider'] ?? '',
+            'amount' => number_format($cost['amount_cents'] / 100, 2, ',', ''),
+            'currency' => $cost['currency'],
+            'interval' => $cost['billing_interval'],
+            'project' => $cost['project_id'] !== null ? (string)$cost['project_id'] : '',
+            'note' => $cost['note'] ?? '',
+        ];
+    }
+
+    /**
      * Monthly and yearly totals per currency, without converting between currencies.
      *
      * @param list<array{amount_cents: int, currency: string, billing_interval: string}> $costs

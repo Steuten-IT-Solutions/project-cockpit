@@ -32,6 +32,21 @@ final class CostRepository
         ]);
     }
 
+    /**
+     * Rewrites every field of an entry; its creation time stays.
+     *
+     * @param CostInput $cost
+     */
+    public function update(int $id, array $cost): void
+    {
+        $this->pdo->prepare(
+            'UPDATE costs SET name = ?, provider = ?, amount_cents = ?, currency = ?, billing_interval = ?, project_id = ?, note = ? WHERE id = ?'
+        )->execute([
+            $cost['name'], $cost['provider'], $cost['amount_cents'], $cost['currency'],
+            $cost['billing_interval'], $cost['project_id'], $cost['note'], $id,
+        ]);
+    }
+
     public function delete(int $id): bool
     {
         $stmt = $this->pdo->prepare('DELETE FROM costs WHERE id = ?');
@@ -41,17 +56,30 @@ final class CostRepository
     }
 
     /**
+     * @return StoredCost|null
+     */
+    public function find(int $id): ?array
+    {
+        return $this->select(' WHERE c.id = ?', [$id])[0] ?? null;
+    }
+
+    /**
      * @return list<StoredCost>
      */
     public function all(?int $projectId = null): array
     {
-        $sql = 'SELECT c.*, p.name AS project_name FROM costs c LEFT JOIN projects p ON p.id = c.project_id';
-        $params = [];
-        if ($projectId !== null) {
-            $sql .= ' WHERE c.project_id = ?';
-            $params[] = $projectId;
-        }
-        $stmt = $this->pdo->prepare($sql . ' ORDER BY c.name, c.id');
+        return $projectId === null ? $this->select('', []) : $this->select(' WHERE c.project_id = ?', [$projectId]);
+    }
+
+    /**
+     * @param list<int> $params
+     * @return list<StoredCost>
+     */
+    private function select(string $where, array $params): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT c.*, p.name AS project_name FROM costs c LEFT JOIN projects p ON p.id = c.project_id' . $where . ' ORDER BY c.name, c.id'
+        );
         $stmt->execute($params);
 
         return array_values(array_map(static fn (array $r): array => [
