@@ -106,13 +106,16 @@ final class StatusView
     }
 
     /**
-     * Traffic light of a format 2 installation: error (open alert), warn (yellow light or error codes
-     * in the last 24 h) or ok.
+     * Traffic light of a format 2 installation: maintenance (an admin locked the app on purpose), error
+     * (open alert), warn (yellow light or error codes in the last 24 h) or ok.
      *
-     * @param array{checks: array<string, string>, errors: array<string, int>} $installation
+     * @param array{checks: array<string, string>, errors: array<string, int>, maintenance?: bool} $installation
      */
     public static function light(array $installation, bool $openAlert): string
     {
+        if ($installation['maintenance'] ?? false) {
+            return 'maintenance';
+        }
         if ($openAlert) {
             return 'error';
         }

@@ -25,6 +25,9 @@ $levelClass = static fn (string $level): string => match ($level) {
 <div class="grid">
 <section class="card">
   <h2>Zustand</h2>
+  <?php if ($i['maintenance']): ?>
+    <p><span class="badge neutral">in Wartung</span> Ein Admin hat die App gesperrt; Hintergrundaufgaben pausieren, rote Ampeln lösen keine Warnung aus.</p>
+  <?php endif; ?>
   <p class="badges">
     <?php foreach ($i['checks'] as $key => $level): ?>
       <span class="badge <?= $e($levelClass($level)) ?>"><?= $e(StatusView::checkLabel($key)) ?></span>

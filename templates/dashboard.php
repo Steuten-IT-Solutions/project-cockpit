@@ -156,7 +156,7 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
           <h2><a href="/installation?id=<?= $e($i['id']) ?>"><?= $e(StatusView::name($i['kompanie'])) ?></a></h2>
           <p class="owner"><?= $e(StatusView::variant($i['variant'])) ?> · Version <?= $e($i['version']) ?> · PHP <?= $e($i['php']) ?> / <?= $e($i['db_driver']) ?></p>
           <p class="badges">
-            <?php if ($light === 'ok'): ?><span class="badge ok">in Ordnung</span><?php elseif ($light === 'warn'): ?><span class="badge warn">Hinweise</span><?php endif; ?>
+            <?php if ($light === 'ok'): ?><span class="badge ok">in Ordnung</span><?php elseif ($light === 'warn'): ?><span class="badge warn">Hinweise</span><?php elseif ($light === 'maintenance'): ?><span class="badge neutral">in Wartung</span><?php endif; ?>
             <?php foreach ($alerts as $a): ?><span class="badge fail"><?= $e(StatusView::alertLabel($a['alert_key'])) ?></span><?php endforeach; ?>
             <?php if ($newer !== null): ?><span class="badge neutral"><?= $e($newer) ?> veröffentlicht</span><?php endif; ?>
           </p>
