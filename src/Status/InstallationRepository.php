@@ -14,7 +14,7 @@ use PDO;
  *     id: string, kompanie: string, variant: string, version: string, php: string, db_driver: string,
  *     cron_kind: string, cron_last: ?string, checks: array<string, string>, errors: array<string, int>,
  *     features: list<string>, update_ok: ?bool, update_at: ?string, update_to: ?string, update_check_ok: bool,
- *     gallery_ok: ?bool, gallery_at: ?string, first_seen: string, last_seen: string, last_heartbeat: ?string
+ *     gallery_ok: ?bool, gallery_at: ?string, maintenance: bool, first_seen: string, last_seen: string, last_heartbeat: ?string
  * }
  * @phpstan-type HistoryEntry array{type: string, received_at: string, version: string, code: ?string,
  *     checks: array<string, string>, errors: array<string, int>}
@@ -87,11 +87,11 @@ final class InstallationRepository implements InstallationStore
         $this->pdo->prepare(
             'UPDATE installations SET kompanie = ?, variant = ?, version = ?, php = ?, db_driver = ?, cron_kind = ?, cron_last = ?, checks = ?, errors = ?,
                 features = ?, update_ok = ?, update_at = ?, update_to = ?, update_check_ok = ?, gallery_ok = ?, gallery_at = ?,
-                last_seen = ?' . ($heartbeat ? ', last_heartbeat = ?' : '') . ' WHERE id = ?'
+                maintenance = ?, last_seen = ?' . ($heartbeat ? ', last_heartbeat = ?' : '') . ' WHERE id = ?'
         )->execute([
             $report['kompanie'], $report['variant'], $report['version'], $report['php'], $report['db_driver'], $report['cron_kind'], $report['cron_last'], $checks, $errors,
             implode(',', $report['features']), $report['update_ok'], $report['update_at'], $report['update_to'],
-            $report['update_check_ok'], $report['gallery_ok'], $report['gallery_at'], $now,
+            $report['update_check_ok'], $report['gallery_ok'], $report['gallery_at'], $report['maintenance'], $now,
             ...($heartbeat ? [$now, $report['installation']] : [$report['installation']]),
         ]);
         if ($heartbeat) {
@@ -233,6 +233,7 @@ final class InstallationRepository implements InstallationStore
             'update_check_ok' => (bool)$row['update_check_ok'],
             'gallery_ok' => $bool('gallery_ok'),
             'gallery_at' => $str('gallery_at'),
+            'maintenance' => (bool)($row['maintenance'] ?? false),
             'first_seen' => (string)$row['first_seen'],
             'last_seen' => (string)$row['last_seen'],
             'last_heartbeat' => $str('last_heartbeat'),

@@ -23,7 +23,7 @@ namespace Cockpit\Status;
  *     gallery_ok: ?int, gallery_at: ?string, sent_at: ?string,
  *     installation: string, kind: string, event: ?string, checks: array<string, string>,
  *     errors: array<string, int>, cron_kind: string, cron_last: ?string, features: list<string>,
- *     sent: int, nonce: string, key: ?string
+ *     maintenance: int, sent: int, nonce: string, key: ?string
  * }
  */
 final class StatusReport
@@ -36,7 +36,8 @@ final class StatusReport
     private const CODE = '/^[A-Z0-9_]{1,40}$/D';
     private const MAX_CHECKS = 20;
     private const MAX_ERRORS = 30;
-    private const MAX_FEATURES = 10;
+    /** Areas (features) an installation may report; the app adds areas over time. */
+    private const MAX_FEATURES = 30;
 
     /** Earliest timestamp taken from a report (2020-01-01); older values are dropped. */
     private const MIN_TIMESTAMP = 1577836800;
@@ -133,6 +134,8 @@ final class StatusReport
             'cron_kind' => $cronKind,
             'cron_last' => self::time($cron['last'] ?? null, $now),
             'features' => $features,
+            // Maintenance mode (Kompanie-App-Template#42): true only, the reason is never sent.
+            'maintenance' => (int)(($in['maintenance'] ?? false) === true),
             'sent' => $sent,
             'nonce' => $nonce,
             'key' => $key,

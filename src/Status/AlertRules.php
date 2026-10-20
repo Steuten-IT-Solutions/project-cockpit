@@ -8,7 +8,7 @@ namespace Cockpit\Status;
  * Which alerts should be open right now (pure: no database, no clock).
  *
  * - silent: no heartbeat for 2 h (real cron, WP-Cron) or 24 h (pseudo-cron, tasks only on page views)
- * - check:<key>: a traffic light of the installation is red
+ * - check:<key>: a traffic light of the installation is red (not in maintenance mode: tasks are paused on purpose)
  * - event:<code>: a severe error was reported in the last 24 h (not CHECK_ERROR: the red light has its own alert)
  * - release:<version>: several installations on the same version reported severe errors in the last 24 h
  *   (update failed, PHP fatal, database error): the hint to withdraw it. Only installations known for a
@@ -51,7 +51,7 @@ final class AlertRules
             if ($last !== null && $now - $last > $limit) {
                 self::add($wanted, $i, 'silent', sprintf('kein Lebenszeichen seit über %d Stunden', intdiv($limit, 3600)));
             }
-            foreach ($i['checks'] as $key => $level) {
+            foreach ($i['maintenance'] ? [] : $i['checks'] as $key => $level) {
                 if ($level === 'error') {
                     self::add($wanted, $i, 'check:' . $key, StatusView::checkLabel($key) . ': rot');
                 }

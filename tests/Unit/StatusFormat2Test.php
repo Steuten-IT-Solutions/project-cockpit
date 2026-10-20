@@ -94,6 +94,11 @@ final class StatusFormat2Test extends TestCase
         self::assertSame('real', $row['cron_kind']);
         self::assertNull($row['event']);
         self::assertSame(1, $row['update_check_ok']);
+        self::assertSame(0, $row['maintenance']);
+        self::assertSame(1, StatusReport::fromFormat2(self::payload(['maintenance' => true]), self::ORG, self::NOW)['maintenance'] ?? null);
+        self::assertSame(0, StatusReport::fromFormat2(self::payload(['maintenance' => 'ja']), self::ORG, self::NOW)['maintenance'] ?? null, 'only true counts');
+        $many = array_map(static fn (int $n): string => str_repeat('a', $n), range(1, 14));
+        self::assertNotNull(StatusReport::fromFormat2(self::payload(['features' => $many]), self::ORG, self::NOW), 'more than ten areas');
 
         $bad = [
             'text in a check' => ['checks' => ['gallery' => 'Ordner von max@example.org fehlt']],
@@ -110,6 +115,7 @@ final class StatusFormat2Test extends TestCase
             'other organisation' => ['kompanie' => 'Fremde/kompanie'],
             'too many errors' => ['errors' => array_fill_keys(array_map(static fn (int $n): string => 'E' . $n, range(1, 31)), 1)],
             'feature with text' => ['features' => ['events', 'max@example.org']],
+            'too many features' => ['features' => array_map(static fn (int $n): string => str_repeat('a', $n % 19 + 1) . 'x', range(1, 31))],
         ];
         foreach ($bad as $name => $override) {
             self::assertNull(StatusReport::fromFormat2(self::payload($override), self::ORG, self::NOW), $name);
@@ -222,7 +228,7 @@ final class StatusFormat2Test extends TestCase
             'id' => $id, 'kompanie' => 'Steuten-IT-Solutions/' . $name, 'variant' => 'standalone', 'version' => '1.4.0.3',
             'php' => '8.3', 'db_driver' => 'sqlite', 'cron_kind' => $cronKind, 'cron_last' => null,
             'checks' => $checks, 'errors' => [], 'features' => [], 'update_ok' => true, 'update_at' => null,
-            'update_to' => null, 'update_check_ok' => true, 'gallery_ok' => null, 'gallery_at' => null,
+            'update_to' => null, 'update_check_ok' => true, 'gallery_ok' => null, 'gallery_at' => null, 'maintenance' => false,
             'first_seen' => gmdate('Y-m-d H:i:s', self::NOW - 86400), 'last_seen' => gmdate('Y-m-d H:i:s', self::NOW - $quietFor),
             'last_heartbeat' => gmdate('Y-m-d H:i:s', self::NOW - $quietFor),
         ];
@@ -252,6 +258,15 @@ final class StatusFormat2Test extends TestCase
             str_repeat('e', 32) . '|event:DB_ERROR',
         ], $keys, 'silent after 2 h with real cron, not yet with pseudo-cron; old events expire; warn and CHECK_ERROR raise nothing; '
             . 'no release alert: a red light is no release error and kompanie-e is new');
+
+        // Maintenance mode: a red light is expected (tasks paused) and raises no alert; silence still does.
+        $m = self::installation(str_repeat('f', 32), 'kompanie-f', 'real', 600, ['gallery' => 'error']);
+        $m['maintenance'] = true;
+        self::assertSame([], AlertRules::wanted([$m], [], self::NOW));
+        $m['last_heartbeat'] = gmdate('Y-m-d H:i:s', self::NOW - 3 * 3600);
+        self::assertSame([str_repeat('f', 32) . '|silent'], array_keys(AlertRules::wanted([$m], [], self::NOW)));
+        self::assertSame('maintenance', StatusView::light($m, true));
+        self::assertSame('error', StatusView::light($d, true));
 
         // Two installations known for a day with severe errors on the same version: release alert.
         $e['first_seen'] = gmdate('Y-m-d H:i:s', self::NOW - 2 * 86400);

@@ -71,7 +71,7 @@ $links = [
       <?php $alerts = $alertsByInstallation[$i['id']] ?? []; $light = StatusView::light($i, $alerts !== []); $newer = StatusView::newerRelease($i['version'], $p['release_tag']); ?>
       <dt>Installation (<?= $e(StatusView::variant($i['variant'])) ?>)</dt>
       <dd>
-        <span class="badge <?= $e(['ok' => 'ok', 'warn' => 'warn', 'error' => 'fail'][$light]) ?>"><?= $e(['ok' => 'in Ordnung', 'warn' => 'Hinweise', 'error' => 'Warnung'][$light]) ?></span>
+        <span class="badge <?= $e(['ok' => 'ok', 'warn' => 'warn', 'error' => 'fail', 'maintenance' => 'neutral'][$light]) ?>"><?= $e(['ok' => 'in Ordnung', 'warn' => 'Hinweise', 'error' => 'Warnung', 'maintenance' => 'in Wartung'][$light]) ?></span>
         <a href="/installation?id=<?= $e($i['id']) ?>">Version <?= $e($i['version']) ?></a><?php if ($newer !== null): ?> (<?= $e($newer) ?> veröffentlicht)<?php endif; ?>
         · PHP <?= $e($i['php']) ?> / <?= $e($i['db_driver']) ?>
         <br><small class="muted">Lebenszeichen <?= $e(View::localTime($i['last_heartbeat'] ?? $i['last_seen'], $timezone)) ?></small>
