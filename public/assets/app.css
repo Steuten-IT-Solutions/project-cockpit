@@ -274,5 +274,12 @@ select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   border-top: 1px solid var(--border);
   overflow-wrap: anywhere;
 }
-.costs form { flex-shrink: 0; }
+.costs .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
+.costs .button.compact,
 .costs form > button.compact { width: auto; margin: 0; padding: 6px 12px; min-height: 40px; white-space: nowrap; }
+a.button.secondary {
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+a.button.compact { display: inline-flex; align-items: center; }
