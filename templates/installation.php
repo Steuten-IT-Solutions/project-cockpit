@@ -2,8 +2,8 @@
 /**
  * @var callable(mixed): string $e
  * @var string $timezone
- * @var array{id: string, kompanie: string, variant: string, version: string, php: string, db_driver: string, cron_kind: string, cron_last: ?string, checks: array<string, string>, errors: array<string, int>, features: list<string>, update_ok: ?bool, update_at: ?string, update_to: ?string, update_check_ok: bool, gallery_ok: ?bool, gallery_at: ?string, first_seen: string, last_seen: string, last_heartbeat: ?string} $installation
- * @var list<array{type: string, received_at: string, version: string, code: ?string, checks: array<string, string>, errors: array<string, int>}> $history
+ * @var array{id: string, kompanie: string, variant: string, version: string, php: string, db_driver: string, cron_kind: string, cron_last: ?string, checks: array<string, string>, errors: array<string, int>, details: array<string, array<string, int>>, features: list<string>, update_ok: ?bool, update_at: ?string, update_to: ?string, update_check_ok: bool, gallery_ok: ?bool, gallery_at: ?string, maintenance: bool, first_seen: string, last_seen: string, last_heartbeat: ?string} $installation
+ * @var list<array{type: string, received_at: string, version: string, code: ?string, detail: ?string, checks: array<string, string>, errors: array<string, int>, details: array<string, array<string, int>>}> $history
  * @var list<array{id: int, alert_key: string, detail: string, opened_at: string, resolved_at: ?string}> $alerts
  */
 
@@ -42,7 +42,8 @@ $levelClass = static fn (string $level): string => match ($level) {
     <dd>
       <?php if ($i['errors'] === []): ?>keine<?php endif; ?>
       <?php foreach ($i['errors'] as $code => $count): ?>
-        <?= $e(StatusView::codeLabel($code)) ?>: <?= $e($count) ?><br>
+        <?= $e(StatusView::codeLabel($code)) ?>: <?= $e($count) ?>
+        <?php if (($i['details'][$code] ?? []) !== []): ?><small class="muted">(<?= $e(StatusView::causes($i['details'][$code])) ?>)</small><?php endif; ?><br>
       <?php endforeach; ?>
     </dd>
     <dt>Bereiche</dt>
@@ -82,6 +83,7 @@ $levelClass = static fn (string $level): string => match ($level) {
           <span>
             <?php if ($h['type'] === 'event'): ?>
               <span class="badge fail"><?= $e(StatusView::codeLabel((string)$h['code'])) ?></span>
+              <?php if ($h['detail'] !== null): ?><small class="muted">Ursache: <code><?= $e($h['detail']) ?></code></small><?php endif; ?>
             <?php else: ?>
               Lebenszeichen
               <?php $red = array_keys(array_filter($h['checks'], static fn (string $l): bool => $l === 'error')); ?>
