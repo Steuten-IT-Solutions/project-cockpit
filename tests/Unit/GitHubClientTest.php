@@ -122,4 +122,29 @@ final class GitHubClientTest extends TestCase
         self::assertNull(Client::nextLink('<https://api.github.com/x?page=1>; rel="prev"'));
         self::assertSame('https://api.github.com/x?page=3', Client::nextLink('<https://api.github.com/x?page=1>; rel="prev", <https://api.github.com/x?page=3>; rel="next"'));
     }
+
+    public function testScopedTokenAndJsonRequests(): void
+    {
+        $calls = [];
+        $transport = static function (string $method, string $url, array $headers, string $body = '') use (&$calls): array {
+            $calls[] = [$method, $url, $headers, $body];
+            if (str_ends_with($url, '/access_tokens')) {
+                return [201, [], (string)json_encode(['token' => 'ghs_scoped'])];
+            }
+
+            return [201, [], (string)json_encode(['number' => 7])];
+        };
+        $client = new Client('Iv23test', self::$privateKey, 'https://api.github.com', $transport(...));
+
+        self::assertSame('ghs_scoped', $client->installationToken(11, 1000, ['kompanie-meldungen'], ['issues' => 'write']));
+        self::assertSame(['repositories' => ['kompanie-meldungen'], 'permissions' => ['issues' => 'write']], json_decode($calls[0][3], true));
+        self::assertSame([201, ['number' => 7]], $client->send('POST', '/repos/o/r/issues', 'ghs_scoped', ['title' => 'Ä']));
+        self::assertSame('{"title":"Ä"}', $calls[1][3]);
+        self::assertContains('Content-Type: application/json', $calls[1][2]);
+        self::assertContains('Authorization: Bearer ghs_scoped', $calls[1][2]);
+
+        // Without a scope the token request has no body, as before.
+        $client->installationToken(11, 1000);
+        self::assertSame('', $calls[2][3]);
+    }
 }

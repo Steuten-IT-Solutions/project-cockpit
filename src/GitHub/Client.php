@@ -8,19 +8,20 @@ use RuntimeException;
 
 /**
  * Minimal REST client for a GitHub App: signs the app JWT, exchanges it for
- * installation tokens and performs read-only GET requests.
+ * installation tokens and performs GET requests. Writes (send()) are used only for bug reports,
+ * with tokens limited to the reports repository (installationToken() with $repositories and $permissions).
  */
 final class Client
 {
     private const API_VERSION = '2026-03-10';
     private const USER_AGENT = 'steuten-it-project-cockpit';
 
-    /** @var \Closure(string, string, list<string>): array{int, array<string, string>, string} */
+    /** @var \Closure(string, string, list<string>, string=): array{int, array<string, string>, string} */
     private readonly \Closure $transport;
 
     /**
-     * @param (\Closure(string, string, list<string>): array{int, array<string, string>, string})|null $transport
-     *        method, url, headers → status, lower-cased response headers, body; defaults to curl
+     * @param (\Closure(string, string, list<string>, string=): array{int, array<string, string>, string})|null $transport
+     *        method, url, headers, request body → status, lower-cased response headers, body; defaults to curl
      */
     public function __construct(
         private readonly string $clientId,
@@ -70,9 +71,14 @@ final class Client
         return $installations;
     }
 
-    public function installationToken(int $installationId, int $now): string
+    /**
+     * @param list<string> $repositories limit the token to these repositories (names without owner); [] = all granted
+     * @param array<string, string> $permissions limit the token to these permissions, e.g. ['issues' => 'write']
+     */
+    public function installationToken(int $installationId, int $now, array $repositories = [], array $permissions = []): string
     {
-        [$status, , $body] = $this->request('POST', '/app/installations/' . $installationId . '/access_tokens', $this->jwt($now));
+        $scope = array_filter(['repositories' => $repositories, 'permissions' => $permissions], static fn (array $v): bool => $v !== []);
+        [$status, , $body] = $this->request('POST', '/app/installations/' . $installationId . '/access_tokens', $this->jwt($now), $scope === [] ? null : $scope);
         if ($status !== 201 || !is_array($body) || !is_string($body['token'] ?? null)) {
             throw new RuntimeException(sprintf('GitHub returned %d for an installation token%s.', $status, self::reason($body)));
         }
@@ -86,6 +92,19 @@ final class Client
     public function get(string $path, string $token): array
     {
         [$status, , $body] = $this->request('GET', $path, $token);
+
+        return [$status, $body];
+    }
+
+    /**
+     * A request with a JSON body (POST, PUT, PATCH), e.g. to create an issue.
+     *
+     * @param array<string, mixed> $json
+     * @return array{int, mixed} status and decoded JSON body
+     */
+    public function send(string $method, string $path, string $token, array $json): array
+    {
+        [$status, , $body] = $this->request($method, $path, $token, $json);
 
         return [$status, $body];
     }
@@ -143,9 +162,10 @@ final class Client
     }
 
     /**
+     * @param array<string, mixed>|null $json request body
      * @return array{int, array<string, string>, mixed}
      */
-    private function request(string $method, string $pathOrUrl, string $bearer): array
+    private function request(string $method, string $pathOrUrl, string $bearer, ?array $json = null): array
     {
         $url = str_starts_with($pathOrUrl, 'https://') || str_starts_with($pathOrUrl, 'http://')
             ? $pathOrUrl
@@ -155,12 +175,18 @@ final class Client
             throw new RuntimeException('Refusing to call a URL outside the GitHub API.');
         }
 
-        [$status, $headers, $raw] = ($this->transport)($method, $url, [
+        $requestHeaders = [
             'Accept: application/vnd.github+json',
             'Authorization: Bearer ' . $bearer,
             'User-Agent: ' . self::USER_AGENT,
             'X-GitHub-Api-Version: ' . self::API_VERSION,
-        ]);
+        ];
+        if ($json === null) {
+            [$status, $headers, $raw] = ($this->transport)($method, $url, $requestHeaders);
+        } else {
+            $requestHeaders[] = 'Content-Type: application/json';
+            [$status, $headers, $raw] = ($this->transport)($method, $url, $requestHeaders, (string)json_encode($json, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        }
 
         return [$status, $headers, $raw === '' ? null : json_decode($raw, true)];
     }
@@ -169,13 +195,16 @@ final class Client
      * @param list<string> $headers
      * @return array{int, array<string, string>, string}
      */
-    private static function curl(string $method, string $url, array $headers): array
+    private static function curl(string $method, string $url, array $headers, string $body = ''): array
     {
         $responseHeaders = [];
         $ch = curl_init($url);
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, '');
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        } elseif ($method !== 'GET' && $method !== '') {
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
         }
         curl_setopt_array($ch, [
             CURLOPT_HTTPHEADER => $headers,

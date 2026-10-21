@@ -9,6 +9,8 @@ use Cockpit\Database\Migrator;
 use Cockpit\GitHub\Client;
 use Cockpit\GitHub\Sync;
 use Cockpit\Projects\ProjectRepository;
+use Cockpit\Reports\BugReportRepository;
+use Cockpit\Reports\BugReportSync;
 use Cockpit\Notify\PushSubscriptionRepository;
 use Cockpit\Notify\WebPush;
 use Cockpit\Status\AlertRepository;
@@ -173,6 +175,25 @@ final class Runner
                 $status = 'warn';
                 $messages[] = 'Warnungen: Auswertung fehlgeschlagen (Details im Fehlerprotokoll).';
                 error_log(sprintf('[cockpit alerts] %s: %s in %s:%d', $e::class, $e->getMessage(), $e->getFile(), $e->getLine()));
+            }
+        }
+
+        // Bug reports of the company apps: issues in the private reports repository (Kompanie-App-Template#64).
+        if ($this->config->bugReports !== null && $this->config->statusReports !== null) {
+            try {
+                $reports = new BugReportRepository($this->pdo);
+                $reports->prune(time());
+                $result = BugReportSync::fromConfig($this->config, $reports)?->run(time());
+                if ($result !== null && $result['created'] > 0) {
+                    $messages[] = sprintf('Fehlermeldungen: %d als Issue angelegt', $result['created']);
+                }
+                if ($result !== null && $result['errors'] !== []) {
+                    $status = 'warn';
+                    $messages[] = sprintf('Fehlermeldungen: %d nicht angelegt, z. B. %s', $result['failed'], $result['errors'][0]);
+                }
+            } catch (Throwable $e) {
+                $status = 'warn';
+                $messages[] = 'Fehlermeldungen: ' . $e->getMessage();
             }
         }
 
