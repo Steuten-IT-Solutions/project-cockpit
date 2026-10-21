@@ -68,6 +68,19 @@ return [
     //     'org' => 'Steuten-IT-Solutions',
     // ],
 
+    // Bug reports of the company apps (optional, Kompanie-App-Template#64). Needs status_reports (the receiver) and a
+    // GitHub App with "Issues: read and write" and "Contents: read and write" on this repository (see README). Each
+    // report becomes an issue there, labelled label_prefix + the company's repository name, e.g. "kompanie:kompanie-musterstadt";
+    // screenshots are committed to screenshots/YYYY/MM/ in the same repository. Keep the repository PRIVATE.
+    // By default the app of the github section is used, with tokens limited to this repository; client_id and
+    // private_key_file select a separate app instead.
+    // 'bug_reports' => [
+    //     'repo' => 'Steuten-IT-Solutions/kompanie-meldungen',
+    //     'label_prefix' => 'kompanie:',
+    //     // 'client_id' => 'Iv23-CHANGE-ME',
+    //     // 'private_key_file' => __DIR__ . '/github-reports.pem',
+    // ],
+
     // Alerts of the status reports (optional): e-mail via PHP mail() when an installation turns red,
     // goes silent or reports a severe error, and again when the problem is gone. "from" must be an
     // address of this domain (IONOS sends only from own addresses).

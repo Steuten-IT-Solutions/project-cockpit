@@ -12,7 +12,8 @@ The user interface is German; code, comments, commits and documentation are Engl
   and a note that keeps every saved version, hiding projects, a refresh button.
 - **Phase 3 (in progress):** latest Vercel production deployment on each card; status
   reports of the company apps (Kompanie-Apps) with history, traffic lights and alerts by
-  e-mail and push; costs (entered by hand, plus Vercel's charges of the current month).
+  e-mail and push; bug reports of the company apps as issues in a private repository;
+  costs (entered by hand, plus Vercel's charges of the current month).
 
 ## Stack
 
@@ -25,7 +26,7 @@ The user interface is German; code, comments, commits and documentation are Engl
 
 ```
 public/       document root of the cockpit subdomain (index.php, assets, .htaccess)
-receiver/     document root of the status subdomain (accepts status reports only)
+receiver/     document root of the status subdomain (accepts status and bug reports only)
 src/          application code (namespace Cockpit\)
 templates/    PHP templates; every dynamic value is escaped with $e()
 migrations/   NNNN_name.sql, applied in order by cron/run.php and the setup page
@@ -71,7 +72,7 @@ pages only read the database.
 
 1. Organisation *Steuten-IT-Solutions* → Settings → Developer settings → GitHub Apps →
    *New GitHub App*. Webhook *Active*: off. Repository permissions, all **read-only**:
-   *Actions*, *Contents*, *Metadata*, *Pull requests*. Installable **only on this account**:
+   *Actions*, *Contents*, *Metadata*, *Pull requests* (bug reports need more, see *Bug reports*). Installable **only on this account**:
    the projects live in the organisation. A private app can only be installed on the
    account that owns it; to also cover a personal account, make the app public (Advanced →
    Make public) or register a second app there — the code reads every installation on the
@@ -165,6 +166,57 @@ Evaluation (cron, every 15 minutes) and alerts:
   are behind the login.
 - Pages: overview with a traffic light per installation, *Warnungen* (open and resolved,
   push per device), and a page per installation with its history.
+
+## Bug reports (phase 3)
+
+Company apps let anyone (also guests) report a bug via *? → Fehler melden* (Kompanie-App-Template#64; wire format
+in `docs/FEHLERMELDUNGEN.md` there). The app sends each report signed to `POST /reports` of the status subdomain;
+the cockpit stores it and creates an **issue in one private repository** for all companies, labelled
+`kompanie:<repository name>`. The installations have no GitHub access.
+
+1. Create a **private** repository, e.g. `Steuten-IT-Solutions/kompanie-meldungen`, with an initial commit (a
+   README), so that it has a default branch.
+2. GitHub App permissions (Settings → Developer settings → GitHub Apps → the app → *Permissions & events*):
+   add **Issues: Read and write** and change **Contents** to **Read and write** (screenshots are committed to the
+   repository, see below). GitHub asks the organisation to accept the new permissions on the installation; then add
+   the reports repository to the installation's selected repositories. GitHub App permissions apply to every selected
+   repository, so the cockpit asks for installation tokens **limited to the reports repository** and to
+   `issues`/`contents` write whenever it creates issues; the project sync keeps using read-only requests. If you
+   prefer the app itself to stay read-only, register a second app with only *Issues* and *Contents* (read and write)
+   and *Metadata* (read), install it on the reports repository only, and set its `client_id` and `private_key_file`
+   in the `bug_reports` section.
+3. Add the `bug_reports` section to `config.php` (see `config.example.php`): `repo` (owner/name), optional
+   `label_prefix` (default `kompanie:`). The `status_reports` section must be present (it provides the
+   organisation and switches the receiver on); without `bug_reports` the receiver answers 404 at `/reports`.
+4. In `Kompanie-App-Template` set the repository variable `KOMPANIE_REPORT_URL` to
+   `https://status.steuten-it-solutions.de/reports`. Every company gets a new version with that address at the next
+   sync; until then the app shows no "Fehler melden" button. Deploy the cockpit (migration `0008`) first.
+
+How it works:
+
+- **Signature:** like format 2 status reports (`X-Kompanie-Signature`, HMAC-SHA256 with the installation's secret).
+  The secret stored from the installation's status reports is used; installations that send no status reports teach
+  the cockpit their secret with their first bug report (field `key`, trust on first use, stored encrypted with the app
+  key in `report_installations`). A `key` never replaces a stored secret. `sent` within 10 minutes, new `nonce`.
+- **Limits:** body at most 3 MB (screenshot at most 2 MB decoded, PNG/JPEG/WebP, checked to be a real image with at
+  most 10000 px per edge); 30 reports per hour per IP (keyed hash, never stored in clear), 10 per installation, 200 in
+  total. Only companies with a project card (or none synced yet) may register a new installation.
+- **Answer:** `201` once the report is stored (`200` with `duplicate` for a report id seen before); the app deletes
+  it then. The issue is created right after the response when PHP-FPM allows it (`fastcgi_finish_request`), else by
+  the cron job (every 15 minutes). If GitHub fails, the report stays and the cron job tries again (status *warn* with
+  the reason); reports without an issue are given up after 30 days.
+- **Issue:** title = first line of the description; body = a table of the attached details (company, page, app
+  version, device/browser, role, name if sent, time, last error message, installation, report id), the description,
+  the expectation and the screenshot. All free text sits in code blocks or code spans, so it cannot mention people,
+  reference issues or inject markup. Label `kompanie:<repository name>` (created if missing).
+- **Screenshots:** GitHub's REST API cannot attach files to issues, so the cockpit commits the image to
+  `screenshots/YYYY/MM/<report id>.<ext>` in the reports repository and embeds/links it in the issue. It is visible
+  only to people with access to that private repository.
+- **Retention:** after the issue exists, the cockpit clears the report's content and screenshot and keeps only the
+  ids and the issue link for 30 days (to recognise a report sent twice). The reports repository holds the reports
+  from then on; delete issues and screenshots there when they are no longer needed.
+- The reports repository also shows up as a project card once the app can see it; hide it on the dashboard if you
+  like.
 
 ## Security model
 

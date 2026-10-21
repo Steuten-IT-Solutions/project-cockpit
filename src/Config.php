@@ -20,6 +20,7 @@ final class Config
      * @param array{org: string}|null $statusReports
      * @param array{email: string, from: string}|null $alerts
      * @param array{private_key_file: string, subject: string}|null $push
+     * @param array{repo: string, label_prefix: string, client_id: ?string, private_key_file: ?string}|null $bugReports
      */
     private function __construct(
         public readonly string $baseUrl,
@@ -34,6 +35,7 @@ final class Config
         public readonly ?array $statusReports = null,
         public readonly ?array $alerts = null,
         public readonly ?array $push = null,
+        public readonly ?array $bugReports = null,
     ) {
     }
 
@@ -87,7 +89,7 @@ final class Config
             throw new RuntimeException('timezone is not a valid identifier.');
         }
 
-        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw), self::vercel($raw), self::statusReports($raw), self::alerts($raw), self::push($raw));
+        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw), self::vercel($raw), self::statusReports($raw), self::alerts($raw), self::push($raw), self::bugReports($raw));
     }
 
     /**
@@ -262,6 +264,43 @@ final class Config
         }
 
         return ['private_key_file' => self::string($section, 'private_key_file'), 'subject' => $subject];
+    }
+
+    /**
+     * The optional bug_reports section: bug reports of the company apps (Kompanie-App-Template#64) become issues in
+     * this (private) repository, labelled with label_prefix and the company's repository name. The GitHub App of the
+     * github section creates them, unless client_id and private_key_file name a separate app for this repository.
+     *
+     * @param array<mixed> $raw
+     * @return array{repo: string, label_prefix: string, client_id: ?string, private_key_file: ?string}|null
+     */
+    private static function bugReports(array $raw): ?array
+    {
+        $section = $raw['bug_reports'] ?? null;
+        if ($section === null) {
+            return null;
+        }
+        if (!is_array($section)) {
+            throw new RuntimeException('bug_reports must be an array.');
+        }
+        $repo = self::string($section, 'repo');
+        if (!preg_match('#^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$#D', $repo)) {
+            throw new RuntimeException('bug_reports.repo must be owner/name.');
+        }
+        $prefix = $section['label_prefix'] ?? 'kompanie:';
+        if (!is_string($prefix) || $prefix === '' || mb_strlen($prefix) > 20 || preg_match('/[\x00-\x1F,]/', $prefix)) {
+            throw new RuntimeException('bug_reports.label_prefix must be a short text without commas.');
+        }
+        $clientId = isset($section['client_id']) ? self::string($section, 'client_id') : null;
+        $keyFile = isset($section['private_key_file']) ? self::string($section, 'private_key_file') : null;
+        if (($clientId === null) !== ($keyFile === null)) {
+            throw new RuntimeException('bug_reports.client_id and bug_reports.private_key_file go together.');
+        }
+        if ($clientId === null && !isset($raw['github'])) {
+            throw new RuntimeException('bug_reports needs the github section or its own client_id and private_key_file.');
+        }
+
+        return ['repo' => $repo, 'label_prefix' => $prefix, 'client_id' => $clientId, 'private_key_file' => $keyFile];
     }
 
     /**

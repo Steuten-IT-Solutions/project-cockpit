@@ -127,6 +127,42 @@ final class ConfigTest extends TestCase
         Config::fromArray($raw);
     }
 
+    public function testBugReportsSectionNeedsARepositoryAndAGitHubApp(): void
+    {
+        self::assertNull(Config::fromArray(self::valid())->bugReports);
+
+        $raw = self::valid();
+        $raw['github'] = ['client_id' => 'Iv23abc', 'private_key_file' => '/x/app.pem', 'accounts' => ['Steuten-IT-Solutions']];
+        $raw['bug_reports'] = ['repo' => 'Steuten-IT-Solutions/kompanie-meldungen'];
+        self::assertSame(
+            ['repo' => 'Steuten-IT-Solutions/kompanie-meldungen', 'label_prefix' => 'kompanie:', 'client_id' => null, 'private_key_file' => null],
+            Config::fromArray($raw)->bugReports,
+        );
+
+        // A separate app for the reports repository instead of the github section
+        $own = self::valid();
+        $own['bug_reports'] = ['repo' => 'o/r', 'label_prefix' => 'k:', 'client_id' => 'Iv23x', 'private_key_file' => '/x/r.pem'];
+        self::assertSame('Iv23x', Config::fromArray($own)->bugReports['client_id'] ?? null);
+
+        foreach ([
+            ['repo' => 'no-slash'],
+            ['repo' => 'o/r', 'label_prefix' => 'a,b'],
+            ['repo' => 'o/r', 'client_id' => 'Iv23x'],
+        ] as $section) {
+            $bad = $raw;
+            $bad['bug_reports'] = $section;
+            try {
+                Config::fromArray($bad);
+                self::fail('accepted ' . json_encode($section));
+            } catch (RuntimeException) {
+            }
+        }
+        $noApp = self::valid();
+        $noApp['bug_reports'] = ['repo' => 'o/r'];
+        $this->expectException(RuntimeException::class);
+        Config::fromArray($noApp);
+    }
+
     public function testRejectsShortSetupToken(): void
     {
         $raw = self::valid();
