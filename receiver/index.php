@@ -5,12 +5,17 @@ declare(strict_types=1);
 /*
  * Document root of the status subdomain (e.g. https://status.steuten-it-solutions.de/).
  * Accepts status reports of the company apps at POST / and, with a bug_reports section, bug reports at
- * POST /reports; everything else answers 404. The overview lives in the cockpit behind its login.
+ * POST /reports and, with a releases section that has a webhook_secret, the GitHub App's webhook at POST /github;
+ * everything else answers 404. The overview lives in the cockpit behind its login.
  */
 
 use Cockpit\Config;
 use Cockpit\Database\Connection;
 use Cockpit\Http\Response;
+use Cockpit\Releases\GitHubWebhook;
+use Cockpit\Releases\ReleaseRepository;
+use Cockpit\Releases\ReleaseStore;
+use Cockpit\Releases\ReleaseSync;
 use Cockpit\Reports\BugReportReceiver;
 use Cockpit\Reports\BugReportRepository;
 use Cockpit\Reports\BugReportStore;
@@ -46,7 +51,32 @@ try {
     $path = parse_url(is_string($_SERVER['REQUEST_URI'] ?? null) ? $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH);
     $path = is_string($path) ? $path : '';
     $isReport = $path === '/reports';
-    if ($org === null || ($isReport && $config->bugReports === null)) {
+    $secret = $config->releases['webhook_secret'] ?? null;
+    if ($path === '/github') {
+        if ($secret === null || $config->releases === null) {
+            $response = Receiver::json(404, ['error' => 'not found']);
+        } else {
+            $body = $method === 'POST' ? (string)file_get_contents('php://input', false, null, 0, GitHubWebhook::MAX_BODY + 1) : '';
+            $pdo = null;
+            $store = static function () use (&$pdo, $config): ReleaseStore {
+                return new ReleaseRepository($pdo ??= Connection::create($config->database));
+            };
+            $webhook = new GitHubWebhook($store, $config->releases['repo'], $secret);
+            [$response, $recorded] = $webhook->handle(
+                $method,
+                is_string($_SERVER['HTTP_X_GITHUB_EVENT'] ?? null) ? $_SERVER['HTTP_X_GITHUB_EVENT'] : '',
+                $body,
+                is_string($_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? null) ? $_SERVER['HTTP_X_HUB_SIGNATURE_256'] : '',
+            );
+            // Whether the run publishes and its core version: after the response, so GitHub gets its answer at once
+            // (it waits at most 10 seconds). Without PHP-FPM the cron job does it.
+            if ($recorded && function_exists('fastcgi_finish_request')) {
+                $afterResponse = static function () use ($config, $store): void {
+                    ReleaseSync::fromConfig($config, $store())?->complete(time());
+                };
+            }
+        }
+    } elseif ($org === null || ($isReport && $config->bugReports === null)) {
         $response = Receiver::json(404, ['error' => 'not found']);
     } else {
         // One byte more than allowed, so that an oversized report is recognised without reading all of it.
@@ -92,7 +122,7 @@ if ($afterResponse !== null) {
     try {
         $afterResponse();
     } catch (Throwable $e) {
-        // The report is stored; the cron job tries again.
-        error_log(sprintf('[cockpit receiver] bug report issue: %s: %s', $e::class, $e->getMessage()));
+        // The report or run is stored; the cron job tries again.
+        error_log(sprintf('[cockpit receiver] after response: %s: %s', $e::class, $e->getMessage()));
     }
 }

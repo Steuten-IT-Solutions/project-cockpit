@@ -20,7 +20,10 @@ final class Session
     ) {
     }
 
-    public function start(): void
+    /**
+     * @param bool $touch false for requests a page makes on its own (polling): they must not keep an idle session alive
+     */
+    public function start(bool $touch = true): void
     {
         if (!is_dir($this->savePath) && !mkdir($this->savePath, 0700, true) && !is_dir($this->savePath)) {
             throw new RuntimeException('Session directory could not be created.');
@@ -56,7 +59,9 @@ final class Session
         if (!is_int($_SESSION['_created'] ?? null)) {
             $_SESSION['_created'] = $now;
         }
-        $_SESSION['_seen'] = $now;
+        if ($touch || !is_int($_SESSION['_seen'] ?? null)) {
+            $_SESSION['_seen'] = $now;
+        }
     }
 
     /**

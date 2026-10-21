@@ -20,6 +20,7 @@
  * @var list<array<string, mixed>> $reports
  * @var array<int, list<array<string, mixed>>> $reportsByRepo
  * @var array<string, string> $releaseByRepo
+ * @var string $releasesHtml rendered templates/releases.php
  * @var bool $statusReceiver
  * @var list<array<string, mixed>> $installations format 2
  * @var list<array<string, mixed>> $openAlerts
@@ -83,6 +84,11 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
     <button type="submit" class="secondary compact">Jetzt aktualisieren</button>
   </form>
 </div>
+<section class="card releases" id="releases" data-poll="/releases" aria-live="polite">
+<?= $releasesHtml ?>
+</section>
+<script src="/assets/releases.js" defer></script>
+
 <?php if (!$githubConfigured): ?>
   <p class="notice">Die GitHub App ist noch nicht in <code>config.php</code> eingetragen. Projekte erscheinen nach dem Eintragen beim nächsten Cron-Lauf.</p>
 <?php elseif ($projects === null || ($projects === [] && $hiddenCount === 0)): ?>

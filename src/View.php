@@ -26,6 +26,16 @@ final class View
         return $this->renderFile('layout', $data + ['content' => $content]);
     }
 
+    /**
+     * A template without the layout, e.g. a part of a page that a script reloads.
+     *
+     * @param array<string, mixed> $data
+     */
+    public function fragment(string $template, array $data = []): string
+    {
+        return $this->renderFile($template, $data);
+    }
+
     public static function escape(mixed $value): string
     {
         return htmlspecialchars(is_scalar($value) ? (string)$value : '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
