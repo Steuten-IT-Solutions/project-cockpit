@@ -22,8 +22,8 @@ namespace Cockpit\Status;
  *     update_ok: ?int, update_at: ?string, update_to: ?string, update_check_ok: int,
  *     gallery_ok: ?int, gallery_at: ?string, sent_at: ?string,
  *     installation: string, kind: string, event: ?string, checks: array<string, string>,
- *     errors: array<string, int>, cron_kind: string, cron_last: ?string, features: list<string>,
- *     maintenance: int, sent: int, nonce: string, key: ?string
+ *     errors: array<string, int>, details: array<string, array<string, int>>, detail: ?string,
+ *     cron_kind: string, cron_last: ?string, features: list<string>, maintenance: int, sent: int, nonce: string, key: ?string
  * }
  */
 final class StatusReport
@@ -36,6 +36,12 @@ final class StatusReport
     private const CODE = '/^[A-Z0-9_]{1,40}$/D';
     private const MAX_CHECKS = 20;
     private const MAX_ERRORS = 30;
+    /**
+     * Causes of an error code (Kompanie-App-Template Telemetry\Detail): fixed parts and patterns, never texts.
+     * The app sends at most 10 per code and hour (more count as "other"), so 24 hours may hold more.
+     */
+    private const CAUSE = '/^[a-z][a-z0-9_]{0,63}$/D';
+    private const MAX_CAUSES = 60;
     /** Areas (features) an installation may report; the app adds areas over time. */
     private const MAX_FEATURES = 30;
 
@@ -111,6 +117,11 @@ final class StatusReport
                 return null;
             }
         }
+        // Cause of the event, only if the app knows one; a heartbeat has none.
+        $detail = $in['detail'] ?? null;
+        if ($detail !== null && ($kind !== 'event' || !is_string($detail) || !preg_match(self::CAUSE, $detail))) {
+            return null;
+        }
         $key = $in['key'] ?? null;
         if ($key !== null && (!is_string($key) || !preg_match('/^[0-9a-f]{64}$/D', $key))) {
             return null;
@@ -118,10 +129,12 @@ final class StatusReport
 
         $checks = self::checks($in['checks'] ?? null);
         $errors = self::errors($in['errors'] ?? null);
+        // Older app versions send no causes: missing counts as none, invalid ones refuse the report like invalid errors.
+        $details = isset($in['details']) ? self::details($in['details']) : [];
         $features = self::features($in['features'] ?? null);
         $cron = is_array($in['cron'] ?? null) ? $in['cron'] : [];
         $cronKind = $cron['kind'] ?? null;
-        if ($checks === null || $errors === null || $features === null || !is_string($cronKind) || !in_array($cronKind, self::CRON_KINDS, true)) {
+        if ($checks === null || $errors === null || $details === null || $features === null || !is_string($cronKind) || !in_array($cronKind, self::CRON_KINDS, true)) {
             return null;
         }
 
@@ -131,6 +144,8 @@ final class StatusReport
             'event' => $event,
             'checks' => $checks,
             'errors' => $errors,
+            'details' => $details,
+            'detail' => $detail,
             'cron_kind' => $cronKind,
             'cron_last' => self::time($cron['last'] ?? null, $now),
             'features' => $features,
@@ -179,6 +194,32 @@ final class StatusReport
                 return null;
             }
             $out[$code] = $count;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Causes per error code of the last 24 hours with their counts. A code without causes is dropped.
+     *
+     * @return array<string, array<string, int>>|null
+     */
+    private static function details(mixed $value): ?array
+    {
+        if (!self::isObject($value, self::MAX_ERRORS)) {
+            return null;
+        }
+        $out = [];
+        foreach ($value as $code => $causes) {
+            if (!is_string($code) || !preg_match(self::CODE, $code) || !self::isObject($causes, self::MAX_CAUSES)) {
+                return null;
+            }
+            foreach ($causes as $cause => $count) {
+                if (!is_string($cause) || !preg_match(self::CAUSE, $cause) || !is_int($count) || $count <= 0 || $count > 1000000) {
+                    return null;
+                }
+                $out[$code][$cause] = $count;
+            }
         }
 
         return $out;

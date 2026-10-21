@@ -7,12 +7,15 @@ namespace Cockpit\Tests\Unit;
 use Cockpit\Notify\WebPush;
 use Cockpit\Security\Crypto;
 use Cockpit\Status\AlertRules;
+use Cockpit\Status\InstallationRepository;
 use Cockpit\Status\InstallationStore;
 use Cockpit\Status\Notifier;
 use Cockpit\Status\Receiver;
 use Cockpit\Status\StatusReport;
 use Cockpit\Status\StatusRepository;
 use Cockpit\Status\StatusView;
+use Cockpit\View;
+use PDO;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -124,6 +127,156 @@ final class StatusFormat2Test extends TestCase
         self::assertNotNull(StatusReport::fromFormat2(self::payload(['errors' => []]), self::ORG, self::NOW));
     }
 
+    public function testValidatesCausesOfErrorCodes(): void
+    {
+        $details = ['CALENDAR_FETCH' => ['ics_http_404' => 2, 'ics_timeout' => 1], 'UPDATE_FAILED' => ['download_http_503' => 1]];
+        $row = StatusReport::fromFormat2(self::payload(['details' => $details]), self::ORG, self::NOW);
+        self::assertNotNull($row);
+        self::assertSame($details, $row['details']);
+        self::assertNull($row['detail']);
+        $event = StatusReport::fromFormat2(self::payload(['kind' => 'event', 'event' => 'UPDATE_FAILED', 'detail' => 'download_http_503']), self::ORG, self::NOW);
+        self::assertSame('download_http_503', $event['detail'] ?? null);
+        $unknown = StatusReport::fromFormat2(self::payload(['kind' => 'event', 'event' => 'UPDATE_FAILED']), self::ORG, self::NOW);
+        self::assertNotNull($unknown);
+        self::assertNull($unknown['detail'], 'an event without a known cause');
+
+        // Older app versions send no causes: still accepted, as none.
+        self::assertSame([], StatusReport::fromFormat2(self::payload(), self::ORG, self::NOW)['details'] ?? null, 'missing');
+        self::assertSame([], StatusReport::fromFormat2(self::payload(['details' => []]), self::ORG, self::NOW)['details'] ?? null, 'empty object');
+        self::assertSame([], StatusReport::fromFormat2(self::payload(['details' => null]), self::ORG, self::NOW)['details'] ?? null, 'null');
+        // 24 hours may hold more than the 10 causes per code and hour the app sends.
+        $many = array_fill_keys(array_map(static fn (int $n): string => 'cause_' . $n, range(1, 60)), 1);
+        self::assertNotNull(StatusReport::fromFormat2(self::payload(['details' => ['SERVER_ERROR' => $many]]), self::ORG, self::NOW));
+
+        $bad = [
+            'details as list' => ['details' => ['ics_http_404']],
+            'causes as list' => ['details' => ['CALENDAR_FETCH' => ['ics_http_404']]],
+            'causes not an object' => ['details' => ['CALENDAR_FETCH' => 'ics_http_404']],
+            'bad code' => ['details' => ['Kalender' => ['ics_http_404' => 1]]],
+            'error text as cause' => ['details' => ['CALENDAR_FETCH' => ['Kalender von max@example.org nicht erreichbar' => 1]]],
+            'cause with capitals' => ['details' => ['CALENDAR_FETCH' => ['ICS_HTTP_404' => 1]]],
+            'cause starting with a digit' => ['details' => ['CALENDAR_FETCH' => ['404' => 1]]],
+            'cause too long' => ['details' => ['CALENDAR_FETCH' => ['a' . str_repeat('b', 64) => 1]]],
+            'count not an int' => ['details' => ['CALENDAR_FETCH' => ['ics_timeout' => '1']]],
+            'count zero' => ['details' => ['CALENDAR_FETCH' => ['ics_timeout' => 0]]],
+            'count too high' => ['details' => ['CALENDAR_FETCH' => ['ics_timeout' => 1000001]]],
+            'too many codes' => ['details' => array_fill_keys(array_map(static fn (int $n): string => 'E' . $n, range(1, 31)), ['other' => 1])],
+            'too many causes' => ['details' => ['SERVER_ERROR' => $many + ['cause_61' => 1]]],
+            'detail in a heartbeat' => ['detail' => 'download_http_503'],
+            'bad event detail' => ['kind' => 'event', 'event' => 'UPDATE_FAILED', 'detail' => 'Download: HTTP 503'],
+            'event detail not a string' => ['kind' => 'event', 'event' => 'UPDATE_FAILED', 'detail' => 503],
+        ];
+        foreach ($bad as $name => $override) {
+            self::assertNull(StatusReport::fromFormat2(self::payload($override), self::ORG, self::NOW), $name);
+        }
+
+        // The receiver refuses invalid causes like invalid errors and passes valid ones on.
+        $store = self::store();
+        $receiver = self::receiver($store);
+        self::assertSame([400, 'invalid'], self::send($receiver, self::payload(['key' => self::SECRET, 'details' => ['CALENDAR_FETCH' => ['Fehlertext' => 1]]])));
+        self::assertSame([201, ''], self::send($receiver, self::payload(['key' => self::SECRET, 'details' => $details])));
+        self::assertSame([400, 'invalid'], self::send($receiver, self::payload(['detail' => 'download_http_503'])));
+        self::assertSame([201, ''], self::send($receiver, self::payload(['kind' => 'event', 'event' => 'UPDATE_FAILED', 'detail' => 'download_http_503', 'details' => $details])));
+        self::assertSame([201, ''], self::send($receiver, self::payload()), 'a report of an older app version');
+        self::assertSame([$details, $details, []], array_column($store->records, 'details'));
+        self::assertSame([null, 'download_http_503', null], array_column($store->records, 'detail'));
+
+        // Many causes no longer fit the 4 KiB of the time before details, but fit MAX_BODY.
+        $codes = ['UPDATE_FAILED', 'UPDATE_CHECK', 'CALENDAR_FETCH', 'GALLERY_SYNC', 'TASK_FAILED', 'SERVER_ERROR', 'DB_ERROR', 'PHP_FATAL'];
+        $full = array_fill_keys($codes, array_fill_keys(array_map(static fn (int $n): string => 'typeerror_get_events_id_' . $n, range(1, 20)), 3));
+        $payload = self::payload(['details' => $full]);
+        self::assertGreaterThan(4096, strlen((string)json_encode($payload)));
+        self::assertLessThan(Receiver::MAX_BODY, strlen((string)json_encode($payload)));
+        self::assertSame([201, ''], self::send($receiver, $payload));
+    }
+
+    /**
+     * InstallationRepository on SQLite with the columns of migrations 0006, 0007 and 0009 (register() uses
+     * MariaDB's INSERT IGNORE, so the installation row is inserted directly).
+     */
+    private static function repository(): InstallationRepository
+    {
+        $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+        $pdo->exec('CREATE TABLE installations (id TEXT PRIMARY KEY, kompanie TEXT NOT NULL, variant TEXT NOT NULL, secret_enc TEXT NOT NULL,
+            version TEXT NOT NULL, php TEXT NOT NULL, db_driver TEXT NOT NULL, cron_kind TEXT NOT NULL, cron_last TEXT NULL, checks TEXT NOT NULL,
+            errors TEXT NOT NULL, features TEXT NOT NULL, update_ok INTEGER NULL, update_at TEXT NULL, update_to TEXT NULL,
+            update_check_ok INTEGER NOT NULL, gallery_ok INTEGER NULL, gallery_at TEXT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
+            last_heartbeat TEXT NULL, maintenance INTEGER NOT NULL DEFAULT 0, details TEXT NULL)');
+        $pdo->exec('CREATE TABLE status_heartbeats (id INTEGER PRIMARY KEY AUTOINCREMENT, installation_id TEXT NOT NULL, received_at TEXT NOT NULL,
+            version TEXT NOT NULL, checks TEXT NOT NULL, errors TEXT NOT NULL, cron_kind TEXT NOT NULL, details TEXT NULL)');
+        $pdo->exec('CREATE TABLE status_events (id INTEGER PRIMARY KEY AUTOINCREMENT, installation_id TEXT NOT NULL, code TEXT NOT NULL,
+            version TEXT NOT NULL, received_at TEXT NOT NULL, detail TEXT NULL)');
+        // A row from before migration 0009: no causes (NULL).
+        $pdo->prepare("INSERT INTO installations (id, kompanie, variant, secret_enc, version, php, db_driver, cron_kind, checks, errors, features,
+            update_check_ok, first_seen, last_seen) VALUES (?, 'Steuten-IT-Solutions/kompanie-musterstadt', 'standalone', 'x', '1.4.0.2', '8.3',
+            'sqlite', 'real', '{}', '{}', '', 1, '2026-10-18 00:00:00', '2026-10-18 00:00:00')")->execute([self::ID]);
+        $pdo->exec("INSERT INTO status_heartbeats (installation_id, received_at, version, checks, errors, cron_kind)
+            VALUES ('" . self::ID . "', '2026-10-18 00:00:00', '1.4.0.2', '{}', '{}', 'real')");
+        $pdo->exec("INSERT INTO status_events (installation_id, code, version, received_at) VALUES ('" . self::ID . "', 'DB_ERROR', '1.4.0.2', '2026-10-18 00:30:00')");
+
+        return new InstallationRepository($pdo);
+    }
+
+    public function testStoresCausesAtTheInstallationAndInTheHistory(): void
+    {
+        $repository = self::repository();
+        $old = $repository->get(self::ID);
+        self::assertSame([], $old['details'] ?? null, 'rows from before migration 0009');
+
+        $details = ['CALENDAR_FETCH' => ['ics_http_404' => 2, 'ics_timeout' => 1]];
+        $heartbeat = StatusReport::fromFormat2(self::payload(['details' => $details]), self::ORG, self::NOW);
+        $event = StatusReport::fromFormat2(self::payload(['kind' => 'event', 'event' => 'UPDATE_FAILED', 'detail' => 'download_http_503',
+            'details' => $details + ['UPDATE_FAILED' => ['download_http_503' => 1]]]), self::ORG, self::NOW);
+        self::assertNotNull($heartbeat);
+        self::assertNotNull($event);
+        $repository->record($heartbeat, '2026-10-18 23:00:00');
+        self::assertSame($details, $repository->get(self::ID)['details'] ?? null);
+        $repository->record($event, '2026-10-18 23:30:00');
+        self::assertSame($details + ['UPDATE_FAILED' => ['download_http_503' => 1]], $repository->get(self::ID)['details'] ?? null, 'events update the installation too');
+
+        $history = $repository->history(self::ID, '2026-10-01 00:00:00', 10);
+        self::assertSame(['event', 'heartbeat', 'event', 'heartbeat'], array_column($history, 'type'));
+        self::assertSame(['download_http_503', null, null, null], array_column($history, 'detail'));
+        self::assertSame([[], $details, [], []], array_column($history, 'details'), 'older heartbeats without causes');
+
+        $events = $repository->eventsSince('2026-10-18 00:00:00');
+        self::assertSame([null, 'download_http_503'], array_column($events, 'detail'));
+        // The alert of an event names the cause of the latest one.
+        $installation = $repository->get(self::ID);
+        self::assertNotNull($installation);
+        $installation['first_seen'] = gmdate('Y-m-d H:i:s', self::NOW - 600);
+        $events = array_map(static fn (array $ev): array => ['received_at' => gmdate('Y-m-d H:i:s', self::NOW - 60)] + $ev, $events);
+        $wanted = AlertRules::wanted([$installation], $events, self::NOW);
+        self::assertSame('Update gescheitert (download_http_503)', $wanted[self::ID . '|event:UPDATE_FAILED']['detail'] ?? null);
+        self::assertSame('Datenbankfehler', $wanted[self::ID . '|event:DB_ERROR']['detail'] ?? null, 'without a cause as before');
+    }
+
+    public function testShowsCausesOnTheInstallationPage(): void
+    {
+        self::assertSame('ics_http_404: 2, ics_timeout: 1', StatusView::causes(['ics_timeout' => 1, 'ics_http_404' => 2]));
+        self::assertSame('a_b: 1, c_d: 1', StatusView::causes(['c_d' => 1, 'a_b' => 1]), 'ties by name');
+        self::assertSame('', StatusView::causes([]));
+
+        $installation = self::installation(self::ID, 'kompanie-a');
+        $installation['errors'] = ['CALENDAR_FETCH' => 3, 'DB_ERROR' => 1];
+        $installation['details'] = ['CALENDAR_FETCH' => ['ics_timeout' => 1, 'ics_http_404' => 2]];
+        $at = gmdate('Y-m-d H:i:s', self::NOW - 60);
+        $html = (new View(dirname(__DIR__, 2) . '/templates'))->render('installation', [
+            'title' => 'kompanie-a', 'csrf' => 'x', 'flash' => null, 'loggedIn' => true, 'timezone' => 'Europe/Berlin', 'alerts' => [],
+            'installation' => $installation,
+            'history' => [
+                ['type' => 'event', 'received_at' => $at, 'version' => '1.4.0.3', 'code' => 'UPDATE_FAILED', 'detail' => 'download_http_503',
+                    'checks' => [], 'errors' => [], 'details' => []],
+                ['type' => 'event', 'received_at' => $at, 'version' => '1.4.0.3', 'code' => 'DB_ERROR', 'detail' => null,
+                    'checks' => [], 'errors' => [], 'details' => []],
+            ],
+        ]);
+        self::assertMatchesRegularExpression('~Kalender nicht abrufbar: 3\s*<small class="muted">\(ics_http_404: 2, ics_timeout: 1\)</small>~', $html);
+        self::assertMatchesRegularExpression('~Datenbankfehler: 1\s*<br>~', $html, 'a code without causes');
+        self::assertStringContainsString('Ursache: <code>download_http_503</code>', $html);
+        self::assertSame(1, substr_count($html, 'Ursache:'), 'an event without a cause shows none');
+    }
+
     public function testReceiverTrustsOnFirstUseAndChecksSignatures(): void
     {
         $store = self::store();
@@ -227,7 +380,7 @@ final class StatusFormat2Test extends TestCase
         return [
             'id' => $id, 'kompanie' => 'Steuten-IT-Solutions/' . $name, 'variant' => 'standalone', 'version' => '1.4.0.3',
             'php' => '8.3', 'db_driver' => 'sqlite', 'cron_kind' => $cronKind, 'cron_last' => null,
-            'checks' => $checks, 'errors' => [], 'features' => [], 'update_ok' => true, 'update_at' => null,
+            'checks' => $checks, 'errors' => [], 'details' => [], 'features' => [], 'update_ok' => true, 'update_at' => null,
             'update_to' => null, 'update_check_ok' => true, 'gallery_ok' => null, 'gallery_at' => null, 'maintenance' => false,
             'first_seen' => gmdate('Y-m-d H:i:s', self::NOW - 86400), 'last_seen' => gmdate('Y-m-d H:i:s', self::NOW - $quietFor),
             'last_heartbeat' => gmdate('Y-m-d H:i:s', self::NOW - $quietFor),

@@ -11,8 +11,8 @@ use Cockpit\Security\Crypto;
 /**
  * Accepts status reports at POST / of the status subdomain (receiver/index.php).
  *
- * Format 1 (daily, unsigned; until all installations are updated): at most 4 KiB per report,
- * 2000 stored rows, rows without a new report for 60 days are removed.
+ * Format 1 (daily, unsigned; until all installations are updated): 2000 stored rows, rows without a
+ * new report for 60 days are removed.
  *
  * Format 2 (Kompanie-App-Template docs/STATUSMELDUNGEN.md): hourly heartbeats and events, signed
  * with HMAC-SHA256 (header X-Kompanie-Signature) and a secret per installation. The secret is
@@ -20,12 +20,13 @@ use Cockpit\Security\Crypto;
  * stored encrypted; later reports must carry a valid signature, and a "key" never replaces it.
  * "sent" must lie within REPLAY_WINDOW of the receiver's clock and "nonce" must be new.
  *
- * Both formats share 2000 reports per hour in total. The database is only opened once a report
+ * Both formats: at most MAX_BODY per report, 2000 reports per hour in total. The database is only opened once a report
  * passed validation, so junk requests never open a connection.
  */
 final class Receiver
 {
-    public const MAX_BODY = 4096;
+    /** Room for the causes of format 2 ("details", up to 10 per code and hour); a report without them stays under 2 KiB. */
+    public const MAX_BODY = 16384;
     public const MAX_PER_HOUR = 2000;
     public const MAX_ROWS = 2000;
     public const KEEP_DAYS = 60;

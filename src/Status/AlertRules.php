@@ -9,7 +9,8 @@ namespace Cockpit\Status;
  *
  * - silent: no heartbeat for 2 h (real cron, WP-Cron) or 24 h (pseudo-cron, tasks only on page views)
  * - check:<key>: a traffic light of the installation is red (not in maintenance mode: tasks are paused on purpose)
- * - event:<code>: a severe error was reported in the last 24 h (not CHECK_ERROR: the red light has its own alert)
+ * - event:<code>: a severe error was reported in the last 24 h (not CHECK_ERROR: the red light has its own alert);
+ *   the detail names the cause of the latest event, if the app sent one
  * - release:<version>: several installations on the same version reported severe errors in the last 24 h
  *   (update failed, PHP fatal, database error): the hint to withdraw it. Only installations known for a
  *   day count, so freshly registered ones cannot raise it.
@@ -34,7 +35,7 @@ final class AlertRules
 
     /**
      * @param list<Installation> $installations
-     * @param list<array{installation_id: string, code: string, version: string, received_at: string}> $events
+     * @param list<array{installation_id: string, code: string, detail?: ?string, version: string, received_at: string}> $events oldest first
      * @return array<string, Wanted> by identity (installation id or kompanie, plus alert key)
      */
     public static function wanted(array $installations, array $events, int $now): array
@@ -63,7 +64,8 @@ final class AlertRules
             if ($i === null || $at === null || $now - $at > self::EVENT_HOLD || $event['code'] === 'CHECK_ERROR') {
                 continue;
             }
-            self::add($wanted, $i, 'event:' . $event['code'], StatusView::codeLabel($event['code']));
+            $cause = $event['detail'] ?? null;
+            self::add($wanted, $i, 'event:' . $event['code'], StatusView::codeLabel($event['code']) . ($cause !== null ? ' (' . $cause . ')' : ''));
             $since = self::ts($i['first_seen']);
             if (in_array($event['code'], self::RELEASE_CODES, true) && $since !== null && $now - $since >= self::RELEASE_MIN_AGE) {
                 $red[$event['version']][$i['id']] = true;

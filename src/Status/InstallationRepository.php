@@ -13,11 +13,11 @@ use PDO;
  * @phpstan-type Installation array{
  *     id: string, kompanie: string, variant: string, version: string, php: string, db_driver: string,
  *     cron_kind: string, cron_last: ?string, checks: array<string, string>, errors: array<string, int>,
- *     features: list<string>, update_ok: ?bool, update_at: ?string, update_to: ?string, update_check_ok: bool,
+ *     details: array<string, array<string, int>>, features: list<string>, update_ok: ?bool, update_at: ?string, update_to: ?string, update_check_ok: bool,
  *     gallery_ok: ?bool, gallery_at: ?string, maintenance: bool, first_seen: string, last_seen: string, last_heartbeat: ?string
  * }
- * @phpstan-type HistoryEntry array{type: string, received_at: string, version: string, code: ?string,
- *     checks: array<string, string>, errors: array<string, int>}
+ * @phpstan-type HistoryEntry array{type: string, received_at: string, version: string, code: ?string, detail: ?string,
+ *     checks: array<string, string>, errors: array<string, int>, details: array<string, array<string, int>>}
  */
 final class InstallationRepository implements InstallationStore
 {
@@ -68,12 +68,12 @@ final class InstallationRepository implements InstallationStore
     public function register(array $report, string $secretEnc, string $now): bool
     {
         $stmt = $this->pdo->prepare(
-            'INSERT IGNORE INTO installations (id, kompanie, variant, secret_enc, version, php, db_driver, cron_kind, checks, errors, features,
-                update_check_ok, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT IGNORE INTO installations (id, kompanie, variant, secret_enc, version, php, db_driver, cron_kind, checks, errors, details, features,
+                update_check_ok, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $report['installation'], $report['kompanie'], $report['variant'], $secretEnc, $report['version'], $report['php'],
-            $report['db_driver'], $report['cron_kind'], '{}', '{}', '', $report['update_check_ok'], $now, $now,
+            $report['db_driver'], $report['cron_kind'], '{}', '{}', '{}', '', $report['update_check_ok'], $now, $now,
         ]);
 
         return $stmt->rowCount() === 1;
@@ -83,23 +83,24 @@ final class InstallationRepository implements InstallationStore
     {
         $checks = self::json($report['checks']);
         $errors = self::json($report['errors']);
+        $details = self::json($report['details']);
         $heartbeat = $report['kind'] === 'heartbeat';
         $this->pdo->prepare(
-            'UPDATE installations SET kompanie = ?, variant = ?, version = ?, php = ?, db_driver = ?, cron_kind = ?, cron_last = ?, checks = ?, errors = ?,
+            'UPDATE installations SET kompanie = ?, variant = ?, version = ?, php = ?, db_driver = ?, cron_kind = ?, cron_last = ?, checks = ?, errors = ?, details = ?,
                 features = ?, update_ok = ?, update_at = ?, update_to = ?, update_check_ok = ?, gallery_ok = ?, gallery_at = ?,
                 maintenance = ?, last_seen = ?' . ($heartbeat ? ', last_heartbeat = ?' : '') . ' WHERE id = ?'
         )->execute([
-            $report['kompanie'], $report['variant'], $report['version'], $report['php'], $report['db_driver'], $report['cron_kind'], $report['cron_last'], $checks, $errors,
+            $report['kompanie'], $report['variant'], $report['version'], $report['php'], $report['db_driver'], $report['cron_kind'], $report['cron_last'], $checks, $errors, $details,
             implode(',', $report['features']), $report['update_ok'], $report['update_at'], $report['update_to'],
             $report['update_check_ok'], $report['gallery_ok'], $report['gallery_at'], $report['maintenance'], $now,
             ...($heartbeat ? [$now, $report['installation']] : [$report['installation']]),
         ]);
         if ($heartbeat) {
-            $this->pdo->prepare('INSERT INTO status_heartbeats (installation_id, received_at, version, checks, errors, cron_kind) VALUES (?, ?, ?, ?, ?, ?)')
-                ->execute([$report['installation'], $now, $report['version'], $checks, $errors, $report['cron_kind']]);
+            $this->pdo->prepare('INSERT INTO status_heartbeats (installation_id, received_at, version, checks, errors, details, cron_kind) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                ->execute([$report['installation'], $now, $report['version'], $checks, $errors, $details, $report['cron_kind']]);
         } else {
-            $this->pdo->prepare('INSERT INTO status_events (installation_id, code, version, received_at) VALUES (?, ?, ?, ?)')
-                ->execute([$report['installation'], (string)$report['event'], $report['version'], $now]);
+            $this->pdo->prepare('INSERT INTO status_events (installation_id, code, detail, version, received_at) VALUES (?, ?, ?, ?, ?)')
+                ->execute([$report['installation'], (string)$report['event'], $report['detail'], $report['version'], $now]);
         }
     }
 
@@ -129,16 +130,17 @@ final class InstallationRepository implements InstallationStore
     /**
      * Events received since the cutoff (UTC), oldest first.
      *
-     * @return list<array{installation_id: string, code: string, version: string, received_at: string}>
+     * @return list<array{installation_id: string, code: string, detail: ?string, version: string, received_at: string}>
      */
     public function eventsSince(string $cutoff): array
     {
-        $stmt = $this->pdo->prepare('SELECT installation_id, code, version, received_at FROM status_events WHERE received_at >= ? ORDER BY received_at, id');
+        $stmt = $this->pdo->prepare('SELECT installation_id, code, detail, version, received_at FROM status_events WHERE received_at >= ? ORDER BY received_at, id');
         $stmt->execute([$cutoff]);
 
         return array_values(array_map(static fn (array $r): array => [
             'installation_id' => (string)$r['installation_id'],
             'code' => (string)$r['code'],
+            'detail' => isset($r['detail']) ? (string)$r['detail'] : null,
             'version' => (string)$r['version'],
             'received_at' => (string)$r['received_at'],
         ], $stmt->fetchAll()));
@@ -152,17 +154,17 @@ final class InstallationRepository implements InstallationStore
     public function history(string $id, string $cutoff, int $limit): array
     {
         $out = [];
-        $stmt = $this->pdo->prepare('SELECT received_at, version, checks, errors FROM status_heartbeats WHERE installation_id = ? AND received_at >= ? ORDER BY received_at DESC LIMIT ' . $limit);
+        $stmt = $this->pdo->prepare('SELECT received_at, version, checks, errors, details FROM status_heartbeats WHERE installation_id = ? AND received_at >= ? ORDER BY received_at DESC LIMIT ' . $limit);
         $stmt->execute([$id, $cutoff]);
         foreach ($stmt->fetchAll() as $r) {
-            $out[] = ['type' => 'heartbeat', 'received_at' => (string)$r['received_at'], 'version' => (string)$r['version'], 'code' => null,
-                'checks' => self::decode((string)$r['checks']), 'errors' => self::decode((string)$r['errors'])];
+            $out[] = ['type' => 'heartbeat', 'received_at' => (string)$r['received_at'], 'version' => (string)$r['version'], 'code' => null, 'detail' => null,
+                'checks' => self::decode((string)$r['checks']), 'errors' => self::decode((string)$r['errors']), 'details' => self::decode((string)$r['details'])];
         }
-        $stmt = $this->pdo->prepare('SELECT received_at, version, code FROM status_events WHERE installation_id = ? AND received_at >= ? ORDER BY received_at DESC LIMIT ' . $limit);
+        $stmt = $this->pdo->prepare('SELECT received_at, version, code, detail FROM status_events WHERE installation_id = ? AND received_at >= ? ORDER BY received_at DESC LIMIT ' . $limit);
         $stmt->execute([$id, $cutoff]);
         foreach ($stmt->fetchAll() as $r) {
             $out[] = ['type' => 'event', 'received_at' => (string)$r['received_at'], 'version' => (string)$r['version'], 'code' => (string)$r['code'],
-                'checks' => [], 'errors' => []];
+                'detail' => isset($r['detail']) ? (string)$r['detail'] : null, 'checks' => [], 'errors' => [], 'details' => []];
         }
         usort($out, static fn (array $a, array $b): int => strcmp($b['received_at'], $a['received_at']));
 
@@ -213,6 +215,8 @@ final class InstallationRepository implements InstallationStore
         $checks = self::decode((string)$row['checks']);
         /** @var array<string, int> $errors */
         $errors = self::decode((string)$row['errors']);
+        /** @var array<string, array<string, int>> $details */
+        $details = self::decode((string)($row['details'] ?? ''));
         $features = (string)$row['features'] === '' ? [] : explode(',', (string)$row['features']);
 
         return [
@@ -226,6 +230,7 @@ final class InstallationRepository implements InstallationStore
             'cron_last' => $str('cron_last'),
             'checks' => $checks,
             'errors' => $errors,
+            'details' => $details,
             'features' => $features,
             'update_ok' => $bool('update_ok'),
             'update_at' => $str('update_at'),

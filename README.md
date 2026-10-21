@@ -124,6 +124,17 @@ defined in `docs/STATUSMELDUNGEN.md` there.
   only), error codes of the last 24 hours, how background tasks run (`cron.kind`), enabled
   areas and the result of the last update; severe errors (`UPDATE_FAILED`, `PHP_FATAL`, …)
   at once as events. No names, contents or error texts.
+- **Causes** (format 2, since Kompanie-App-Template#82): `details` holds the causes per error
+  code of the last 24 hours with their counts, e.g.
+  `{"CALENDAR_FETCH": {"ics_http_404": 2, "ics_timeout": 1}}`; an event carries the cause of
+  its code in `detail` (e.g. `download_http_503`) when the app knows one. A cause matches
+  `^[a-z][a-z0-9_]{0,63}$` and is built from fixed parts only, never from an error text (those
+  stay in the installation's own error log). Older app versions send no `details`: the report
+  is accepted with no causes. Invalid `details`, `detail` in a heartbeat, more than 30 codes or
+  more than 60 causes per code refuse the whole report (400), like invalid `errors`. The
+  cockpit shows the causes next to the error codes, in the history and in event alerts; the
+  alert rules themselves do not use them. The authoritative description of all fields is
+  `docs/STATUSMELDUNGEN.md` in the template (branch `develop`).
 - **Format 1** (old, daily, unsigned) is still accepted until every installation is updated
   and shown separately as a hint.
 
@@ -146,7 +157,7 @@ Signature and limits (format 2):
   the app key. Every later report must be signed with it (HMAC-SHA256 over the body, header
   `X-Kompanie-Signature`); a secret sent again never replaces the stored one. `sent` must be
   within 10 minutes of the cockpit's clock and `nonce` must be new (replay protection).
-- Only repositories of the configured organisation, at most 4 KiB per report, 2000 reports
+- Only repositories of the configured organisation, at most 16 KiB per report, 2000 reports
   per hour in total (both formats) and 2000 installations.
 - History: heartbeats, events and resolved alerts are kept 90 days; an installation that
   has not reported for 90 days is removed.

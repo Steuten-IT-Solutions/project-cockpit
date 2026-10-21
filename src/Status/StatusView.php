@@ -90,6 +90,18 @@ final class StatusView
         return self::CODES[$code] ?? $code;
     }
 
+    /**
+     * Causes of an error code, most frequent first, e.g. "ics_http_404: 2, ics_timeout: 1" ('' if none).
+     *
+     * @param array<string, int> $causes
+     */
+    public static function causes(array $causes): string
+    {
+        uksort($causes, static fn (string $a, string $b): int => [$causes[$b], $a] <=> [$causes[$a], $b]);
+
+        return implode(', ', array_map(static fn (string $cause, int $count): string => $cause . ': ' . $count, array_keys($causes), $causes));
+    }
+
     public static function checkLabel(string $key): string
     {
         return self::CHECKS[$key] ?? $key;
