@@ -21,6 +21,8 @@ use Cockpit\Notify\PushSubscriptionRepository;
 use Cockpit\Notify\WebPush;
 use Cockpit\Projects\NoteRepository;
 use Cockpit\Projects\ProjectRepository;
+use Cockpit\Releases\ReleaseRepository;
+use Cockpit\Releases\ReleaseView;
 use Cockpit\Status\AlertRepository;
 use Cockpit\Status\Alerts;
 use Cockpit\Status\InstallationRepository;
@@ -72,7 +74,8 @@ final class App
         $secure = $request->secure || str_starts_with($config->baseUrl, 'https://');
 
         $session = new Session($root . '/var/sessions', $secure, $config->idleTimeout, $config->absoluteTimeout);
-        $session->start();
+        // The release box reloads itself every few seconds; that alone must not count as activity.
+        $session->start(!($request->method === 'GET' && $request->path === '/releases'));
 
         return new self($config, Connection::create($config->database), $session, $root, $secure);
     }
@@ -85,6 +88,7 @@ final class App
         $router->add('POST', '/project/note', $this->saveNote(...));
         $router->add('POST', '/project/visibility', $this->setVisibility(...));
         $router->add('POST', '/refresh', $this->refresh(...));
+        $router->add('GET', '/releases', $this->releases(...));
         $router->add('GET', '/alerts', $this->alerts(...));
         $router->add('GET', '/installation', $this->installation(...));
         $router->add('POST', '/push/subscribe', $this->pushSubscribe(...));
@@ -171,6 +175,7 @@ final class App
             'installations' => $installations,
             'openAlerts' => $openAlerts,
             'releaseByRepo' => $releaseByRepo,
+            'releasesHtml' => $this->releasesHtml(),
             'statusReceiver' => $this->config->statusReports !== null,
             'phpVersion' => PHP_VERSION,
             'schemaVersion' => (new Migrator($this->pdo, $this->root . '/migrations'))->currentVersion(),
@@ -386,6 +391,38 @@ final class App
         });
 
         return Response::redirect('/');
+    }
+
+    /**
+     * The release box of the dashboard, reloaded by assets/releases.js every few seconds.
+     */
+    private function releases(Request $request): Response
+    {
+        if ($this->currentUser() === null) {
+            // 401 instead of a redirect: the script stops polling.
+            return new Response(401, '', ['Content-Type' => 'text/plain; charset=utf-8']);
+        }
+
+        return new Response(200, $this->releasesHtml(), ['Content-Type' => 'text/html; charset=utf-8']);
+    }
+
+    private function releasesHtml(): string
+    {
+        $summary = null;
+        if ($this->config->releases !== null) {
+            try {
+                $summary = ReleaseView::summary((new ReleaseRepository($this->pdo))->releases(200));
+            } catch (\PDOException) {
+                // The table appears with the next cron run after a deployment.
+            }
+        }
+
+        return $this->view->fragment('releases', [
+            'repo' => $this->config->releases['repo'] ?? null,
+            'webhook' => ($this->config->releases['webhook_secret'] ?? null) !== null,
+            'summary' => $summary,
+            'timezone' => $this->config->timezone,
+        ]);
     }
 
     private function costs(Request $request): Response

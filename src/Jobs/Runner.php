@@ -9,6 +9,8 @@ use Cockpit\Database\Migrator;
 use Cockpit\GitHub\Client;
 use Cockpit\GitHub\Sync;
 use Cockpit\Projects\ProjectRepository;
+use Cockpit\Releases\ReleaseRepository;
+use Cockpit\Releases\ReleaseSync;
 use Cockpit\Reports\BugReportRepository;
 use Cockpit\Reports\BugReportSync;
 use Cockpit\Notify\PushSubscriptionRepository;
@@ -121,6 +123,19 @@ final class Runner
             } catch (Throwable $e) {
                 $status = 'warn';
                 $messages[] = 'GitHub: ' . $e->getMessage();
+            }
+        }
+
+        // Releases of the company app template; the webhook records them at once, this catches lost deliveries.
+        if ($this->config->releases !== null) {
+            try {
+                $result = ReleaseSync::fromConfig($this->config, new ReleaseRepository($this->pdo))?->run(time());
+                if ($result !== null) {
+                    $messages[] = sprintf('Releases: %d Läufe geprüft', $result['runs']);
+                }
+            } catch (Throwable $e) {
+                $status = 'warn';
+                $messages[] = 'Releases: ' . $e->getMessage();
             }
         }
 

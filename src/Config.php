@@ -21,6 +21,7 @@ final class Config
      * @param array{email: string, from: string}|null $alerts
      * @param array{private_key_file: string, subject: string}|null $push
      * @param array{repo: string, label_prefix: string, client_id: ?string, private_key_file: ?string}|null $bugReports
+     * @param array{repo: string, webhook_secret: ?string}|null $releases
      */
     private function __construct(
         public readonly string $baseUrl,
@@ -36,6 +37,7 @@ final class Config
         public readonly ?array $alerts = null,
         public readonly ?array $push = null,
         public readonly ?array $bugReports = null,
+        public readonly ?array $releases = null,
     ) {
     }
 
@@ -89,7 +91,7 @@ final class Config
             throw new RuntimeException('timezone is not a valid identifier.');
         }
 
-        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw), self::vercel($raw), self::statusReports($raw), self::alerts($raw), self::push($raw), self::bugReports($raw));
+        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw), self::vercel($raw), self::statusReports($raw), self::alerts($raw), self::push($raw), self::bugReports($raw), self::releases($raw));
     }
 
     /**
@@ -301,6 +303,39 @@ final class Config
         }
 
         return ['repo' => $repo, 'label_prefix' => $prefix, 'client_id' => $clientId, 'private_key_file' => $keyFile];
+    }
+
+    /**
+     * The optional releases section: running and recent releases of the company app template (workflows
+     * "Kernversion freigeben" and "Kompanien abgleichen"). The cron job reads them with the GitHub App of the github
+     * section; with webhook_secret the status subdomain also accepts the app's webhook at POST /github, so a release
+     * shows up within seconds.
+     *
+     * @param array<mixed> $raw
+     * @return array{repo: string, webhook_secret: ?string}|null
+     */
+    private static function releases(array $raw): ?array
+    {
+        $section = $raw['releases'] ?? null;
+        if ($section === null) {
+            return null;
+        }
+        if (!is_array($section)) {
+            throw new RuntimeException('releases must be an array.');
+        }
+        $repo = self::string($section, 'repo');
+        if (!preg_match('#^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$#D', $repo)) {
+            throw new RuntimeException('releases.repo must be owner/name.');
+        }
+        if (!isset($raw['github'])) {
+            throw new RuntimeException('releases needs the github section.');
+        }
+        $secret = isset($section['webhook_secret']) ? self::string($section, 'webhook_secret') : null;
+        if ($secret !== null && strlen($secret) < 32) {
+            throw new RuntimeException('releases.webhook_secret must be at least 32 characters long.');
+        }
+
+        return ['repo' => $repo, 'webhook_secret' => $secret];
     }
 
     /**

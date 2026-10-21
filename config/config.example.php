@@ -81,6 +81,17 @@ return [
     //     // 'private_key_file' => __DIR__ . '/github-reports.pem',
     // ],
 
+    // Releases of the company app template (optional): the dashboard shows running early and stable releases and
+    // the last successful one of each channel, with core version and time. Needs the github section (the app reads
+    // Actions and Contents of this repository). With webhook_secret the status subdomain accepts the GitHub App's
+    // webhook at POST /github (events "Workflow runs" and "Workflow jobs"), so a release shows up within seconds;
+    // without it only after the next cron run. The secret: at least 32 random characters, the same as in the app's
+    // webhook settings.
+    // 'releases' => [
+    //     'repo' => 'Steuten-IT-Solutions/Kompanie-App-Template',
+    //     'webhook_secret' => 'CHANGE-ME',
+    // ],
+
     // Alerts of the status reports (optional): e-mail via PHP mail() when an installation turns red,
     // goes silent or reports a severe error, and again when the problem is gone. "from" must be an
     // address of this domain (IONOS sends only from own addresses).

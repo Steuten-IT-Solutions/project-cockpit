@@ -163,6 +163,37 @@ final class ConfigTest extends TestCase
         Config::fromArray($noApp);
     }
 
+    public function testReleasesSectionNeedsARepositoryAndTheGitHubSection(): void
+    {
+        self::assertNull(Config::fromArray(self::valid())->releases);
+
+        $raw = self::valid();
+        $raw['github'] = ['client_id' => 'Iv23abc', 'private_key_file' => '/x/app.pem', 'accounts' => ['Steuten-IT-Solutions']];
+        $raw['releases'] = ['repo' => 'Steuten-IT-Solutions/Kompanie-App-Template'];
+        self::assertSame(['repo' => 'Steuten-IT-Solutions/Kompanie-App-Template', 'webhook_secret' => null], Config::fromArray($raw)->releases);
+
+        $raw['releases']['webhook_secret'] = str_repeat('s', 32);
+        self::assertSame(str_repeat('s', 32), Config::fromArray($raw)->releases['webhook_secret'] ?? null);
+
+        foreach ([
+            ['repo' => 'no-slash'],
+            ['repo' => 'o/r', 'webhook_secret' => 'short'],
+            ['repo' => 'o/r', 'webhook_secret' => 'CHANGE-ME'],
+        ] as $section) {
+            $bad = $raw;
+            $bad['releases'] = $section;
+            try {
+                Config::fromArray($bad);
+                self::fail('accepted ' . json_encode($section));
+            } catch (RuntimeException) {
+            }
+        }
+        $noApp = self::valid();
+        $noApp['releases'] = ['repo' => 'o/r'];
+        $this->expectException(RuntimeException::class);
+        Config::fromArray($noApp);
+    }
+
     public function testRejectsShortSetupToken(): void
     {
         $raw = self::valid();

@@ -10,7 +10,8 @@ The user interface is German; code, comments, commits and documentation are Engl
 - **Phase 2:** project cards from a read-only GitHub App (CI status of the default branch,
   latest release, open issues and pull requests, last push), a page per project with links
   and a note that keeps every saved version, hiding projects, a refresh button.
-- **Phase 3 (in progress):** latest Vercel production deployment on each card; status
+- **Phase 3 (in progress):** latest Vercel production deployment on each card; running and last early and
+  stable releases of the company app (webhook, live on the dashboard); status
   reports of the company apps (Kompanie-Apps) with history, traffic lights and alerts by
   e-mail and push; bug reports of the company apps as issues in a private repository;
   costs (entered by hand, plus Vercel's charges of the current month).
@@ -100,6 +101,45 @@ card are listed under *Vercel ohne GitHub-Karte*.
    expiry. Vercel documents no read-only tokens, so it stays in `config.php` only.
 2. Add the `vercel` section to `config.php` (see `config.example.php`) with the token and
    the team id (`team_…`, shown under Team Settings → General).
+
+## Releases of the company app (phase 3)
+
+The dashboard shows in a box at the top whether an **early** or **stable** release of
+`Steuten-IT-Solutions/Kompanie-App-Template` is running right now, and per channel the last successful release
+with its core version and time. Release flow: `docs/RELEASE.md` in the template.
+
+- **Early:** a run of *Kompanien abgleichen* (`kompanien-abgleichen.yml`) on `develop` that publishes, i.e. has a
+  job besides `finden` (the `veroeffentlichen (…)` matrix jobs). Runs that find nothing to publish are not shown.
+- **Stable:** a run of *Kernversion freigeben* (`kern-freigeben.yml`) on `main`, or a publishing run of
+  *Kompanien abgleichen* on `main` (changes of a company repository, companies without a version of the released
+  core). In rare cases such a run on `main` publishes to `early` (core not yet in `STABLE_CORE`); the cockpit cannot
+  tell from the run and shows it as stable.
+- **Version** is the file `VERSION` at the run's commit (the core version, e.g. `0.1.1`), not the version of each
+  company (`0.1.1.N`). **Time** is the end of the workflow run. The template stores no time of a promotion, so this
+  is the closest exact value; a manual *Versionen steuern* run (promote, withdraw) is not shown.
+- A run that failed or was cancelled after the last successful one is shown in red below it.
+
+How it stays current:
+
+- **Webhook** (within seconds): GitHub sends `workflow_run` and `workflow_job` events to
+  `https://status.steuten-it-solutions.de/github`; the receiver checks `X-Hub-Signature-256` and stores the run. Right
+  after answering it reads, with the app, whether the run publishes and its `VERSION`.
+- **The open dashboard** reloads the box every 5 seconds while it is visible (`assets/releases.js`, reads only the
+  database). These requests do not count as activity, so the idle timeout still logs you out.
+- **Cron** (every 15 minutes and *Jetzt aktualisieren*): reads the latest runs of both workflows and completes them,
+  in case a webhook delivery got lost. Runs that publish nothing are kept 30 days, releases 400 days.
+
+Setup:
+
+1. Deploy the cockpit (migration `0010`).
+2. GitHub App → *Permissions & events*: *Actions* and *Contents* at least **read** (already needed above). Under
+   *Subscribe to events* tick **Workflow run** and **Workflow job**. Under *Webhook* set *Active*, URL
+   `https://status.steuten-it-solutions.de/github`, a random **secret** of at least 32 characters, SSL verification on.
+   The template repository must be one of the installation's selected repositories.
+3. Add the `releases` section to `config.php` with `repo` and the same `webhook_secret` (see `config.example.php`).
+   The status subdomain must exist; the `status_reports` section is not needed for this.
+4. Check in the app's *Advanced* tab that the `ping` delivery got `200`. A wrong secret gets `401`, a missing
+   `releases` section `404`.
 
 ## Costs (phase 3)
 
