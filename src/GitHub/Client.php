@@ -202,7 +202,7 @@ final class Client
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-        } elseif ($method !== 'GET') {
+        } elseif ($method !== 'GET' && $method !== '') {
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
         }

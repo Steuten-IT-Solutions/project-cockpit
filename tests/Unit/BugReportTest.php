@@ -162,7 +162,8 @@ final class BugReportTest extends TestCase
         self::assertSame([], $store->reports);
 
         self::assertSame(201, $send(self::payload(['screenshot' => ['type' => 'image/png', 'data' => self::png()]], ['description' => str_repeat('ä', BugReport::MAX_TEXT)])));
-        $stored = $store->reports[1]['report'];
+        $stored = $store->all()[1]['report'] ?? null;
+        self::assertNotNull($stored);
         self::assertSame(base64_decode(self::png(), true), $stored['screenshot']);
         self::assertSame('image/png', $stored['screenshot_type']);
     }
@@ -230,7 +231,7 @@ final class BugReportTest extends TestCase
                 $path === '/app/installations/5/access_tokens' => [201, [], (string)json_encode(['token' => 'ghs_reports'])],
                 $method === 'GET' && str_contains($path, '/labels/') => [404, [], '{"message":"Not Found"}'],
                 $method === 'POST' && str_ends_with($path, '/labels') => [201, [], '{}'],
-                $method === 'PUT' && str_contains($path, '/contents/screenshots/') => [201, [], (string)json_encode(['content' => ['html_url' => 'https://github.com/Steuten-IT-Solutions/kompanie-meldungen/blob/main/' . substr($path, strpos($path, 'screenshots/'))]])],
+                $method === 'PUT' && str_contains($path, '/contents/screenshots/') => [201, [], (string)json_encode(['content' => ['html_url' => 'https://github.com/Steuten-IT-Solutions/kompanie-meldungen/blob/main/' . substr($path, (int)strpos($path, 'screenshots/'))]])],
                 $method === 'POST' && str_ends_with($path, '/issues') => [201, [], (string)json_encode(['number' => count($calls), 'html_url' => 'https://github.com/x/issues/' . count($calls)])],
                 default => [500, [], '{}'],
             };

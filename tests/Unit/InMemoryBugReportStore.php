@@ -100,6 +100,16 @@ final class InMemoryBugReportStore implements BugReportStore
         return $out;
     }
 
+    /**
+     * Stored reports, read through a method so PHPStan does not keep a narrowed type of the property across calls.
+     *
+     * @return array<int, array{report: Incoming, screenshot_url: ?string, issue: ?string, attempts: int, error: ?string}>
+     */
+    public function all(): array
+    {
+        return $this->reports;
+    }
+
     public function screenshotCommitted(int $id, string $url): void
     {
         $this->reports[$id]['screenshot_url'] = $url;
@@ -112,6 +122,9 @@ final class InMemoryBugReportStore implements BugReportStore
 
     public function failed(int $id, string $error): void
     {
+        if (!isset($this->reports[$id])) {
+            return;
+        }
         $this->reports[$id]['attempts']++;
         $this->reports[$id]['error'] = $error;
     }
