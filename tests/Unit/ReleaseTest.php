@@ -23,7 +23,7 @@ final class ReleaseTest extends TestCase
      * @param array<string, mixed> $overrides
      * @return array<string, mixed>
      */
-    private static function run(array $overrides = []): array
+    private static function workflowRun(array $overrides = []): array
     {
         return $overrides + [
             'id' => 39664542607,
@@ -57,23 +57,23 @@ final class ReleaseTest extends TestCase
 
     public function testMapsChannelsByWorkflowAndBranch(): void
     {
-        $early = ReleaseRun::fromApi(self::run());
+        $early = ReleaseRun::fromApi(self::workflowRun());
         self::assertNotNull($early);
         self::assertSame(['sync', 'early', null, '2026-10-21 19:46:26', '2026-10-21 19:48:16'], [$early['workflow'], $early['channel'], $early['publishing'], $early['started_at'], $early['updated_at']]);
 
-        $main = ReleaseRun::fromApi(self::run(['head_branch' => 'main', 'event' => 'schedule']));
+        $main = ReleaseRun::fromApi(self::workflowRun(['head_branch' => 'main', 'event' => 'schedule']));
         self::assertSame('stable', $main['channel'] ?? null);
 
-        $promote = ReleaseRun::fromApi(self::run(['head_branch' => 'main', 'path' => '.github/workflows/kern-freigeben.yml', 'display_title' => 'Release 0.1.1: develop → main (#93)']));
+        $promote = ReleaseRun::fromApi(self::workflowRun(['head_branch' => 'main', 'path' => '.github/workflows/kern-freigeben.yml', 'display_title' => 'Release 0.1.1: develop → main (#93)']));
         self::assertNotNull($promote);
         self::assertSame(['promote', 'stable', 1], [$promote['workflow'], $promote['channel'], $promote['publishing']]);
 
         // Other workflows, branches and broken data are not release runs.
-        self::assertNull(ReleaseRun::fromApi(self::run(['path' => '.github/workflows/ci.yml'])));
-        self::assertNull(ReleaseRun::fromApi(self::run(['head_branch' => 'feature'])));
-        self::assertNull(ReleaseRun::fromApi(self::run(['path' => '.github/workflows/kern-freigeben.yml'])), 'promotion runs only on main');
-        self::assertNull(ReleaseRun::fromApi(self::run(['html_url' => 'https://evil.example/run'])));
-        self::assertNull(ReleaseRun::fromApi(self::run(['head_sha' => 'nope'])));
+        self::assertNull(ReleaseRun::fromApi(self::workflowRun(['path' => '.github/workflows/ci.yml'])));
+        self::assertNull(ReleaseRun::fromApi(self::workflowRun(['head_branch' => 'feature'])));
+        self::assertNull(ReleaseRun::fromApi(self::workflowRun(['path' => '.github/workflows/kern-freigeben.yml'])), 'promotion runs only on main');
+        self::assertNull(ReleaseRun::fromApi(self::workflowRun(['html_url' => 'https://evil.example/run'])));
+        self::assertNull(ReleaseRun::fromApi(self::workflowRun(['head_sha' => 'nope'])));
     }
 
     public function testPublishingJobsAndCoreVersion(): void
@@ -90,16 +90,16 @@ final class ReleaseTest extends TestCase
     public function testWebhookChecksTheSignatureAndTheRepository(): void
     {
         $store = new InMemoryReleaseStore();
-        $payload = ['action' => 'requested', 'workflow_run' => self::run(['status' => 'queued', 'conclusion' => null]), 'repository' => ['full_name' => self::REPO]];
+        $payload = ['action' => 'requested', 'workflow_run' => self::workflowRun(['status' => 'queued', 'conclusion' => null]), 'repository' => ['full_name' => self::REPO]];
 
         self::assertSame([401, false], self::deliver($store, 'workflow_run', $payload, 'wrong-secret-wrong-secret-wrong-secret'));
-        self::assertSame([], $store->runs);
+        self::assertSame(0, count($store->runs));
 
         $other = $payload;
         $other['repository']['full_name'] = 'Steuten-IT-Solutions/other';
         self::assertSame([200, false], self::deliver($store, 'workflow_run', $other));
         self::assertSame([200, false], self::deliver($store, 'ping', ['zen' => 'Keep it logically awesome.']));
-        self::assertSame([], $store->runs);
+        self::assertSame(0, count($store->runs));
 
         self::assertSame([200, true], self::deliver($store, 'workflow_run', $payload));
         self::assertSame('queued', $store->runs[39664542607]['status']);
@@ -112,7 +112,7 @@ final class ReleaseTest extends TestCase
     {
         $store = new InMemoryReleaseStore();
         $repo = ['full_name' => self::REPO];
-        self::deliver($store, 'workflow_run', ['action' => 'in_progress', 'workflow_run' => self::run(['status' => 'in_progress', 'conclusion' => null, 'updated_at' => '2026-10-21T19:46:30Z']), 'repository' => $repo]);
+        self::deliver($store, 'workflow_run', ['action' => 'in_progress', 'workflow_run' => self::workflowRun(['status' => 'in_progress', 'conclusion' => null, 'updated_at' => '2026-10-21T19:46:30Z']), 'repository' => $repo]);
         self::assertNull($store->runs[39664542607]['publishing']);
 
         // "finden" does not publish, the matrix job does.
@@ -125,9 +125,9 @@ final class ReleaseTest extends TestCase
         self::assertCount(1, $summary['early']['running']);
         self::assertSame([], $summary['stable']['running']);
 
-        self::deliver($store, 'workflow_run', ['action' => 'completed', 'workflow_run' => self::run(), 'repository' => $repo]);
+        self::deliver($store, 'workflow_run', ['action' => 'completed', 'workflow_run' => self::workflowRun(), 'repository' => $repo]);
         // A late "in_progress" delivery does not reopen the run.
-        self::deliver($store, 'workflow_run', ['action' => 'in_progress', 'workflow_run' => self::run(['status' => 'in_progress', 'conclusion' => null, 'updated_at' => '2026-10-21T19:46:30Z']), 'repository' => $repo]);
+        self::deliver($store, 'workflow_run', ['action' => 'in_progress', 'workflow_run' => self::workflowRun(['status' => 'in_progress', 'conclusion' => null, 'updated_at' => '2026-10-21T19:46:30Z']), 'repository' => $repo]);
         self::assertSame(['completed', 'success', 1], [$store->runs[39664542607]['status'], $store->runs[39664542607]['conclusion'], $store->runs[39664542607]['publishing']]);
 
         $summary = ReleaseView::summary($store->releases(10));
@@ -138,9 +138,9 @@ final class ReleaseTest extends TestCase
     public function testSummaryShowsLastSuccessAndALaterFailure(): void
     {
         $store = new InMemoryReleaseStore();
-        $stable = ReleaseRun::fromApi(self::run(['id' => 1, 'head_branch' => 'main', 'path' => '.github/workflows/kern-freigeben.yml', 'run_started_at' => '2026-10-20T10:00:00Z', 'updated_at' => '2026-10-20T10:01:00Z']));
-        $failed = ReleaseRun::fromApi(self::run(['id' => 2, 'head_branch' => 'main', 'path' => '.github/workflows/kern-freigeben.yml', 'conclusion' => 'failure', 'run_started_at' => '2026-10-21T10:00:00Z', 'updated_at' => '2026-10-21T10:01:00Z']));
-        $quiet = ReleaseRun::fromApi(self::run(['id' => 3, 'run_started_at' => '2026-10-21T11:00:00Z', 'updated_at' => '2026-10-21T11:00:20Z']));
+        $stable = ReleaseRun::fromApi(self::workflowRun(['id' => 1, 'head_branch' => 'main', 'path' => '.github/workflows/kern-freigeben.yml', 'run_started_at' => '2026-10-20T10:00:00Z', 'updated_at' => '2026-10-20T10:01:00Z']));
+        $failed = ReleaseRun::fromApi(self::workflowRun(['id' => 2, 'head_branch' => 'main', 'path' => '.github/workflows/kern-freigeben.yml', 'conclusion' => 'failure', 'run_started_at' => '2026-10-21T10:00:00Z', 'updated_at' => '2026-10-21T10:01:00Z']));
+        $quiet = ReleaseRun::fromApi(self::workflowRun(['id' => 3, 'run_started_at' => '2026-10-21T11:00:00Z', 'updated_at' => '2026-10-21T11:00:20Z']));
         self::assertNotNull($stable);
         self::assertNotNull($failed);
         self::assertNotNull($quiet);
@@ -170,9 +170,9 @@ final class ReleaseTest extends TestCase
                 str_ends_with($url, '/app/installations?per_page=100') => [['id' => 7, 'account' => ['login' => 'Steuten-IT-Solutions']]],
                 str_ends_with($url, '/app/installations/7/access_tokens') => ['token' => 'ghs_test'],
                 str_starts_with($url, $base . '/actions/workflows/kern-freigeben.yml/runs') => ['workflow_runs' => []],
-                str_contains($url, 'kompanien-abgleichen.yml/runs?per_page=10&branch=develop') => ['workflow_runs' => [self::run()]],
+                str_contains($url, 'kompanien-abgleichen.yml/runs?per_page=10&branch=develop') => ['workflow_runs' => [self::workflowRun()]],
                 str_contains($url, 'kompanien-abgleichen.yml/runs?per_page=10&branch=main') => ['workflow_runs' => [
-                    self::run(['id' => 5, 'head_branch' => 'main', 'event' => 'schedule', 'run_started_at' => '2026-10-21T19:47:00Z']),
+                    self::workflowRun(['id' => 5, 'head_branch' => 'main', 'event' => 'schedule', 'run_started_at' => '2026-10-21T19:47:00Z']),
                 ]],
                 $url === $base . '/actions/runs/39664542607/jobs?per_page=100' => ['jobs' => [['name' => 'finden', 'conclusion' => 'success'], ['name' => 'veroeffentlichen (Steuten-IT-Solutions/marinekompanie-app) / build', 'conclusion' => 'success']]],
                 $url === $base . '/actions/runs/5/jobs?per_page=100' => ['jobs' => [['name' => 'finden', 'conclusion' => 'success'], ['name' => 'veroeffentlichen', 'conclusion' => 'skipped']]],
@@ -191,6 +191,7 @@ final class ReleaseTest extends TestCase
         self::assertSame([0, null], [$store->runs[5]['publishing'], $store->runs[5]['core_version']], 'nothing published: no version read');
 
         // A second run reads no jobs and no version again.
+        /** @var list<string> $calls filled by the transport */
         $calls = [];
         $sync->run((int)strtotime('2026-10-21T20:15:00Z'));
         self::assertSame([], array_values(array_filter($calls, static fn (string $c): bool => str_contains($c, '/jobs') || str_contains($c, '/contents/'))));
