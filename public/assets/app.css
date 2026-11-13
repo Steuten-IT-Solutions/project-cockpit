@@ -285,3 +285,7 @@ a.button.secondary {
   border: 1px solid var(--border);
 }
 a.button.compact { display: inline-flex; align-items: center; }
+
+/* Usage figures of an installation (project-cockpit#20): bars without inline styles (CSP). */
+.usage-chart { display: block; width: 100%; height: auto; margin-top: 4px; }
+.usage-chart rect { fill: var(--accent); }

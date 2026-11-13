@@ -191,7 +191,7 @@ final class StatusFormat2Test extends TestCase
     }
 
     /**
-     * InstallationRepository on SQLite with the columns of migrations 0006, 0007 and 0009 (register() uses
+     * InstallationRepository on SQLite with the columns of migrations 0006, 0007, 0009 and 0011 (register() uses
      * MariaDB's INSERT IGNORE, so the installation row is inserted directly).
      */
     private static function repository(): InstallationRepository
@@ -201,7 +201,11 @@ final class StatusFormat2Test extends TestCase
             version TEXT NOT NULL, php TEXT NOT NULL, db_driver TEXT NOT NULL, cron_kind TEXT NOT NULL, cron_last TEXT NULL, checks TEXT NOT NULL,
             errors TEXT NOT NULL, features TEXT NOT NULL, update_ok INTEGER NULL, update_at TEXT NULL, update_to TEXT NULL,
             update_check_ok INTEGER NOT NULL, gallery_ok INTEGER NULL, gallery_at TEXT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
-            last_heartbeat TEXT NULL, maintenance INTEGER NOT NULL DEFAULT 0, details TEXT NULL)');
+            last_heartbeat TEXT NULL, maintenance INTEGER NOT NULL DEFAULT 0, details TEXT NULL, usage_counts TEXT NULL)');
+        $pdo->exec('CREATE TABLE status_usage (installation_id TEXT NOT NULL, day TEXT NOT NULL, users INTEGER NOT NULL, d1 INTEGER NOT NULL,
+            d7 INTEGER NOT NULL, d30 INTEGER NOT NULL, areas TEXT NOT NULL, PRIMARY KEY (installation_id, day))');
+        $pdo->exec('CREATE TABLE status_nonces (installation_id TEXT NOT NULL, nonce TEXT NOT NULL, received_at TEXT NOT NULL)');
+        $pdo->exec('CREATE TABLE alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, installation_id TEXT NULL)');
         $pdo->exec('CREATE TABLE status_heartbeats (id INTEGER PRIMARY KEY AUTOINCREMENT, installation_id TEXT NOT NULL, received_at TEXT NOT NULL,
             version TEXT NOT NULL, checks TEXT NOT NULL, errors TEXT NOT NULL, cron_kind TEXT NOT NULL, details TEXT NULL)');
         $pdo->exec('CREATE TABLE status_events (id INTEGER PRIMARY KEY AUTOINCREMENT, installation_id TEXT NOT NULL, code TEXT NOT NULL,
@@ -262,7 +266,7 @@ final class StatusFormat2Test extends TestCase
         $installation['details'] = ['CALENDAR_FETCH' => ['ics_timeout' => 1, 'ics_http_404' => 2]];
         $at = gmdate('Y-m-d H:i:s', self::NOW - 60);
         $html = (new View(dirname(__DIR__, 2) . '/templates'))->render('installation', [
-            'title' => 'kompanie-a', 'csrf' => 'x', 'flash' => null, 'loggedIn' => true, 'timezone' => 'Europe/Berlin', 'alerts' => [],
+            'title' => 'kompanie-a', 'csrf' => 'x', 'flash' => null, 'loggedIn' => true, 'timezone' => 'Europe/Berlin', 'alerts' => [], 'usage' => null, 'usageDays' => [],
             'installation' => $installation,
             'history' => [
                 ['type' => 'event', 'received_at' => $at, 'version' => '1.4.0.3', 'code' => 'UPDATE_FAILED', 'detail' => 'download_http_503',
@@ -523,5 +527,150 @@ final class StatusFormat2Test extends TestCase
         self::assertSame('error', StatusView::light(['checks' => ['updates' => 'ok'], 'errors' => []], true));
         self::assertSame('warn', StatusView::light(['checks' => ['updates' => 'ok'], 'errors' => ['DB_ERROR' => 1]], false));
         self::assertSame('ok', StatusView::light(['checks' => ['updates' => 'ok'], 'errors' => []], false));
+    }
+
+    /** Usage figures as ActivityService::usage() in Kompanie-App-Template builds them (format 3). */
+    private const USAGE = ['users' => 42, 'active' => ['d1' => 12, 'd7' => 30, 'd30' => 38], 'areas' => ['app' => 20, 'events' => 35, 'login' => 31, 'points' => 3]];
+
+    public function testValidatesUsageFiguresOfFormat3(): void
+    {
+        $row = StatusReport::fromFormat2(self::payload(['format' => 3, 'usage' => self::USAGE]), self::ORG, self::NOW);
+        self::assertNotNull($row);
+        self::assertSame(['users' => 42, 'd1' => 12, 'd7' => 30, 'd30' => 38, 'areas' => ['app' => 20, 'events' => 35, 'login' => 31, 'points' => 3]], $row['usage']);
+        // Format 2 and heartbeats without figures stay accepted: none, not zero.
+        foreach ([self::payload(), self::payload(['format' => 3]), self::payload(['format' => 3, 'usage' => null])] as $payload) {
+            $row = StatusReport::fromFormat2($payload, self::ORG, self::NOW);
+            self::assertNotNull($row);
+            self::assertNull($row['usage']);
+        }
+        $nobody = StatusReport::fromFormat2(self::payload(['format' => 3, 'usage' => ['users' => 0, 'active' => ['d1' => 0, 'd7' => 0, 'd30' => 0], 'areas' => []]]), self::ORG, self::NOW);
+        self::assertSame(['users' => 0, 'd1' => 0, 'd7' => 0, 'd30' => 0, 'areas' => []], $nobody['usage'] ?? null, 'no use at all');
+        // A figure added by a later app version does not refuse the report.
+        $later = StatusReport::fromFormat2(self::payload(['format' => 3, 'usage' => self::USAGE + ['guests' => 5]]), self::ORG, self::NOW);
+        self::assertSame(42, $later['usage']['users'] ?? null);
+        $areas = array_fill_keys(array_map(static fn (int $n): string => 'a' . chr(97 + intdiv($n, 26)) . chr(97 + $n % 26), range(1, 32)), 1);
+        self::assertNotNull(StatusReport::fromFormat2(self::payload(['format' => 3, 'usage' => ['areas' => $areas] + self::USAGE]), self::ORG, self::NOW), 'all areas plus app and login');
+
+        $bad = [
+            'format 4' => ['format' => 4, 'usage' => self::USAGE],
+            'usage in an event' => ['kind' => 'event', 'event' => 'DB_ERROR', 'usage' => self::USAGE],
+            'usage as list' => ['usage' => [1, 2, 3]],
+            'users missing' => ['usage' => ['active' => self::USAGE['active'], 'areas' => []]],
+            'active missing' => ['usage' => ['users' => 42, 'areas' => []]],
+            'areas missing' => ['usage' => ['users' => 42, 'active' => self::USAGE['active']]],
+            'negative' => ['usage' => ['users' => -1] + self::USAGE],
+            'too large' => ['usage' => ['users' => 100001, 'active' => ['d1' => 1, 'd7' => 1, 'd30' => 1], 'areas' => []]],
+            'not an int' => ['usage' => ['users' => '42'] + self::USAGE],
+            'fraction' => ['usage' => ['users' => 42.5] + self::USAGE],
+            'd1 above d7' => ['usage' => ['active' => ['d1' => 31, 'd7' => 30, 'd30' => 38]] + self::USAGE],
+            'd30 above users' => ['usage' => ['active' => ['d1' => 1, 'd7' => 2, 'd30' => 43]] + self::USAGE],
+            'area with text' => ['usage' => ['areas' => ['Max Mustermann' => 1]] + self::USAGE],
+            'area count not an int' => ['usage' => ['areas' => ['events' => '3']] + self::USAGE],
+            'too many areas' => ['usage' => ['areas' => $areas + ['zzz' => 1]] + self::USAGE],
+        ];
+        foreach ($bad as $name => $override) {
+            self::assertNull(StatusReport::fromFormat2(self::payload($override + ['format' => 3]), self::ORG, self::NOW), $name);
+        }
+    }
+
+    public function testReceiverAcceptsFormat3(): void
+    {
+        // Before project-cockpit#20 every format 3 report got 400, so the apps' reports were dropped.
+        $store = self::store();
+        $receiver = self::receiver($store);
+        self::assertSame([201, ''], self::send($receiver, self::payload(['format' => 3, 'key' => self::SECRET, 'usage' => self::USAGE])));
+        self::assertSame([201, ''], self::send($receiver, self::payload(['format' => 3, 'kind' => 'event', 'event' => 'DB_ERROR'])));
+        self::assertSame([201, ''], self::send($receiver, self::payload()), 'format 2 still accepted');
+        self::assertSame([400, 'invalid'], self::send($receiver, self::payload(['format' => 3, 'usage' => ['users' => -1] + self::USAGE])));
+        self::assertSame([42, null, null], array_map(static fn (array $r): ?int => $r['usage']['users'] ?? null, $store->records));
+    }
+
+    public function testStoresUsageFiguresPerDay(): void
+    {
+        $repository = self::repository();
+        self::assertNull($repository->usage(self::ID), 'none before the first format 3 heartbeat');
+        self::assertSame([], $repository->usageDays(self::ID, '2026-01-01'));
+
+        $report = static fn (int $d1, string $kind = 'heartbeat'): array => StatusReport::fromFormat2(self::payload(['format' => 3, 'kind' => $kind]
+            + ($kind === 'event' ? ['event' => 'DB_ERROR'] : ['usage' => ['active' => ['d1' => $d1, 'd7' => 30, 'd30' => 38]] + self::USAGE])), self::ORG, self::NOW)
+            ?? throw new \LogicException('invalid report');
+        $repository->record($report(10), '2026-10-17 08:00:00');
+        $repository->record($report(11), '2026-10-18 08:00:00');
+        $repository->record($report(12), '2026-10-18 21:00:00');
+        $repository->record($report(0, 'event'), '2026-10-18 22:00:00');
+
+        $usage = $repository->usage(self::ID);
+        self::assertNotNull($usage);
+        self::assertSame(12, $usage['d1'], 'the latest heartbeat; an event changes nothing');
+        self::assertSame(['app' => 20, 'events' => 35, 'login' => 31, 'points' => 3], $usage['areas']);
+        self::assertSame([['day' => '2026-10-17', 'd1' => 10], ['day' => '2026-10-18', 'd1' => 12]],
+            array_map(static fn (array $d): array => ['day' => $d['day'], 'd1' => $d['d1']], $repository->usageDays(self::ID, '2026-10-01')), 'one row per day, the last heartbeat wins');
+        self::assertCount(1, $repository->usageDays(self::ID, '2026-10-18'));
+
+        // Daily figures go after their own period, and with the installation.
+        $repository->prune('2026-01-01 00:00:00', '2026-10-18 00:00:00', '2026-10-18 00:00:00');
+        self::assertSame(['2026-10-18'], array_column($repository->usageDays(self::ID, '2026-01-01'), 'day'));
+        $repository->prune('2026-12-01 00:00:00', '2026-10-18 00:00:00', '2026-01-01 00:00:00');
+        self::assertNull($repository->get(self::ID));
+        self::assertSame([], $repository->usageDays(self::ID, '2026-01-01'));
+    }
+
+    public function testStoresTheReportBeforeMigration0011(): void
+    {
+        $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+        $pdo->exec('CREATE TABLE installations (id TEXT PRIMARY KEY, kompanie TEXT, variant TEXT, version TEXT, php TEXT, db_driver TEXT, cron_kind TEXT,
+            cron_last TEXT, checks TEXT, errors TEXT, details TEXT, features TEXT, update_ok INTEGER, update_at TEXT, update_to TEXT, update_check_ok INTEGER,
+            gallery_ok INTEGER, gallery_at TEXT, maintenance INTEGER, last_seen TEXT, last_heartbeat TEXT)');
+        $pdo->exec('CREATE TABLE status_heartbeats (installation_id TEXT, received_at TEXT, version TEXT, checks TEXT, errors TEXT, details TEXT, cron_kind TEXT)');
+        $pdo->prepare('INSERT INTO installations (id) VALUES (?)')->execute([self::ID]);
+        $repository = new InstallationRepository($pdo);
+        $report = StatusReport::fromFormat2(self::payload(['format' => 3, 'usage' => self::USAGE]), self::ORG, self::NOW);
+        self::assertNotNull($report);
+
+        $logged = ini_set('error_log', '/dev/null');
+        try {
+            $repository->record($report, '2026-10-18 23:00:00');
+        } finally {
+            ini_set('error_log', (string)$logged);
+        }
+        $column = static function (string $sql) use ($pdo): mixed {
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute();
+
+            return $stmt->fetchColumn();
+        };
+        self::assertSame('2026-10-18 23:00:00', $column('SELECT last_heartbeat FROM installations'));
+        self::assertSame(1, (int)$column('SELECT COUNT(*) FROM status_heartbeats'));
+        self::assertNull($repository->usage(self::ID));
+        self::assertSame([], $repository->usageDays(self::ID, '2026-01-01'));
+    }
+
+    public function testShowsUsageFiguresOnTheInstallationPage(): void
+    {
+        self::assertSame('0', StatusView::figure(0));
+        self::assertSame('< 5', StatusView::figure(1));
+        self::assertSame('< 5', StatusView::figure(4));
+        self::assertSame('5', StatusView::figure(5));
+        self::assertSame([['label' => 'Termine', 'people' => '35'], ['label' => 'Allgemein', 'people' => '20'], ['label' => 'neu', 'people' => '20'],
+            ['label' => 'Punkte', 'people' => '< 5']], StatusView::areas(['points' => 3, 'neu' => 20, 'events' => 35, 'app' => 20]));
+
+        $render = static fn (?array $usage, array $days): string => (new View(dirname(__DIR__, 2) . '/templates'))->render('installation', [
+            'title' => 'kompanie-a', 'csrf' => 'x', 'flash' => null, 'loggedIn' => true, 'timezone' => 'Europe/Berlin', 'alerts' => [], 'history' => [],
+            'installation' => self::installation(self::ID, 'kompanie-a'), 'usage' => $usage, 'usageDays' => $days,
+        ]);
+        self::assertStringContainsString('Keine Zahlen.', $render(null, []));
+
+        $today = gmdate('Y-m-d');
+        $yesterday = gmdate('Y-m-d', time() - 86400);
+        $html = $render(['users' => 42, 'd1' => 3, 'd7' => 30, 'd30' => 38, 'areas' => ['events' => 35, 'points' => 2]], [
+            ['day' => $yesterday, 'users' => 42, 'd1' => 20, 'd7' => 30, 'd30' => 38],
+            ['day' => $today, 'users' => 42, 'd1' => 3, 'd7' => 30, 'd30' => 38],
+        ]);
+        self::assertMatchesRegularExpression('~<dt>Konten</dt>\s*<dd>42</dd>~', $html);
+        self::assertStringContainsString('heute &lt; 5 · 7 Tage 30 · 30 Tage 38', $html);
+        self::assertMatchesRegularExpression('~Termine: 35<br>\s*Punkte: &lt; 5<br>~', $html);
+        self::assertSame(2, substr_count($html, '<rect '));
+        self::assertStringContainsString(implode('.', array_reverse(explode('-', $today))) . ': &lt; 5</title>', $html);
+        self::assertStringNotContainsString('style=', $html, 'no inline styles (CSP)');
     }
 }

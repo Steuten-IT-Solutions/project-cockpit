@@ -84,6 +84,49 @@ final class StatusView
         'data' => 'Schutz der Daten',
     ];
 
+    /** German labels of the areas in usage figures (Kompanie-App-Template Features and ActivityService::EXTRA_AREAS). */
+    private const AREAS = [
+        'app' => 'Allgemein', 'login' => 'Anmeldung', 'events' => 'Termine', 'calendar' => 'Kalender', 'news' => 'News',
+        'gallery' => 'Galerie', 'points' => 'Punkte', 'penalties' => 'Strafen', 'ranks' => 'Dienstgrade', 'titles' => 'Titel',
+        'attendance' => 'Anwesenheit', 'documents' => 'Dokumente', 'board' => 'Schwarzes Brett', 'polls' => 'Umfragen',
+        'birthdays' => 'Geburtstage', 'inventory' => 'Inventar', 'directory' => 'Mitglieder', 'offices' => 'Ämter',
+        'lists' => 'Listen', 'mail' => 'E-Mails', 'companies' => 'Kompanien', 'sponsors' => 'Sponsoren', 'pages' => 'Seiten',
+    ];
+
+    /** Below this, usage figures are shown as "< 5": in a small company they could point to a single person. */
+    public const SMALL_FIGURE = 5;
+
+    /** Unknown areas (added by a later app version) are shown by their key. */
+    public static function areaLabel(string $area): string
+    {
+        return self::AREAS[$area] ?? $area;
+    }
+
+    /**
+     * A usage figure for display: 1 to 4 as "< 5", otherwise the number.
+     */
+    public static function figure(int $count): string
+    {
+        return $count > 0 && $count < self::SMALL_FIGURE ? '< ' . self::SMALL_FIGURE : (string)$count;
+    }
+
+    /**
+     * Areas of the usage figures, most used first, ties by label.
+     *
+     * @param array<string, int> $areas
+     * @return list<array{label: string, people: string}>
+     */
+    public static function areas(array $areas): array
+    {
+        $rows = [];
+        foreach ($areas as $key => $people) {
+            $rows[] = ['label' => self::areaLabel($key), 'count' => $people];
+        }
+        usort($rows, static fn (array $a, array $b): int => [$b['count'], $a['label']] <=> [$a['count'], $b['label']]);
+
+        return array_map(static fn (array $r): array => ['label' => $r['label'], 'people' => self::figure($r['count'])], $rows);
+    }
+
     /** Unknown codes are shown as they are. */
     public static function codeLabel(string $code): string
     {

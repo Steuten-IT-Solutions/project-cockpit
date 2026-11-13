@@ -7,9 +7,11 @@ namespace Cockpit\Status;
 use PDO;
 
 /**
- * Format 2 status reports in MySQL (migration 0006): installations, history, nonces.
+ * Format 2 and 3 status reports in MySQL (migrations 0006, 0011): installations, history, nonces, usage figures.
  *
  * @phpstan-import-type Format2 from StatusReport
+ * @phpstan-import-type Usage from StatusReport
+ * @phpstan-type UsageDay array{day: string, users: int, d1: int, d7: int, d30: int}
  * @phpstan-type Installation array{
  *     id: string, kompanie: string, variant: string, version: string, php: string, db_driver: string,
  *     cron_kind: string, cron_last: ?string, checks: array<string, string>, errors: array<string, int>,
@@ -21,6 +23,9 @@ use PDO;
  */
 final class InstallationRepository implements InstallationStore
 {
+    /** Daily usage figures are kept this long, so a period can be compared with the year before. */
+    public const USAGE_KEEP_DAYS = 400;
+
     public function __construct(private readonly PDO $pdo)
     {
     }
@@ -102,6 +107,71 @@ final class InstallationRepository implements InstallationStore
             $this->pdo->prepare('INSERT INTO status_events (installation_id, code, detail, version, received_at) VALUES (?, ?, ?, ?, ?)')
                 ->execute([$report['installation'], (string)$report['event'], $report['detail'], $report['version'], $now]);
         }
+        if ($heartbeat && $report['usage'] !== null) {
+            try {
+                $this->recordUsage($report['installation'], $report['usage'], $now);
+            } catch (\PDOException $e) {
+                // Until the next cron run has applied migration 0011: the report itself is stored.
+                error_log('[cockpit status] usage not stored: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Current usage figures at the installation and one row per installation and UTC day (the last heartbeat wins).
+     *
+     * @param Usage $usage
+     */
+    private function recordUsage(string $id, array $usage, string $now): void
+    {
+        $this->pdo->prepare('UPDATE installations SET usage_counts = ? WHERE id = ?')->execute([(string)json_encode($usage, JSON_UNESCAPED_SLASHES), $id]);
+        $day = substr($now, 0, 10);
+        $this->pdo->prepare('DELETE FROM status_usage WHERE installation_id = ? AND day = ?')->execute([$id, $day]);
+        $this->pdo->prepare('INSERT INTO status_usage (installation_id, day, users, d1, d7, d30, areas) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            ->execute([$id, $day, $usage['users'], $usage['d1'], $usage['d7'], $usage['d30'], self::json($usage['areas'])]);
+    }
+
+    /**
+     * The latest usage figures of an installation, null if it never sent any (older app version, or before migration 0011).
+     *
+     * @return Usage|null
+     */
+    public function usage(string $id): ?array
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT usage_counts FROM installations WHERE id = ?');
+            $stmt->execute([$id]);
+            $json = $stmt->fetchColumn();
+        } catch (\PDOException) {
+            return null;
+        }
+        $value = is_string($json) ? json_decode($json, true) : null;
+        if (!is_array($value) || !is_array($value['areas'] ?? null)) {
+            return null;
+        }
+        /** @var array<string, int> $areas */
+        $areas = $value['areas'];
+
+        return ['users' => (int)($value['users'] ?? 0), 'd1' => (int)($value['d1'] ?? 0), 'd7' => (int)($value['d7'] ?? 0), 'd30' => (int)($value['d30'] ?? 0), 'areas' => $areas];
+    }
+
+    /**
+     * Daily usage figures of an installation from the given UTC day (YYYY-MM-DD), oldest first.
+     *
+     * @return list<UsageDay>
+     */
+    public function usageDays(string $id, string $fromDay): array
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT day, users, d1, d7, d30 FROM status_usage WHERE installation_id = ? AND day >= ? ORDER BY day');
+            $stmt->execute([$id, $fromDay]);
+        } catch (\PDOException) {
+            return [];
+        }
+
+        return array_values(array_map(static fn (array $r): array => [
+            'day' => substr((string)$r['day'], 0, 10), 'users' => (int)$r['users'], 'd1' => (int)$r['d1'], 'd7' => (int)$r['d7'], 'd30' => (int)$r['d30'],
+        ], $stmt->fetchAll()));
     }
 
     /**
@@ -172,10 +242,19 @@ final class InstallationRepository implements InstallationStore
     }
 
     /**
-     * Removes history, nonces and installations older than the cutoffs (UTC).
+     * Removes history, nonces, usage figures and installations older than the cutoffs (UTC).
      */
-    public function prune(string $historyCutoff, string $nonceCutoff): void
+    public function prune(string $historyCutoff, string $nonceCutoff, ?string $usageCutoff = null): void
     {
+        try {
+            if ($usageCutoff !== null) {
+                $this->pdo->prepare('DELETE FROM status_usage WHERE day < ?')->execute([substr($usageCutoff, 0, 10)]);
+            }
+            // With the installation, below: otherwise its daily figures would stay behind.
+            $this->pdo->prepare('DELETE FROM status_usage WHERE installation_id IN (SELECT id FROM installations WHERE last_seen < ?)')->execute([$historyCutoff]);
+        } catch (\PDOException $e) {
+            error_log('[cockpit status] usage not pruned: ' . $e->getMessage());
+        }
         $this->pdo->prepare('DELETE FROM status_heartbeats WHERE received_at < ?')->execute([$historyCutoff]);
         $this->pdo->prepare('DELETE FROM status_events WHERE received_at < ?')->execute([$historyCutoff]);
         $this->pdo->prepare('DELETE FROM status_nonces WHERE received_at < ?')->execute([$nonceCutoff]);

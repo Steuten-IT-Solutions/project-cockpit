@@ -23,8 +23,10 @@ namespace Cockpit\Status;
  *     gallery_ok: ?int, gallery_at: ?string, sent_at: ?string,
  *     installation: string, kind: string, event: ?string, checks: array<string, string>,
  *     errors: array<string, int>, details: array<string, array<string, int>>, detail: ?string,
- *     cron_kind: string, cron_last: ?string, features: list<string>, maintenance: int, sent: int, nonce: string, key: ?string
+ *     cron_kind: string, cron_last: ?string, features: list<string>, maintenance: int, sent: int, nonce: string, key: ?string,
+ *     usage: Usage|null
  * }
+ * @phpstan-type Usage array{users: int, d1: int, d7: int, d30: int, areas: array<string, int>}
  */
 final class StatusReport
 {
@@ -44,6 +46,8 @@ final class StatusReport
     private const MAX_CAUSES = 60;
     /** Areas (features) an installation may report; the app adds areas over time. */
     private const MAX_FEATURES = 30;
+    /** Format 3 usage figures (Kompanie-App-Template#175): highest number of accounts and of people per area. */
+    private const MAX_USERS = 100000;
 
     /** Earliest timestamp taken from a report (2020-01-01); older values are dropped. */
     private const MIN_TIMESTAMP = 1577836800;
@@ -90,14 +94,15 @@ final class StatusReport
     }
 
     /**
-     * Validates a format 2 report (Kompanie-App-Template docs/STATUSMELDUNGEN.md) strictly against a
-     * whitelist. Signature, replay window and nonce are checked by the Receiver.
+     * Validates a format 2 or 3 report (Kompanie-App-Template docs/STATUSMELDUNGEN.md) strictly against a
+     * whitelist. Format 3 is format 2 with the usage figures "usage" in a heartbeat. Signature, replay window
+     * and nonce are checked by the Receiver.
      *
-     * @return Format2|null null if the report is not a valid format 2 report of the organisation
+     * @return Format2|null null if the report is not a valid format 2 or 3 report of the organisation
      */
     public static function fromFormat2(mixed $in, string $org, int $now): ?array
     {
-        if (!is_array($in) || ($in['format'] ?? null) !== 2) {
+        if (!is_array($in) || !in_array($in['format'] ?? null, [2, 3], true)) {
             return null;
         }
         $base = self::fromPayload(['format' => 1] + $in, $org, $now);
@@ -132,6 +137,14 @@ final class StatusReport
         // Older app versions send no causes: missing counts as none, invalid ones refuse the report like invalid errors.
         $details = isset($in['details']) ? self::details($in['details']) : [];
         $features = self::features($in['features'] ?? null);
+        // Usage figures only in a heartbeat; missing (format 2, older app versions) means none, not zero.
+        $usage = null;
+        if (isset($in['usage'])) {
+            $usage = $kind === 'heartbeat' ? self::usage($in['usage']) : null;
+            if ($usage === null) {
+                return null;
+            }
+        }
         $cron = is_array($in['cron'] ?? null) ? $in['cron'] : [];
         $cronKind = $cron['kind'] ?? null;
         if ($checks === null || $errors === null || $details === null || $features === null || !is_string($cronKind) || !in_array($cronKind, self::CRON_KINDS, true)) {
@@ -154,7 +167,41 @@ final class StatusReport
             'sent' => $sent,
             'nonce' => $nonce,
             'key' => $key,
+            'usage' => $usage,
         ];
+    }
+
+    /**
+     * Usage figures of a heartbeat: accounts, active accounts in the last 1, 7 and 30 days and people per
+     * area in the last 30 days. Unknown keys are dropped, so a new figure of a later app version does not
+     * refuse the report; invalid known figures do.
+     *
+     * @return Usage|null
+     */
+    private static function usage(mixed $value): ?array
+    {
+        if (!self::isObject($value, 10) || !self::isObject($value['active'] ?? null, 10)
+            || !self::isObject($value['areas'] ?? null, self::MAX_FEATURES + 2)) {
+            return null;
+        }
+        $users = self::count($value['users'] ?? null);
+        $d1 = self::count($value['active']['d1'] ?? null);
+        $d7 = self::count($value['active']['d7'] ?? null);
+        $d30 = self::count($value['active']['d30'] ?? null);
+        if ($users === null || $d1 === null || $d7 === null || $d30 === null || $d1 > $d7 || $d7 > $d30 || $d30 > $users) {
+            return null;
+        }
+        $areas = [];
+        foreach ($value['areas'] as $area => $people) {
+            // "app" and "login" come on top of the areas of "features".
+            $people = self::count($people);
+            if (!is_string($area) || !preg_match('/^[a-z]{1,20}$/D', $area) || $people === null) {
+                return null;
+            }
+            $areas[$area] = $people;
+        }
+
+        return ['users' => $users, 'd1' => $d1, 'd7' => $d7, 'd30' => $d30, 'areas' => $areas];
     }
 
     /**
@@ -244,6 +291,14 @@ final class StatusReport
         }
 
         return $out;
+    }
+
+    /**
+     * A usage figure: a whole number from 0 to MAX_USERS, else null.
+     */
+    private static function count(mixed $value): ?int
+    {
+        return is_int($value) && $value >= 0 && $value <= self::MAX_USERS ? $value : null;
     }
 
     /**
