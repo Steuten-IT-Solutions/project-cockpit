@@ -172,11 +172,11 @@ final class Runner
             }
         }
 
-        // Status reports format 2: evaluate, alert, prune (history 90 days).
+        // Status reports format 2 and 3: evaluate, alert, prune (history 90 days, daily usage figures 400 days).
         if ($this->config->statusReports !== null) {
             try {
                 $installations = new InstallationRepository($this->pdo);
-                $installations->prune(gmdate('Y-m-d H:i:s', time() - Alerts::KEEP_DAYS * 86400), gmdate('Y-m-d H:i:s', time() - 2 * Receiver::REPLAY_WINDOW));
+                $installations->prune(gmdate('Y-m-d H:i:s', time() - Alerts::KEEP_DAYS * 86400), gmdate('Y-m-d H:i:s', time() - 2 * Receiver::REPLAY_WINDOW), gmdate('Y-m-d H:i:s', time() - InstallationRepository::USAGE_KEEP_DAYS * 86400));
                 $pushError = null;
                 $result = (new Alerts($installations, new AlertRepository($this->pdo), $this->notifier($pushError)))->run(time());
                 if ($pushError !== null) {

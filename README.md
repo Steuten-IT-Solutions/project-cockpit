@@ -175,6 +175,18 @@ defined in `docs/STATUSMELDUNGEN.md` there.
   cockpit shows the causes next to the error codes, in the history and in event alerts; the
   alert rules themselves do not use them. The authoritative description of all fields is
   `docs/STATUSMELDUNGEN.md` in the template (branch `develop`).
+- **Format 3** (since project-cockpit#20, Kompanie-App-Template#175): format 2 plus the usage
+  figures `usage` in a heartbeat, sums only:
+  `{"users": 42, "active": {"d1": 12, "d7": 30, "d30": 38}, "areas": {"events": 35, "login": 31}}`
+  (accounts, accounts active in the last 1, 7 and 30 days, people per area in the last 30 days).
+  Whole numbers `0 … 100000` with `d1 ≤ d7 ≤ d30 ≤ users`, area keys `^[a-z]{1,20}$` (unknown
+  areas are shown by their key), at most 32 areas; unknown keys inside `usage` are dropped so a
+  later app version does not break the reports. Invalid figures or `usage` in an event refuse the
+  report (400). A heartbeat without `usage` (format 2) means "no figures", not zero. The cockpit
+  keeps the latest figures per installation and one row per installation and UTC day (the day's
+  last heartbeat wins) for 400 days, and shows them on the installation page; values from 1 to 4
+  are shown as "< 5", since in a small company they could point to a single person. Format 2
+  stays accepted until every installation is updated.
 - **Format 1** (old, daily, unsigned) is still accepted until every installation is updated
   and shown separately as a hint.
 
@@ -199,8 +211,8 @@ Signature and limits (format 2):
   within 10 minutes of the cockpit's clock and `nonce` must be new (replay protection).
 - Only repositories of the configured organisation, at most 16 KiB per report, 2000 reports
   per hour in total (both formats) and 2000 installations.
-- History: heartbeats, events and resolved alerts are kept 90 days; an installation that
-  has not reported for 90 days is removed.
+- History: heartbeats, events and resolved alerts are kept 90 days, daily usage figures 400
+  days; an installation that has not reported for 90 days is removed with its usage figures.
 - The receiver stores no IP addresses, but the web server's access log does. Check the
   log settings of the hosting package and mention the reports in the companies' privacy
   policy (`docs/OFFENE-PUNKTE.md`, section 3, in the template).

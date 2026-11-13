@@ -284,6 +284,8 @@ final class App
             }
             $history = $repository->history($id, gmdate('Y-m-d H:i:s', time() - Alerts::KEEP_DAYS * 86400), 200);
             $alerts = (new AlertRepository($this->pdo))->forInstallation($id, 50);
+            $usage = $repository->usage($id);
+            $usageDays = $repository->usageDays($id, gmdate('Y-m-d', time() - 29 * 86400));
         } catch (\PDOException) {
             // New tables appear with the next cron run after a deployment.
             return new Response(404);
@@ -294,6 +296,8 @@ final class App
             'installation' => $installation,
             'history' => $history,
             'alerts' => $alerts,
+            'usage' => $usage,
+            'usageDays' => $usageDays,
         ]);
     }
 

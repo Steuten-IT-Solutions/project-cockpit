@@ -14,7 +14,7 @@ use Cockpit\Security\Crypto;
  * Format 1 (daily, unsigned; until all installations are updated): 2000 stored rows, rows without a
  * new report for 60 days are removed.
  *
- * Format 2 (Kompanie-App-Template docs/STATUSMELDUNGEN.md): hourly heartbeats and events, signed
+ * Format 2 and 3 (Kompanie-App-Template docs/STATUSMELDUNGEN.md; 3 adds usage figures to a heartbeat): hourly heartbeats and events, signed
  * with HMAC-SHA256 (header X-Kompanie-Signature) and a secret per installation. The secret is
  * learned from the first report of an unknown installation (field "key", trust on first use) and
  * stored encrypted; later reports must carry a valid signature, and a "key" never replaces it.
@@ -64,7 +64,8 @@ final class Receiver
         } catch (\JsonException) {
             return self::json(400, ['error' => 'invalid']);
         }
-        if (is_array($payload) && ($payload['format'] ?? null) === 2) {
+        // Format 3 is format 2 with usage figures (project-cockpit#20).
+        if (is_array($payload) && in_array($payload['format'] ?? null, [2, 3], true)) {
             return $this->format2($payload, $body, $signature, $now);
         }
         $row = StatusReport::fromPayload($payload, $this->org, $now);

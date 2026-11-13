@@ -5,6 +5,8 @@
  * @var array{id: string, kompanie: string, variant: string, version: string, php: string, db_driver: string, cron_kind: string, cron_last: ?string, checks: array<string, string>, errors: array<string, int>, details: array<string, array<string, int>>, features: list<string>, update_ok: ?bool, update_at: ?string, update_to: ?string, update_check_ok: bool, gallery_ok: ?bool, gallery_at: ?string, maintenance: bool, first_seen: string, last_seen: string, last_heartbeat: ?string} $installation
  * @var list<array{type: string, received_at: string, version: string, code: ?string, detail: ?string, checks: array<string, string>, errors: array<string, int>, details: array<string, array<string, int>>}> $history
  * @var list<array{id: int, alert_key: string, detail: string, opened_at: string, resolved_at: ?string}> $alerts
+ * @var array{users: int, d1: int, d7: int, d30: int, areas: array<string, int>}|null $usage
+ * @var list<array{day: string, users: int, d1: int, d7: int, d30: int}> $usageDays
  */
 
 use Cockpit\Status\StatusView;
@@ -68,6 +70,47 @@ $levelClass = static fn (string $level): string => match ($level) {
         </li>
       <?php endforeach; ?>
     </ul>
+  <?php endif; ?>
+</section>
+
+<section class="card">
+  <h2>Nutzung</h2>
+  <?php if ($usage === null): ?>
+    <p class="muted">Keine Zahlen. Die App sendet sie ab der Version mit Statusmeldungen im Format 3.</p>
+  <?php else: ?>
+    <dl class="status">
+      <dt>Konten</dt>
+      <dd><?= $e(StatusView::figure($usage['users'])) ?></dd>
+      <dt>Aktiv</dt>
+      <dd>heute <?= $e(StatusView::figure($usage['d1'])) ?> · 7 Tage <?= $e(StatusView::figure($usage['d7'])) ?> · 30 Tage <?= $e(StatusView::figure($usage['d30'])) ?></dd>
+      <dt>Bereiche (30 Tage)</dt>
+      <dd>
+        <?php if ($usage['areas'] === []): ?>keine Nutzung<?php endif; ?>
+        <?php foreach (StatusView::areas($usage['areas']) as $area): ?>
+          <?= $e($area['label']) ?>: <?= $e($area['people']) ?><br>
+        <?php endforeach; ?>
+      </dd>
+    </dl>
+    <?php if (count($usageDays) > 1): ?>
+      <?php
+        $small = StatusView::SMALL_FIGURE;
+        $shown = static fn (int $n): int => $n > 0 && $n < $small ? $small : $n;
+        $max = max($small, ...array_map(static fn (array $d): int => $shown($d['d1']), $usageDays));
+        $step = 300 / 30;
+      ?>
+      <p class="stats">Aktiv je Tag (24 Stunden), letzte 30 Tage</p>
+      <svg class="usage-chart" viewBox="0 0 300 60" role="img" aria-label="Aktive Konten je Tag in den letzten 30 Tagen">
+        <?php foreach ($usageDays as $d): ?>
+          <?php
+            $index = 29 - (int)round((strtotime(gmdate('Y-m-d') . ' UTC') - (int)strtotime($d['day'] . ' UTC')) / 86400);
+            $height = max(1, (int)round($shown($d['d1']) / $max * 58));
+          ?>
+          <?php if ($index >= 0 && $index < 30): ?>
+            <rect x="<?= $e($index * $step + 1) ?>" y="<?= $e(60 - $height) ?>" width="<?= $e($step - 2) ?>" height="<?= $e($height) ?>"><title><?= $e(implode('.', array_reverse(explode('-', $d['day'])))) ?>: <?= $e(StatusView::figure($d['d1'])) ?></title></rect>
+          <?php endif; ?>
+        <?php endforeach; ?>
+      </svg>
+    <?php endif; ?>
   <?php endif; ?>
 </section>
 </div>
