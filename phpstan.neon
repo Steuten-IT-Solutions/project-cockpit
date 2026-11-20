@@ -6,4 +6,5 @@ parameters:
         - receiver
         - cron
         - tests
+        - bin
     tmpDir: .phpstan.cache
