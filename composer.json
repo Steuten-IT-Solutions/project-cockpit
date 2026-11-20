@@ -5,12 +5,13 @@
     "license": "proprietary",
     "require": {
         "php": "^8.3",
-        "chillerlan/php-qrcode": "^6.0",
         "ext-curl": "*",
         "ext-mbstring": "*",
         "ext-openssl": "*",
         "ext-pdo": "*",
         "ext-sodium": "*",
+        "chillerlan/php-qrcode": "^6.0",
+        "horstoeko/zugferd": "^1.0",
         "paragonie/constant_time_encoding": "^3.1"
     },
     "require-dev": {
@@ -28,7 +29,7 @@
         }
     },
     "scripts": {
-        "lint": "find src public receiver cron config templates tests -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null",
+        "lint": "find src public receiver cron config templates tests bin -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null",
         "analyse": "phpstan analyse --no-progress",
         "test": "phpunit",
         "check": [

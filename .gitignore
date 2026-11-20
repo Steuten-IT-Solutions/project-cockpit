@@ -15,3 +15,6 @@
 .DS_Store
 .idea/
 .vscode/
+
+# Generated sample invoices (bin/einvoice-samples.php)
+/build/

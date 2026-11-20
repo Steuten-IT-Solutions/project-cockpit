@@ -32,8 +32,11 @@ jobs:
   ci:
     uses: ./.github/workflows/ci.yml
 
+  einvoice:
+    uses: ./.github/workflows/einvoice.yml
+
   deploy:
-    needs: ci
+    needs: [ci, einvoice]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -50,7 +53,7 @@ jobs:
       - name: Assemble build
         run: |
           mkdir -p build/config
-          cp -R public receiver src templates migrations cron vendor build/
+          cp -R public receiver src templates migrations cron resources vendor build/
           cp .htaccess composer.json build/
           cp config/config.example.php build/config/
           echo "Deployed by project-cockpit. Marks this directory as a deployment target; see bin/deploy-sftp.sh." > build/.cockpit-deploy

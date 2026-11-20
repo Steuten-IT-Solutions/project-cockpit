@@ -281,6 +281,23 @@ How it works:
 - The reports repository also shows up as a project card once the app can see it; hide it on the dashboard if you
   like.
 
+## Invoicing (phase 4, in progress)
+
+Outgoing invoices as ZUGFeRD/Factur-X hybrid PDFs (PDF/A-3 with the EN 16931 XML embedded), built with
+`horstoeko/zugferd`. The plan, the legal basis and the open steps are in the project's planning document.
+
+- `src/Invoicing/`: `Invoice`, `InvoiceLine` and `Party` (amounts in cents, quantities in thousandths),
+  `ZugferdXml` (CII XML, profile EN 16931), `InvoicePdf` (visual PDF with FPDF, fonts embedded) and
+  `HybridInvoice` (merges both). The PDF is drawn from the same object as the XML, because the XML is the
+  leading part of a hybrid invoice.
+- Small businesses (§ 19 UStG) get VAT category `E` with the exemption note and no VAT; standard rates 19 % and
+  7 % and exempt lines are supported for later.
+- `resources/fonts/`: DejaVu Sans converted for FPDF (license in `LICENSE-DejaVu.txt`); PDF/A needs embedded fonts.
+- CI (`.github/workflows/einvoice.yml`) writes sample invoices with `bin/einvoice-samples.php` and validates them
+  with [Mustang](https://www.mustangproject.org/) (schema, EN 16931 schematron, PDF/A-3 via veraPDF). The webspace
+  has no Java, so this check runs before every deployment instead of on the server.
+- Nothing is reachable from the web yet: no routes, no database tables.
+
 ## Security model
 
 - Password (Argon2id) **and** TOTP (RFC 6238, SHA-1, 6 digits, 30 s, ±1 step); a code
