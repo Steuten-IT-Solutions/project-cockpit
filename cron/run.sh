@@ -1,5 +1,6 @@
 #!/bin/sh
-# Cron entry point for the IONOS cron manager.
+# Cron entry point, for /etc/cron.d/cockpit on the VPS (see bin/server-setup.sh)
+# and for the IONOS cron manager while the webspace is still in use.
 #
 # The manager's UnixCron command field takes a single absolute path without
 # spaces or arguments, so it cannot call "/usr/bin/php8.4 -f …" itself. This

@@ -6,8 +6,9 @@
 # the target directory is empty, contains the marker file .cockpit-deploy from an
 # earlier deployment, or contains nothing but names this project creates.
 #
-# Environment: SFTP_USER, SFTP_TARGET_DIR, LFTP_PASSWORD (read by --env-password),
-# and either SFTP_HOST or LFTP_URL (the latter lets tests use file:// URLs).
+# Environment: SFTP_USER, SFTP_TARGET_DIR, either SFTP_KEY_FILE (path of an SSH private
+# key, used on the VPS) or LFTP_PASSWORD (read by --env-password, used on the IONOS
+# webspace), and either SFTP_HOST or LFTP_URL (the latter lets tests use file:// URLs).
 set -euo pipefail
 
 : "${SFTP_TARGET_DIR:?}"
@@ -16,12 +17,21 @@ target="${SFTP_TARGET_DIR%/}"
 [ -n "$target" ] || target="/"
 
 settings="set net:max-retries 3; set net:timeout 30"
+key="${SFTP_KEY_FILE:-}"
 if [[ "$url" == sftp://* ]]; then
-  settings="set sftp:connect-program \"ssh -a -x -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts\"; $settings"
+  ssh_cmd="ssh -a -x -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+  if [ -n "$key" ]; then
+    [ -r "$key" ] || { echo "::error::SFTP_KEY_FILE $key is not readable."; exit 1; }
+    ssh_cmd="$ssh_cmd -i $key -o IdentitiesOnly=yes -o BatchMode=yes"
+  fi
+  settings="set sftp:connect-program \"$ssh_cmd\"; $settings"
 fi
 
 run_lftp() {
-  if [[ "$url" == sftp://* ]]; then
+  if [[ "$url" == sftp://* && -n "$key" ]]; then
+    # The trailing comma gives lftp an empty password, so it never prompts; ssh uses the key.
+    lftp -u "${SFTP_USER:?}," -e "$settings; $1; bye" "$url"
+  elif [[ "$url" == sftp://* ]]; then
     lftp --env-password -u "${SFTP_USER:?}" -e "$settings; $1; bye" "$url"
   else
     lftp -e "$settings; $1; bye" "$url"
