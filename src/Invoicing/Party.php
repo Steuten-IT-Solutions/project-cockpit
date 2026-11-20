@@ -15,6 +15,8 @@ final readonly class Party
      * @param string $country ISO 3166-1 alpha-2 code, e.g. "DE"
      * @param ?string $taxNumber German Steuernummer (BT-32 for the seller)
      * @param ?string $vatId USt-IdNr. (BT-31 / BT-48)
+     * @param ?string $id Party identifier without scheme (BT-29 for the seller, BT-46 for the buyer).
+     *                    EN 16931 rule BR-CO-26 needs BT-29 when the seller has no VAT id.
      */
     public function __construct(
         public string $name,
@@ -27,6 +29,7 @@ final readonly class Party
         public ?string $email = null,
         public ?string $phone = null,
         public ?string $contactName = null,
+        public ?string $id = null,
     ) {
         foreach (['name' => $name, 'street' => $street, 'postcode' => $postcode, 'city' => $city] as $field => $value) {
             if (trim($value) === '') {

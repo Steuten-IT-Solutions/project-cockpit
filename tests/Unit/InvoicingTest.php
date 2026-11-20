@@ -49,6 +49,8 @@ final class InvoicingTest extends TestCase
         self::assertSame('0.00', $xpath->evaluate('string(//ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TaxTotalAmount)'));
         self::assertSame('619.00', $xpath->evaluate('string(//ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:DuePayableAmount)'));
         self::assertSame('123/456/78901', $xpath->evaluate("string(//ram:SellerTradeParty/ram:SpecifiedTaxRegistration/ram:ID[@schemeID='FC'])"));
+        // BR-CO-26: without a VAT id the seller identifier (BT-29) must be present.
+        self::assertSame('123/456/78901', $xpath->evaluate('string(//ram:SellerTradeParty/ram:ID)'));
     }
 
     public function testUsesTheEn16931Profile(): void
@@ -100,6 +102,7 @@ final class InvoicingTest extends TestCase
             'due before issue' => fn () => new Invoice('R-1', $base->issueDate, $base->deliveryDate, new DateTimeImmutable('2020-01-01'), $base->seller, $base->buyer, $base->lines, true, $base->iban),
             'cancellation without original' => fn () => new Invoice('R-1', $base->issueDate, $base->deliveryDate, $base->dueDate, $base->seller, $base->buyer, $base->lines, true, $base->iban, type: Invoice::TYPE_CREDIT_NOTE),
             'seller without tax id' => fn () => new Invoice('R-1', $base->issueDate, $base->deliveryDate, $base->dueDate, new Party('A', 'B', '1', 'C'), $base->buyer, $base->lines, true, $base->iban),
+            'seller without VAT id or identifier' => fn () => new Invoice('R-1', $base->issueDate, $base->deliveryDate, $base->dueDate, new Party('A', 'B', '1', 'C', taxNumber: '1/2/3'), $base->buyer, $base->lines, true, $base->iban),
             'unknown unit' => fn () => new InvoiceLine('x', 1000, 'XYZ', 100),
             'zero quantity' => fn () => new InvoiceLine('x', 0, 'C62', 100),
             '16 percent' => fn () => new InvoiceLine('x', 1000, 'C62', 100, 16),

@@ -28,7 +28,7 @@ final class ZugferdXml
         }
 
         $seller = $invoice->seller;
-        $b->setDocumentSeller($seller->name);
+        $b->setDocumentSeller($seller->name, $seller->id);
         if ($seller->taxNumber !== null) {
             $b->addDocumentSellerTaxNumber($seller->taxNumber);
         }

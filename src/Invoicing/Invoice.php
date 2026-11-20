@@ -60,6 +60,9 @@ final readonly class Invoice
         if ($seller->taxNumber === null && $seller->vatId === null) {
             throw new InvalidArgumentException('The seller needs a tax number or a VAT id (§ 14 Abs. 4 Nr. 2 UStG).');
         }
+        if ($seller->vatId === null && $seller->id === null) {
+            throw new InvalidArgumentException('Without a VAT id the seller needs an identifier (EN 16931 BR-CO-26).');
+        }
         if (!self::isValidIban($iban)) {
             throw new InvalidArgumentException('The IBAN is not valid.');
         }

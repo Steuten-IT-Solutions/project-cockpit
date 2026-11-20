@@ -20,6 +20,7 @@ final class Samples
         $seller = new Party(
             'Muster IT', 'Musterstraße 1', '12345', 'Musterstadt', 'DE',
             taxNumber: '123/456/78901', email: 'rechnung@example.org', phone: '+49 123 456789', contactName: 'Max Muster',
+            id: '123/456/78901',
         );
         $buyer = new Party('Kompanie Beispiel GmbH', 'Hauptstraße 2', '54321', 'Beispielstadt', email: 'buchhaltung@example.com');
         $iban = 'DE89 3704 0044 0532 0130 00';
