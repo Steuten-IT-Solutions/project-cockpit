@@ -111,6 +111,14 @@ EOF
 */15 * * * * $USER_NAME [ -f $APP/cron/run.sh ] && /bin/sh $APP/cron/run.sh > /dev/null
 EOF
 
+    # Nightly database dump, one file per weekday (kept 7 days). Any file backup of the server
+    # (e.g. STRATO Cyber Protect) then holds a consistent copy of the database.
+    install -d -m 700 /var/backups/cockpit
+    cat > /etc/cron.d/cockpit-dump <<'EOF'
+SHELL=/bin/bash
+30 2 * * * root set -o pipefail; mariadb-dump --single-transaction --routines cockpit | gzip > /var/backups/cockpit/cockpit-$(date +\%u).sql.gz
+EOF
+
     cat <<EOF
 
 Done. Next steps (README.md, "Own server"):

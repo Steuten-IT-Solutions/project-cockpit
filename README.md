@@ -72,7 +72,9 @@ in case the document root is ever pointed at the project root by mistake.
 `bin/server-setup.sh` sets up a fresh Debian 13 server as root: Apache with the build's
 `.htaccess` files (`AllowOverride All`), PHP 8.4 FPM in a pool running as user `cockpit`,
 MariaDB, firewall (22, 80, 443), key-only SSH (only if a key is installed), automatic security
-updates, fail2ban and a cron job every 15 minutes in `/etc/cron.d/cockpit`. It is safe to run again.
+updates, fail2ban, a cron job every 15 minutes in `/etc/cron.d/cockpit` and a nightly database
+dump to `/var/backups/cockpit/` (one file per weekday), so a file backup of the server holds a
+consistent copy of the database. It is safe to run again.
 
 1. **Server:** order the VPS with the Debian 13 image, log in as root with an SSH key, copy
    `bin/server-setup.sh` to the server and run `bash server-setup.sh base`.
