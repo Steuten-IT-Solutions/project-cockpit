@@ -1,15 +1,20 @@
 name: Deploy
 
-# Uploads the application to the IONOS webspace over SFTP after CI passed on main.
+# Uploads the application over SFTP after CI passed on main: to the own VPS (key login,
+# see bin/server-setup.sh) or, until the move is finished, to the IONOS webspace (password).
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
-#   SFTP_HOST         e.g. access-xxxxxxxx.webspace-host.com (shown in the IONOS panel)
-#   SFTP_USER         a dedicated SFTP user, ideally restricted to the cockpit folder
-#   SFTP_PASSWORD     its password
+#   SFTP_HOST         VPS: its host name or IP; IONOS: access-xxxxxxxx.webspace-host.com
+#   SFTP_USER         VPS: cockpit (created by bin/server-setup.sh); IONOS: a dedicated SFTP
+#                     user, ideally restricted to the cockpit folder
+#   SFTP_PRIVATE_KEY  VPS: private half of a deploy key (ssh-keygen -t ed25519), whose public
+#                     half is in ~cockpit/.ssh/authorized_keys on the server
+#   SFTP_PASSWORD     IONOS only, instead of SFTP_PRIVATE_KEY: the SFTP user's password
 #   SFTP_KNOWN_HOSTS  the server's host key line(s), so the connection is verified;
 #                     obtain with `ssh-keyscan -p 22 <host>` and compare the fingerprint
 #                     with the one IONOS publishes before saving it
-#   SFTP_TARGET_DIR   path of the cockpit folder as the SFTP user sees it, e.g. /cockpit;
+#   SFTP_TARGET_DIR   path of the cockpit folder as the SFTP user sees it, e.g. /srv/cockpit/app
+#                     on the VPS or /cockpit on IONOS;
 #                     the subdomain's document root must be <that folder>/public, the
 #                     status subdomain's (optional) <that folder>/receiver
 #
@@ -60,12 +65,16 @@ jobs:
           SFTP_HOST: ${{ secrets.SFTP_HOST }}
           SFTP_USER: ${{ secrets.SFTP_USER }}
           SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          SFTP_PRIVATE_KEY: ${{ secrets.SFTP_PRIVATE_KEY }}
           SFTP_KNOWN_HOSTS: ${{ secrets.SFTP_KNOWN_HOSTS }}
           SFTP_TARGET_DIR: ${{ secrets.SFTP_TARGET_DIR }}
         run: |
-          for name in SFTP_HOST SFTP_USER SFTP_PASSWORD SFTP_KNOWN_HOSTS SFTP_TARGET_DIR; do
+          for name in SFTP_HOST SFTP_USER SFTP_KNOWN_HOSTS SFTP_TARGET_DIR; do
             if [ -z "${!name}" ]; then echo "::error::Secret $name is not set."; exit 1; fi
           done
+          if [ -z "$SFTP_PRIVATE_KEY" ] && [ -z "$SFTP_PASSWORD" ]; then
+            echo "::error::Set SFTP_PRIVATE_KEY (VPS) or SFTP_PASSWORD (IONOS)."; exit 1
+          fi
 
       - name: Upload over SFTP
         env:
@@ -73,11 +82,16 @@ jobs:
           SFTP_USER: ${{ secrets.SFTP_USER }}
           SFTP_KNOWN_HOSTS: ${{ secrets.SFTP_KNOWN_HOSTS }}
           SFTP_TARGET_DIR: ${{ secrets.SFTP_TARGET_DIR }}
+          SFTP_PRIVATE_KEY: ${{ secrets.SFTP_PRIVATE_KEY }}
           LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq lftp
           install -d -m 700 ~/.ssh
           printf '%s\n' "$SFTP_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+          if [ -n "$SFTP_PRIVATE_KEY" ]; then
+            (umask 077 && printf '%s\n' "$SFTP_PRIVATE_KEY" > ~/.ssh/deploy_key)
+            export SFTP_KEY_FILE="$HOME/.ssh/deploy_key"
+          fi
           # Refuses to touch a directory that is not an earlier deployment of this project.
           bin/deploy-sftp.sh
