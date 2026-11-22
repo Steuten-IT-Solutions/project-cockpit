@@ -22,6 +22,7 @@ final class Config
      * @param array{private_key_file: string, subject: string}|null $push
      * @param array{repo: string, label_prefix: string, client_id: ?string, private_key_file: ?string}|null $bugReports
      * @param array{repo: string, webhook_secret: ?string}|null $releases
+     * @param array{probe_token: ?string}|null $mcp
      */
     private function __construct(
         public readonly string $baseUrl,
@@ -38,6 +39,7 @@ final class Config
         public readonly ?array $push = null,
         public readonly ?array $bugReports = null,
         public readonly ?array $releases = null,
+        public readonly ?array $mcp = null,
     ) {
     }
 
@@ -91,7 +93,7 @@ final class Config
             throw new RuntimeException('timezone is not a valid identifier.');
         }
 
-        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw), self::vercel($raw), self::statusReports($raw), self::alerts($raw), self::push($raw), self::bugReports($raw), self::releases($raw));
+        return new self($baseUrl, $appKey, $setupToken, $database, $idle, $absolute, $timezone, self::github($raw), self::vercel($raw), self::statusReports($raw), self::alerts($raw), self::push($raw), self::bugReports($raw), self::releases($raw), self::mcp($raw));
     }
 
     /**
@@ -336,6 +338,30 @@ final class Config
         }
 
         return ['repo' => $repo, 'webhook_secret' => $secret];
+    }
+
+    /**
+     * The optional mcp section: the MCP server at /mcp. For now only a probe that checks whether the host passes the
+     * Authorization header to PHP and serves /.well-known/; probe_token is the bearer token the probe accepts.
+     *
+     * @param array<mixed> $raw
+     * @return array{probe_token: ?string}|null
+     */
+    private static function mcp(array $raw): ?array
+    {
+        $section = $raw['mcp'] ?? null;
+        if ($section === null) {
+            return null;
+        }
+        if (!is_array($section)) {
+            throw new RuntimeException('mcp must be an array.');
+        }
+        $token = isset($section['probe_token']) ? self::string($section, 'probe_token') : null;
+        if ($token !== null && (strlen($token) < 32 || !preg_match('/^[A-Za-z0-9._~-]+$/D', $token))) {
+            throw new RuntimeException('mcp.probe_token must be at least 32 characters: letters, digits and . _ ~ - only.');
+        }
+
+        return ['probe_token' => $token];
     }
 
     /**
