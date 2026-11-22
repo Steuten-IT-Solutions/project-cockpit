@@ -115,4 +115,12 @@ return [
     //     'private_key_file' => __DIR__ . '/github-app.pem',
     //     'accounts' => ['Steuten-IT-Solutions'],
     // ],
+
+    // MCP server (optional, in preparation). For now only a probe at POST /mcp and
+    // GET /.well-known/oauth-protected-resource/mcp that checks whether the host passes the
+    // Authorization header to PHP (see README, "MCP server"). probe_token: at least 32 characters,
+    // letters, digits and . _ ~ - only. Remove the section to switch /mcp off (404).
+    // 'mcp' => [
+    //     'probe_token' => 'CHANGE-ME',
+    // ],
 ];

@@ -281,6 +281,29 @@ How it works:
 - The reports repository also shows up as a project card once the app can see it; hide it on the dashboard if you
   like.
 
+## MCP server (in preparation)
+
+The cockpit will offer an MCP server at `https://cockpit.steuten-it-solutions.de/mcp` (plan: read-only tools first,
+OAuth with the cockpit's own login and TOTP). The first step is a **probe** that checks whether the host can serve it:
+whether `/.well-known/` reaches the front controller and whether the `Authorization` header reaches PHP. Under
+CGI/FastCGI Apache hides that header; `public/.htaccess` copies it into the environment.
+
+- `GET /.well-known/oauth-protected-resource/mcp` (and without `/mcp`): Protected Resource Metadata (RFC 9728).
+- `POST /mcp` without a token: `401` with `WWW-Authenticate: Bearer resource_metadata="…"`.
+- `POST /mcp` with `Authorization: Bearer <probe_token>`: `200` and the server variable the header arrived in.
+  The token is never echoed. A `401` with `"error": "unauthorized"` although a token was sent means the header
+  does not reach PHP.
+- `/mcp` needs no session and no CSRF token; without an `mcp` section in `config.php` every path answers `404`.
+
+Test after the deployment, with an `mcp` section holding a random `probe_token`:
+
+```bash
+curl -i https://cockpit.steuten-it-solutions.de/.well-known/oauth-protected-resource/mcp
+curl -i -X POST https://cockpit.steuten-it-solutions.de/mcp
+read -rs TOKEN   # paste the probe_token, so it stays out of the shell history
+curl -i -X POST -H "Authorization: Bearer $TOKEN" https://cockpit.steuten-it-solutions.de/mcp
+```
+
 ## Security model
 
 - Password (Argon2id) **and** TOTP (RFC 6238, SHA-1, 6 digits, 30 s, ±1 step); a code
