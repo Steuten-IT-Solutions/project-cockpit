@@ -76,6 +76,11 @@ updates, fail2ban, a cron job every 15 minutes in `/etc/cron.d/cockpit` and a ni
 dump to `/var/backups/cockpit/` (one file per weekday), so a file backup of the server holds a
 consistent copy of the database. It is safe to run again.
 
+Every run also installs `/usr/local/sbin/cockpit-setup`: `cockpit-setup <step> …` loads the
+current `bin/server-setup.sh` from `main` on GitHub and runs it, so it never has to be copied by
+hand (e.g. `ssh -t root@<server> "cockpit-setup archive"`). For a first run without it:
+`curl -fsSL https://raw.githubusercontent.com/Steuten-IT-Solutions/project-cockpit/main/bin/server-setup.sh -o /root/server-setup.sh && bash /root/server-setup.sh <step>`.
+
 1. **Server:** order the VPS with the Debian 13 image, log in as root with an SSH key, copy
    `bin/server-setup.sh` to the server and run `bash server-setup.sh base`.
 2. **Deploy key:** create one locally (`ssh-keygen -t ed25519 -f cockpit-deploy -N ''`), put
@@ -162,6 +167,33 @@ mailbox).
 - Enable automatic snapshots of the Storage Box in the Hetzner console, so a compromised server
   cannot delete the history.
 - Restore: `set -a; . /root/restic.env; set +a; restic restore latest --target /tmp/restore`.
+
+## Mail archive
+
+`bash server-setup.sh archive` (after `mail` and `backup`) sets up a GoBD mail archive with
+[piler](https://www.mailpiler.org). Postfix hands a copy of every message it accepts (incoming,
+outgoing, local mail of the cockpit) to piler on `127.0.0.1:2525` (`always_bcc`), before any
+mail client can delete it. Each recipient accepted by smtpd is noted in an `X-Envelope-To`
+header, so Bcc recipients are archived too; the header goes to piler only and is stripped
+before any other delivery. Mail already in the mailboxes is imported once.
+
+- piler stores each message compressed, encrypted with `/etc/piler/piler.key` and with its
+  digest, and keeps it 3653 days (10 years: vouchers 8 years from the end of the calendar year,
+  business letters 6). Deleting in the web interface is off; `pilerpurge` removes messages only
+  after their retention period. Searches, logins and views are logged (*Administration → Audit*).
+- There is no Debian 13 package: piler is built from the pinned commit `PILER_COMMIT`, Manticore
+  (piler's search index) comes from Manticore's repository at `MANTICORE_VERSION` (held), with
+  its signing key checked against `MANTICORE_KEY`. To update, change these values after reading
+  piler's upgrade notes and run `archive` again.
+- Web interface: `https://mail.steuten-it-solutions.de/`, HTTP basic auth (`archiv`) in front of
+  piler's own login. `auditor@local` searches all mail, `admin@local` administers. The step writes
+  the generated passwords to `/root/piler-access.txt` once: store them, then delete the file.
+  Enable two-factor authentication for both accounts under *Settings*. For a tax audit, create
+  another auditor account or export with `pilerexport` (EML or ZIP).
+- Backup: nightly at 04:15 into its own restic repository `cockpit-archive` on the Storage Box,
+  never thinned out: the encrypted messages, `/etc/piler` (with the key), a database dump and
+  the access log. The search index can be rebuilt from the messages. Test a restore once a year.
+- Running `mail` again keeps the archive's Postfix settings.
 
 ## GitHub App (phase 2)
 
