@@ -214,6 +214,8 @@ EOF
 </VirtualHost>
 EOF
     a2ensite -q cockpit-mail > /dev/null
+    # Rspamd pulls in javascript-common, whose Apache config serves /javascript/ on every host.
+    a2disconf -q javascript-common > /dev/null 2>&1 || true
     apache2ctl configtest
     systemctl reload apache2
     if [ ! -f "$tls/fullchain.pem" ]; then
