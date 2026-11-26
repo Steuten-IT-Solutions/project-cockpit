@@ -8,6 +8,9 @@
 #                                after outbound port 25 and reverse DNS of MAIL_HOST are verified
 #   bin/server-setup.sh mail-password <address>
 #                                set or change the password of one mailbox (asks twice)
+#   bin/server-setup.sh backup <uXXXXX@uXXXXX.your-storagebox.de>
+#                                nightly encrypted restic backup to a Hetzner Storage Box
+#                                (asks for the Storage Box password once, to install the key)
 #   bin/server-setup.sh mail-import <address>
 #                                copy the mail of the same address from the old IMAP server
 #                                (IMPORT_HOST, default imap.ionos.de; IMPORT_USER, default the
@@ -510,6 +513,101 @@ mail_password() {
     echo "server-setup: password of $address set."
 }
 
+# Nightly off-site backup with restic to a Hetzner Storage Box (SFTP on port 23). The data is
+# encrypted on this server; the repository password is generated once in
+# /root/restic-password and must also be kept outside the server (password manager), or the
+# backup cannot be restored after losing the server. Cron mails a failure to root.
+backup() {
+    local target="${1:-}"
+    [[ "$target" =~ ^(u[0-9]+)@(u[0-9]+(-sub[0-9]+)?\.your-storagebox\.de)$ ]] \
+        || die "usage: $0 backup uXXXXX@uXXXXX.your-storagebox.de"
+    local user="${BASH_REMATCH[1]}" host="${BASH_REMATCH[2]}"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get install -y -q restic
+
+    install -d -m 700 /root/.ssh
+    [ -f /root/.ssh/storagebox ] || ssh-keygen -q -t ed25519 -N '' -C "backup@$(hostname)" -f /root/.ssh/storagebox
+    cat > /root/.ssh/config.d-storagebox <<EOF
+Host storagebox
+    HostName $host
+    User $user
+    Port 23
+    IdentityFile /root/.ssh/storagebox
+    IdentitiesOnly yes
+    ServerAliveInterval 60
+EOF
+    touch /root/.ssh/config
+    if ! grep -q '^Include /root/.ssh/config.d-storagebox' /root/.ssh/config; then
+        # Include must come before any Host block, so it goes first.
+        { echo 'Include /root/.ssh/config.d-storagebox'; cat /root/.ssh/config; } > /root/.ssh/config.new
+        mv /root/.ssh/config.new /root/.ssh/config
+    fi
+    chmod 600 /root/.ssh/config /root/.ssh/config.d-storagebox
+    if ! ssh-keygen -F "[$host]:23" > /dev/null 2>&1; then
+        ssh-keyscan -p 23 -t ed25519 "$host" >> /root/.ssh/known_hosts 2> /dev/null
+    fi
+    if ! ssh -o BatchMode=yes storagebox pwd > /dev/null 2>&1; then
+        echo "server-setup: installing the backup key; enter the Storage Box password:"
+        ssh -o IdentitiesOnly=yes -o PubkeyAuthentication=no -p 23 "$user@$host" install-ssh-key \
+            < /root/.ssh/storagebox.pub
+    fi
+    ssh -o BatchMode=yes storagebox pwd > /dev/null || die "key login to the Storage Box failed"
+
+    if [ ! -f /root/restic-password ]; then
+        (umask 077 && head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 40 > /root/restic-password)
+    fi
+    cat > /root/restic.env <<'EOF'
+RESTIC_REPOSITORY=sftp:storagebox:cockpit-restic
+RESTIC_PASSWORD_FILE=/root/restic-password
+RESTIC_CACHE_DIR=/var/cache/restic
+EOF
+    chmod 600 /root/restic.env
+    set -a
+    . /root/restic.env
+    set +a
+    restic cat config > /dev/null 2>&1 || restic init
+
+    cat > /usr/local/sbin/cockpit-backup <<'EOF'
+#!/bin/bash
+# Written by server-setup.sh backup. Quiet on success; cron mails any output to root.
+set -euo pipefail
+set -a
+. /root/restic.env
+set +a
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+# Chained with &&: inside "if !" a failing command would not stop a plain list (set -e is off).
+if ! {
+    restic backup --quiet --exclude-caches --exclude /root/.cache \
+        /var/vmail /srv/cockpit/app/config /var/backups/cockpit /etc /root /var/lib/rspamd/dkim \
+    && restic forget --quiet --prune --keep-daily 7 --keep-weekly 5 --keep-monthly 12 \
+    && { [ "$(date +%u)" != 7 ] || restic check --quiet; }
+} > "$log" 2>&1; then
+    echo "Backup FAILED on $(hostname) at $(date -u +%FT%TZ):"
+    cat "$log"
+    exit 1
+fi
+EOF
+    chmod 700 /usr/local/sbin/cockpit-backup
+    # After the database dump at 02:30.
+    cat > /etc/cron.d/cockpit-backup <<'EOF'
+15 3 * * * root /usr/local/sbin/cockpit-backup
+EOF
+
+    echo "server-setup: first backup run (can take a while) ..."
+    /usr/local/sbin/cockpit-backup
+    restic snapshots --compact
+    cat <<EOF
+
+Backup is set up: every night at 03:15 to $host (restic, encrypted).
+  1. Store the repository password in your password manager (never in chat or Git):
+     cat /root/restic-password
+     Without it the backup cannot be restored.
+  2. Storage Box console: enable automatic snapshots (e.g. daily, keep 10).
+  Restore example: set -a; . /root/restic.env; set +a; restic restore latest --target /tmp/restore --include /var/vmail
+EOF
+}
+
 # Copy all folders of <address> from the old provider into the local mailbox of the same name.
 # One-way and repeatable: mail that is only here stays, mail already copied is not copied twice.
 # A full comparison (-f) on every run, because a quick check can miss new mail on both sides.
@@ -554,5 +652,6 @@ case "${1:-}" in
     mail) mailserver ;;
     mail-password) mail_password "${2:-}" ;;
     mail-import) mail_import "${2:-}" ;;
-    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>" ;;
+    backup) backup "${2:-}" ;;
+    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>" ;;
 esac

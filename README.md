@@ -148,6 +148,21 @@ forwarding too (`rechnung@` sends as `invoice@`):
 
 `/var/vmail` holds the mail; include it in the server backup.
 
+## Backup
+
+`bash server-setup.sh backup uXXXXX@uXXXXX.your-storagebox.de` sets up a nightly off-site backup
+(03:15, after the database dump) with restic to a Hetzner Storage Box over SFTP (port 23). It asks
+for the Storage Box password once to install a dedicated SSH key, creates the encrypted repository
+and runs the first backup. Saved: `/var/vmail`, `/srv/cockpit/app/config`, `/var/backups/cockpit`,
+`/etc`, `/root`, `/var/lib/rspamd/dkim`. Kept: 7 daily, 5 weekly, 12 monthly snapshots; on Sundays
+the repository is checked. A failed run prints its log, which cron mails to root (the admin
+mailbox).
+
+- Store `/root/restic-password` in a password manager. Without it nothing can be restored.
+- Enable automatic snapshots of the Storage Box in the Hetzner console, so a compromised server
+  cannot delete the history.
+- Restore: `set -a; . /root/restic.env; set +a; restic restore latest --target /tmp/restore`.
+
 ## GitHub App (phase 2)
 
 The cron job reads the repositories through a GitHub App and stores them in MariaDB;
