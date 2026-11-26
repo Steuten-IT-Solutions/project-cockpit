@@ -1,0 +1,96 @@
+// Nuxt configuration of the new cockpit. See README.md in this folder for the layout.
+export default defineNuxtConfig({
+  compatibilityDate: '2026-11-01',
+  modules: ['@nuxt/ui', '@nuxt/eslint', 'nuxt-security'],
+  css: ['~/assets/css/main.css'],
+  devtools: { enabled: false },
+  telemetry: false,
+
+  app: {
+    head: {
+      htmlAttrs: { lang: 'de' },
+      title: 'Cockpit',
+      meta: [{ name: 'robots', content: 'noindex, nofollow' }],
+    },
+  },
+
+  // Server-only settings. In production every value comes from an environment
+  // variable with the NUXT_ prefix (e.g. NUXT_APP_KEY, NUXT_DATABASE_URL); nothing
+  // secret is ever committed. See .env.example.
+  runtimeConfig: {
+    appKey: '',
+    databaseUrl: '',
+    session: {
+      idleTimeout: 2 * 60 * 60,
+      absoluteTimeout: 12 * 60 * 60,
+    },
+    // true behind HTTPS: cookies get the __Host- prefix and the Secure flag.
+    secureCookies: true,
+  },
+
+  // Close to the PHP cockpit's policy (src/Security/Headers.php), with two
+  // deliberate differences:
+  // - Scripts: Nuxt needs small inline bootstrap scripts. They are allowed by a
+  //   per-response nonce ('strict-dynamic'), never by 'unsafe-inline'.
+  // - Styles: the UI components set style attributes and add style elements at
+  //   runtime, which a nonce cannot cover. Styles therefore allow 'unsafe-inline'.
+  //   Injected CSS cannot run code; scripts stay strict.
+  security: {
+    nonce: true,
+    ssg: false,
+    sri: true,
+    headers: {
+      contentSecurityPolicy: {
+        'default-src': ["'self'"],
+        'script-src': ["'self'", "'nonce-{{nonce}}'", "'strict-dynamic'"],
+        'script-src-attr': ["'none'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'img-src': ["'self'", 'data:'],
+        'font-src': ["'self'"],
+        'connect-src': ["'self'"],
+        'frame-ancestors': ["'none'"],
+        'form-action': ["'self'"],
+        'base-uri': ["'none'"],
+        'object-src': ["'none'"],
+        'upgrade-insecure-requests': false,
+      },
+      crossOriginEmbedderPolicy: false,
+      crossOriginOpenerPolicy: 'same-origin',
+      referrerPolicy: 'no-referrer',
+      strictTransportSecurity: { maxAge: 31536000, includeSubdomains: false },
+      xContentTypeOptions: 'nosniff',
+      xFrameOptions: 'DENY',
+      permissionsPolicy: { camera: [], microphone: [], geolocation: [], payment: [] },
+    },
+    // The cockpit has its own CSRF token check (server/middleware/session.ts).
+    csrf: false,
+    rateLimiter: false,
+    // Same-origin only: no Access-Control-Allow-Origin header at all.
+    corsHandler: false,
+    requestSizeLimiter: { maxRequestSizeInBytes: 1_000_000, maxUploadFileRequestInBytes: 8_000_000 },
+  },
+
+  routeRules: {
+    '/**': { headers: { 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store' } },
+  },
+
+  build: {
+    // vue-router 5 reads the compile-time flag __VUE_OPTIONS_API__. Externalised in the
+    // server bundle, nothing replaces it and every page render fails; bundled, Nitro does.
+    transpile: ['vue-router'],
+  },
+
+  nitro: {
+    // Listen on localhost only; Apache terminates TLS and forwards (see README).
+    preset: 'node-server',
+  },
+
+  ui: {
+    // No web fonts from third parties; the system font stack is enough.
+    fonts: false,
+  },
+
+  eslint: {
+    config: { stylistic: false },
+  },
+})
