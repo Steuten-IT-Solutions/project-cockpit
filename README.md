@@ -94,9 +94,56 @@ consistent copy of the database. It is safe to run again.
 5. **Switch:** switch off the IONOS cron job, import a fresh dump, point the A/AAAA records of
    `cockpit.` and `status.` to the server, then run `bash server-setup.sh certs`. The MX records
    stay unchanged until the mail server is verified.
-6. **Mail:** alert e-mails use PHP `mail()`, which needs a local `sendmail`. The own mail server
-   (Postfix, Dovecot, Rspamd) follows in a separate step, after outbound port 25 and reverse DNS
-   have been checked on the server. Until then alerts by e-mail do not go out; push keeps working.
+6. **Mail:** alert e-mails use PHP `mail()`, which needs a local `sendmail`; see *Mail server*.
+
+## Mail server
+
+`bash server-setup.sh mail` turns the VPS into the mail server of `steuten-it-solutions.de`:
+Postfix replaces exim4, receives on port 25 and accepts mail from clients on 587 (STARTTLS) and
+465 (TLS) with login only; Dovecot keeps the mailboxes under `/var/vmail` and serves IMAP on 993
+only; Rspamd rejects obvious spam, moves likely spam to *Junk* and DKIM-signs every outgoing
+mail, including the cockpit's `mail()`. The certificate for `mail.steuten-it-solutions.de` comes
+from Let's Encrypt; a renewal hook reloads Postfix and Dovecot. Only root and `cockpit` may use
+the local `sendmail`; mail for root goes to the admin mailbox.
+
+The addresses are the `MAILBOXES` and `FORWARDS` lists at the top of the script; run `mail`
+again after changing them. Each mailbox may send as itself, each forwarding's target as the
+forwarding too (`rechnung@` sends as `invoice@`):
+
+| Address | Kind |
+|---|---|
+| `christian.steuten@` | mailbox |
+| `info@` | mailbox |
+| `rechnung@` | mailbox; the cockpit sends invoices from here |
+| `eingangsrechnung@` | mailbox for supplier invoices; the cockpit will read it over IMAP |
+| `dmarc@` | mailbox for DMARC reports |
+| `invoice@` | → `rechnung@` |
+| `belege@` | → `eingangsrechnung@` |
+| `noreply@` | → `christian.steuten@` (sender of cockpit alerts; bounces arrive there) |
+| `postmaster@`, `abuse@` | → `christian.steuten@` |
+
+1. **Preconditions:** outbound port 25 open, A/AAAA of `mail.` point to the server, reverse DNS of
+   the IPv4 (and IPv6) address is `mail.steuten-it-solutions.de`.
+2. **Install:** `bash server-setup.sh mail`. It prints the DNS records of step 4.
+3. **Passwords:** `bash server-setup.sh mail-password <address>` for every mailbox. It asks
+   twice; the password is stored as an Argon2id hash in `/etc/dovecot/passwd` and never
+   appears on the command line.
+4. **DNS** (keep the MX records unchanged for now):
+   - `TXT s2026._domainkey` = the DKIM value printed by the script,
+   - `TXT _dmarc` = `v=DMARC1; p=none; rua=mailto:dmarc@steuten-it-solutions.de`,
+   - SPF (`TXT @`): add `ip4:<IPv4> ip6:<IPv6>` of the server to the existing record, keep the
+     IONOS part until the move is finished.
+5. **Test:** set up a mail client (IMAP `mail.steuten-it-solutions.de` 993 SSL/TLS, SMTP 465
+   SSL/TLS or 587 STARTTLS, user name = full address) and send to an external mailbox (Gmail:
+   *Show original* must say SPF, DKIM and DMARC *PASS*) and to a mail tester. Check the server's
+   IP addresses on public blocklists.
+6. **Move:** copy the mails of the old IONOS mailbox, then point the MX record of the domain to
+   `mail.steuten-it-solutions.de` and copy once more. Afterwards remove the IONOS part of SPF and
+   raise DMARC to `p=quarantine` once the reports look clean.
+7. **Cockpit alerts:** in `config.php`, set `alerts.from` to `Cockpit <noreply@steuten-it-solutions.de>`
+   (an address that does not exist here gets its bounces rejected).
+
+`/var/vmail` holds the mail; include it in the server backup.
 
 ## GitHub App (phase 2)
 

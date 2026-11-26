@@ -4,10 +4,13 @@
 #   bin/server-setup.sh base     packages, firewall, users, Apache, PHP-FPM, MariaDB, cron
 #   bin/server-setup.sh certs    Let's Encrypt certificates; only after the DNS records
 #                                of both host names point to this server
+#   bin/server-setup.sh mail     mail server: Postfix, Dovecot, Rspamd (DKIM, spam filter);
+#                                after outbound port 25 and reverse DNS of MAIL_HOST are verified
+#   bin/server-setup.sh mail-password <address>
+#                                set or change the password of one mailbox (asks twice)
 #
 # The script is idempotent: running it again keeps existing data, passwords and keys.
-# The mail server (Postfix, Dovecot, Rspamd) is a separate step that follows once outbound
-# port 25 and reverse DNS have been verified; see README.md, "Own server".
+# See README.md, "Own server" and "Mail server".
 #
 # Layout:
 #   /srv/cockpit/app        deployment target (SFTP_TARGET_DIR), owned by user cockpit
@@ -15,9 +18,18 @@
 #   /srv/cockpit/app/receiver  document root of STATUS_HOST
 #   PHP-FPM pool "cockpit" runs as user cockpit, so config/config.php can stay chmod 600.
 set -euo pipefail
+umask 022
 
 COCKPIT_HOST="${COCKPIT_HOST:-cockpit.steuten-it-solutions.de}"
 STATUS_HOST="${STATUS_HOST:-status.steuten-it-solutions.de}"
+MAIL_HOST="${MAIL_HOST:-mail.steuten-it-solutions.de}"
+MAIL_DOMAIN="${MAIL_DOMAIN:-steuten-it-solutions.de}"
+# Mailboxes (local parts) and forwardings (alias:mailbox). A forwarding's target may send as
+# the alias; every mailbox sends as itself. Running "mail" again applies changes to these lists.
+MAILBOXES="christian.steuten info rechnung eingangsrechnung dmarc"
+FORWARDS="invoice:rechnung belege:eingangsrechnung noreply:christian.steuten postmaster:christian.steuten abuse:christian.steuten"
+ADMIN_MAILBOX="christian.steuten"
+DKIM_SELECTOR="${DKIM_SELECTOR:-s2026}"
 PHP="8.4"
 USER_NAME="cockpit"
 BASE="/srv/cockpit"
@@ -36,7 +48,7 @@ base() {
     apt-get install -y -q \
         apache2 "php$PHP-fpm" "php$PHP-cli" "php$PHP-curl" "php$PHP-mbstring" "php$PHP-mysql" \
         "php$PHP-xml" "php$PHP-zip" mariadb-server ufw unattended-upgrades certbot python3-certbot-apache \
-        fail2ban python3-systemd rsync
+        fail2ban python3-systemd rsync cron
 
     # Security updates install themselves (Debian's default origins: security archive).
     dpkg-reconfigure -f noninteractive unattended-upgrades
@@ -114,7 +126,8 @@ EOF
         (umask 077 && printf "dsn: mysql:host=localhost;port=3306;dbname=cockpit;charset=utf8mb4\nuser: cockpit\npassword: %s\n" "$password" > "$secret")
     fi
 
-    # Cron every 15 minutes as the deploy user.
+    # Cron every 15 minutes as the deploy user. Minimal Debian images ship without a cron daemon.
+    systemctl enable --now cron
     cat > /etc/cron.d/cockpit <<EOF
 */15 * * * * $USER_NAME [ -f $APP/cron/run.sh ] && /bin/sh $APP/cron/run.sh > /dev/null
 EOF
@@ -163,8 +176,337 @@ certs() {
         --redirect -d "$COCKPIT_HOST" -d "$STATUS_HOST"
 }
 
+# Mail server for MAIL_DOMAIN. Postfix receives (25) and accepts submissions from mail clients
+# and the cockpit (587 STARTTLS, 465 TLS, login required); Dovecot stores the mailboxes as
+# virtual users under /var/vmail and serves IMAP on 993 only; Rspamd filters spam (marked
+# mail goes to Junk) and DKIM-signs outgoing mail. Local mail (PHP mail(), cron) is signed too.
+mailserver() {
+    export DEBIAN_FRONTEND=noninteractive
+    local tls="/etc/letsencrypt/live/$MAIL_HOST"
+    local dkim_key="/var/lib/rspamd/dkim/$MAIL_DOMAIN.$DKIM_SELECTOR.key"
+
+    # Postfix replaces exim4, which the cron package pulled in.
+    debconf-set-selections <<EOF
+postfix postfix/main_mailer_type select Internet Site
+postfix postfix/mailname string $MAIL_HOST
+EOF
+    apt-get update -q
+    apt-get install -y -q postfix dovecot-imapd dovecot-lmtpd dovecot-sieve rspamd redis-server
+    local exim
+    exim="$(dpkg-query -W -f='${Package} ${db:Status-Status}\n' 'exim4*' 2> /dev/null | awk '$2 != "not-installed" {print $1}')" || true
+    if [ -n "$exim" ]; then
+        # shellcheck disable=SC2086
+        apt-get purge -y -q $exim
+    fi
+
+    # Certificate for MAIL_HOST: a plain HTTP host for the ACME challenge, then certbot.
+    install -d -m 755 /var/www/mail
+    cat > /etc/apache2/sites-available/cockpit-mail.conf <<EOF
+<VirtualHost *:80>
+    ServerName $MAIL_HOST
+    DocumentRoot /var/www/mail
+    <Directory /var/www/mail>
+        AllowOverride None
+        Require all granted
+    </Directory>
+    ErrorLog \${APACHE_LOG_DIR}/$MAIL_HOST-error.log
+    CustomLog \${APACHE_LOG_DIR}/$MAIL_HOST-access.log combined
+</VirtualHost>
+EOF
+    a2ensite -q cockpit-mail > /dev/null
+    apache2ctl configtest
+    systemctl reload apache2
+    if [ ! -f "$tls/fullchain.pem" ]; then
+        certbot certonly --apache --non-interactive --agree-tos --register-unsafely-without-email \
+            --cert-name "$MAIL_HOST" -d "$MAIL_HOST"
+    fi
+    install -d -m 755 /etc/letsencrypt/renewal-hooks/deploy
+    cat > /etc/letsencrypt/renewal-hooks/deploy/cockpit-mail.sh <<'EOF'
+#!/bin/sh
+# Postfix and Dovecot read their certificate at start; pick up a renewed one.
+systemctl reload postfix dovecot
+EOF
+    chmod 755 /etc/letsencrypt/renewal-hooks/deploy/cockpit-mail.sh
+
+    # Virtual mail user and the address lists.
+    if ! id vmail > /dev/null 2>&1; then
+        useradd --system --home-dir /var/vmail --shell /usr/sbin/nologin vmail
+    fi
+    install -d -o vmail -g vmail -m 750 /var/vmail
+    local vmail_uid
+    vmail_uid="$(id -u vmail)"
+
+    local box alias target
+    {
+        echo "# Written by server-setup.sh mail; edit MAILBOXES there."
+        for box in $MAILBOXES; do echo "$box@$MAIL_DOMAIN OK"; done
+    } > /etc/postfix/vmailbox
+    {
+        echo "# Written by server-setup.sh mail; edit FORWARDS there."
+        for alias in $FORWARDS; do echo "${alias%%:*}@$MAIL_DOMAIN ${alias#*:}@$MAIL_DOMAIN"; done
+    } > /etc/postfix/virtual
+    {
+        echo "# Written by server-setup.sh mail: which login may send as which address."
+        for box in $MAILBOXES; do echo "$box@$MAIL_DOMAIN $box@$MAIL_DOMAIN"; done
+        for alias in $FORWARDS; do echo "${alias%%:*}@$MAIL_DOMAIN ${alias#*:}@$MAIL_DOMAIN"; done
+    } > /etc/postfix/sender_login
+    {
+        echo "# Written by server-setup.sh mail: mailboxes known to Dovecot (passwords: /etc/dovecot/passwd)."
+        for box in $MAILBOXES; do echo "$box@$MAIL_DOMAIN::::::"; done
+    } > /etc/dovecot/mailboxes
+    touch /etc/dovecot/passwd
+    chown root:dovecot /etc/dovecot/passwd
+    chmod 640 /etc/dovecot/passwd
+
+    # Mail for root (cron, unattended-upgrades) goes to the admin mailbox.
+    if grep -q '^root:' /etc/aliases; then
+        sed -i "s/^root:.*/root: $ADMIN_MAILBOX@$MAIL_DOMAIN/" /etc/aliases
+    else
+        echo "root: $ADMIN_MAILBOX@$MAIL_DOMAIN" >> /etc/aliases
+    fi
+    newaliases
+
+    # Postfix.
+    postconf -e \
+        "myhostname = $MAIL_HOST" \
+        "mydomain = $MAIL_DOMAIN" \
+        'myorigin = $myhostname' \
+        'mydestination = $myhostname, localhost.$mydomain, localhost' \
+        'inet_interfaces = all' \
+        'inet_protocols = all' \
+        'smtp_address_preference = ipv4' \
+        "virtual_mailbox_domains = $MAIL_DOMAIN" \
+        'virtual_mailbox_maps = texthash:/etc/postfix/vmailbox' \
+        'virtual_alias_maps = texthash:/etc/postfix/virtual' \
+        'virtual_transport = lmtp:unix:private/dovecot-lmtp' \
+        'smtpd_sender_login_maps = texthash:/etc/postfix/sender_login' \
+        'smtpd_sasl_type = dovecot' \
+        'smtpd_sasl_path = private/auth' \
+        'smtpd_sasl_auth_enable = no' \
+        "smtpd_tls_chain_files = $tls/privkey.pem, $tls/fullchain.pem" \
+        'smtpd_tls_security_level = may' \
+        'smtpd_tls_auth_only = yes' \
+        'smtpd_tls_mandatory_protocols = >=TLSv1.2' \
+        'smtpd_tls_loglevel = 1' \
+        'smtp_tls_security_level = may' \
+        'smtp_tls_loglevel = 1' \
+        'smtpd_helo_required = yes' \
+        'disable_vrfy_command = yes' \
+        'smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination' \
+        'smtpd_recipient_restrictions = reject_non_fqdn_recipient, reject_unknown_recipient_domain' \
+        'smtpd_milters = inet:127.0.0.1:11332' \
+        'non_smtpd_milters = $smtpd_milters' \
+        'milter_default_action = tempfail' \
+        'milter_protocol = 6' \
+        'message_size_limit = 52428800' \
+        'authorized_submit_users = root, cockpit'
+    postconf -X smtpd_tls_cert_file smtpd_tls_key_file
+    local port
+    for port in submission submissions; do
+        postconf -M "$port/inet=$port inet n - y - - smtpd"
+        postconf -P \
+            "$port/inet/syslog_name=postfix/$port" \
+            "$port/inet/smtpd_sasl_auth_enable=yes" \
+            "$port/inet/smtpd_client_restrictions=permit_sasl_authenticated,reject" \
+            "$port/inet/smtpd_sender_restrictions=reject_sender_login_mismatch" \
+            "$port/inet/smtpd_relay_restrictions=permit_sasl_authenticated,reject" \
+            "$port/inet/milter_macro_daemon_name=ORIGINATING"
+    done
+    postconf -P 'submission/inet/smtpd_tls_security_level=encrypt' 'submissions/inet/smtpd_tls_wrappermode=yes'
+    postfix check
+
+    # Dovecot. Debian's 10-auth.conf enables system users (PAM): divert it so that only the
+    # virtual mailboxes can log in; package updates then go to 10-auth.conf.dist.
+    if ! dpkg-divert --list /etc/dovecot/conf.d/10-auth.conf | grep -q .; then
+        dpkg-divert --local --rename --divert /etc/dovecot/conf.d/10-auth.conf.dist \
+            --add /etc/dovecot/conf.d/10-auth.conf
+    fi
+    echo "# Authentication is configured in /etc/dovecot/local.conf (server-setup.sh mail)." \
+        > /etc/dovecot/conf.d/10-auth.conf
+    cat > /etc/dovecot/local.conf <<EOF
+# Written by server-setup.sh mail; running it again overwrites this file.
+hostname = $MAIL_HOST
+mail_driver = maildir
+mail_home = /var/vmail/%{user | domain}/%{user | username}
+mail_path = ~/Maildir
+mail_inbox_path = .
+mail_uid = vmail
+mail_gid = vmail
+mail_privileged_group =
+first_valid_uid = $vmail_uid
+last_valid_uid = $vmail_uid
+
+namespace inbox {
+  mailbox Drafts {
+    auto = subscribe
+  }
+  mailbox Junk {
+    auto = subscribe
+  }
+  mailbox Trash {
+    auto = subscribe
+  }
+  mailbox Sent {
+    auto = subscribe
+  }
+}
+
+ssl = required
+ssl_server_cert_file = $tls/fullchain.pem
+ssl_server_key_file = $tls/privkey.pem
+ssl_min_protocol = TLSv1.2
+
+auth_mechanisms = plain login
+passdb passwd-file {
+  passwd_file_path = /etc/dovecot/passwd
+  use_worker = yes
+}
+userdb passwd-file {
+  passwd_file_path = /etc/dovecot/mailboxes
+  fields {
+    uid:default = vmail
+    gid:default = vmail
+    home:default = /var/vmail/%{user | domain}/%{user | username}
+  }
+}
+
+# IMAP only with TLS (993); 143 stays closed.
+service imap-login {
+  inet_listener imap {
+    port = 0
+  }
+}
+service auth {
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0660
+    user = postfix
+    group = postfix
+  }
+}
+service lmtp {
+  unix_listener /var/spool/postfix/private/dovecot-lmtp {
+    mode = 0600
+    user = postfix
+    group = postfix
+  }
+}
+protocol lmtp {
+  auth_username_format = %{user | lower}
+  mail_plugins {
+    sieve = yes
+  }
+}
+
+# Mail that Rspamd marks as spam goes to Junk.
+sieve_script spam-to-junk {
+  type = before
+  driver = file
+  path = /etc/dovecot/sieve/spam-to-junk.sieve
+}
+EOF
+    install -d -m 755 /etc/dovecot/sieve
+    cat > /etc/dovecot/sieve/spam-to-junk.sieve <<'EOF'
+require ["fileinto"];
+if header :is "X-Spam" "Yes" {
+  fileinto "Junk";
+  stop;
+}
+EOF
+    sievec /etc/dovecot/sieve/spam-to-junk.sieve
+    doveconf -n > /dev/null
+
+    # Rspamd: Redis for its statistics, DKIM signing with a key generated once.
+    cat > /etc/rspamd/local.d/redis.conf <<'EOF'
+servers = "127.0.0.1";
+EOF
+    cat > /etc/rspamd/local.d/dkim_signing.conf <<EOF
+selector = "$DKIM_SELECTOR";
+path = "/var/lib/rspamd/dkim/\$domain.\$selector.key";
+EOF
+    cat > /etc/rspamd/local.d/milter_headers.conf <<'EOF'
+use = ["authentication-results"];
+EOF
+    install -d -o _rspamd -g _rspamd -m 750 /var/lib/rspamd/dkim
+    if [ ! -f "$dkim_key" ]; then
+        rspamadm dkim_keygen -s "$DKIM_SELECTOR" -d "$MAIL_DOMAIN" -b 2048 -k "$dkim_key" \
+            > "/var/lib/rspamd/dkim/$MAIL_DOMAIN.$DKIM_SELECTOR.txt"
+        chown _rspamd:_rspamd "$dkim_key" "/var/lib/rspamd/dkim/$MAIL_DOMAIN.$DKIM_SELECTOR.txt"
+        chmod 600 "$dkim_key"
+    fi
+    rspamadm configtest > /dev/null
+
+    # Firewall and fail2ban for the mail ports.
+    ufw allow 25/tcp
+    ufw allow 465/tcp
+    ufw allow 587/tcp
+    ufw allow 993/tcp
+    cat > /etc/fail2ban/jail.d/cockpit-mail.local <<'EOF'
+[postfix]
+enabled = true
+backend = systemd
+
+[postfix-sasl]
+enabled = true
+backend = systemd
+
+[dovecot]
+enabled = true
+backend = systemd
+EOF
+
+    systemctl enable --now redis-server rspamd postfix dovecot
+    systemctl restart redis-server rspamd dovecot postfix
+    systemctl restart fail2ban
+
+    local dkim
+    dkim="$(grep -o '"[^"]*"' "/var/lib/rspamd/dkim/$MAIL_DOMAIN.$DKIM_SELECTOR.txt" | tr -d '"\n')"
+    local without
+    without=""
+    for box in $MAILBOXES; do
+        grep -q "^$box@$MAIL_DOMAIN:" /etc/dovecot/passwd || without="$without $box@$MAIL_DOMAIN"
+    done
+    cat <<EOF
+
+Mail server is running. Next steps (README.md, "Mail server"):
+  1. Passwords for the mailboxes still without one:${without:- none}
+     bash server-setup.sh mail-password <address>
+  2. DNS records for $MAIL_DOMAIN (keep the MX records unchanged until the tests pass):
+     TXT  $DKIM_SELECTOR._domainkey   $dkim
+     TXT  _dmarc            v=DMARC1; p=none; rua=mailto:dmarc@$MAIL_DOMAIN
+     SPF (TXT @): add  ip4:$(ip_of 4) ip6:$(ip_of 6)  to the existing record
+  3. Test sending and receiving, then point the MX record to $MAIL_HOST.
+EOF
+}
+
+# First global address of this server (ip_of 4|6).
+ip_of() {
+    ip "-$1" -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n 1
+}
+
+# Set or change the password of one mailbox. doveadm asks for it twice; it never appears
+# on the command line or in the shell history.
+mail_password() {
+    local address="${1:-}" box found=""
+    for box in $MAILBOXES; do
+        [ "$address" = "$box@$MAIL_DOMAIN" ] && found=1
+    done
+    [ -n "$found" ] || die "unknown mailbox '$address'; mailboxes: $(for box in $MAILBOXES; do printf '%s@%s ' "$box" "$MAIL_DOMAIN"; done)"
+    [ -f /etc/dovecot/passwd ] || die "run '$0 mail' first"
+    local hash
+    hash="$(doveadm pw -s ARGON2ID)"
+    local tmp
+    tmp="$(mktemp /etc/dovecot/passwd.XXXXXX)"
+    { grep -v "^$address:" /etc/dovecot/passwd || true; echo "$address:$hash"; } > "$tmp"
+    chown root:dovecot "$tmp"
+    chmod 640 "$tmp"
+    mv "$tmp" /etc/dovecot/passwd
+    echo "server-setup: password of $address set."
+}
+
 case "${1:-}" in
     base) base ;;
     certs) certs ;;
-    *) die "usage: $0 base|certs" ;;
+    mail) mailserver ;;
+    mail-password) mail_password "${2:-}" ;;
+    *) die "usage: $0 base|certs|mail|mail-password <address>" ;;
 esac
