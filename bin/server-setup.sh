@@ -11,7 +11,8 @@
 #   bin/server-setup.sh mail-import <address>
 #                                copy the mail of the same address from the old IMAP server
 #                                (IMPORT_HOST, default imap.ionos.de; IMPORT_USER, default the
-#                                same address); asks for its password
+#                                same address; IMPORT_SEPARATOR, its folder separator, default /);
+#                                asks for its password
 #
 # The script is idempotent: running it again keeps existing data, passwords and keys.
 # See README.md, "Own server" and "Mail server".
@@ -536,6 +537,11 @@ imapc_port = 993
 imapc_ssl = imaps
 imapc_user = $user
 imapc_password = <$dir/password
+# dsync needs the same folder separator on both sides; IONOS uses "/", this server ".".
+# Only the name in IMAP differs: the Maildir++ folders on disk are the same either way.
+namespace inbox {
+  separator = ${IMPORT_SEPARATOR:-/}
+}
 EOF
     doveadm -c "$dir/import.conf" sync -1 -f -R -u "$address" imapc:
     echo "server-setup: copied. Folders of $address now:"
