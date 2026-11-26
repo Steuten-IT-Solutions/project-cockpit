@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { desc, eq, lt, max } from 'drizzle-orm'
 import type { Pool } from 'mysql2/promise'
 import { money } from '#shared/lib/costs'
+import { today } from '#shared/lib/erp'
 import type { CockpitConfig } from '../config'
 import { cronRuns } from '../../database/schema'
 import type { Database } from '../db'
@@ -20,6 +21,8 @@ import { ReleaseRepository } from '../repositories/releases'
 import { AlertRepository, InstallationRepository, StatusRepository } from '../repositories/status'
 import { VercelRepository } from '../repositories/vercel'
 import { evaluateAlerts, KEEP_DAYS as ALERT_KEEP_DAYS } from '../status/alerts'
+import { InvoiceRepository } from '../erp/invoices'
+import { SubscriptionRepository } from '../erp/subscriptions'
 import { Notifier, sendmail } from '../status/notifier'
 import { cut } from '../text'
 import { utc, utcSeconds } from '../time'
@@ -179,6 +182,15 @@ async function execute(ctx: JobContext, trigger: string | null): Promise<JobResu
     catch (e) {
       fail(`Fehlermeldungen: ${(e as Error).message}`)
     }
+  }
+
+  // Recurring invoices that are due become drafts; finalizing and sending stay manual.
+  try {
+    const created = await new SubscriptionRepository(pool).runDue(new InvoiceRepository(pool), today(config.timezone), utc())
+    if (created > 0) messages.push(`Wiederkehrende Rechnungen: ${created} ${created === 1 ? 'Entwurf' : 'Entwürfe'} angelegt`)
+  }
+  catch (e) {
+    fail(`Wiederkehrende Rechnungen: ${(e as Error).message}`)
   }
 
   const message = messages.length === 0 ? null : cut(messages.join(' · '), 255)

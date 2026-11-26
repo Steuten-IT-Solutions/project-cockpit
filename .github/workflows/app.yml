@@ -47,6 +47,15 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      # The ERP's integration tests call the PHP e-invoice engine (bin/invoice.php), as the server does.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl, mbstring, openssl, pdo, pdo_mysql, sodium, dom, fileinfo, zip, gd
+          coverage: none
+      - name: PHP dependencies
+        working-directory: .
+        run: composer install --no-dev --no-interaction --no-progress --prefer-dist
       - name: Integration tests
         env:
           # The tests drop and recreate this database.

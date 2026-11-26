@@ -41,6 +41,9 @@ export default defineNuxtConfig({
     bugReports: { repo: '', labelPrefix: '', clientId: '', privateKeyFile: '' },
     releases: { repo: '', webhookSecret: '' },
     mail: { sendmail: '' },
+    // The ERP's e-invoice engine: PHP binary and the folder with bin/invoice.php and vendor/.
+    // Empty: 'php' from PATH and the folder above the app (on the server <app>/node/..).
+    erp: { phpBinary: '', phpDir: '' },
     // Folder with the SQL migrations, shared with the PHP cockpit. Empty: ../migrations.
     migrationsDir: '',
     // false: the 15-minute background jobs do nothing (tests, the rehearsal on a copy of

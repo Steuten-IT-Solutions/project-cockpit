@@ -20,12 +20,13 @@ final class HybridInvoice
 
     /**
      * @param bool $deterministic fixed dates and ids in the PDF, for tests and samples
+     * @param array{logo?: array{data: string, type: string}, title?: string, meta?: array<string, string>, closing?: string, watermark?: string} $options see InvoicePdf::render()
      * @return array{pdf: string, xml: string}
      */
-    public static function create(Invoice $invoice, bool $deterministic = false): array
+    public static function create(Invoice $invoice, bool $deterministic = false, array $options = []): array
     {
         $builder = ZugferdXml::builder($invoice);
-        $visual = InvoicePdf::render($invoice, self::fontDir());
+        $visual = InvoicePdf::render($invoice, self::fontDir(), $options);
 
         $pdf = ZugferdDocumentPdfBuilder::fromPdfString($builder, $visual);
         $pdf->setDeterministicModeEnabled($deterministic);

@@ -113,6 +113,33 @@ Known, accepted differences from the PHP cockpit:
 - The MCP probe (`/mcp`, `/.well-known/oauth-protected-resource`) is not carried over: it only
   tested the old webspace. The MCP server itself will be built in this app.
 
+## ERP
+
+Sales and invoicing without bookkeeping, under `/erp` (pages in `app/pages/erp`, API in
+`server/api/erp`, logic in `server/lib/erp`, rules shared with the pages in
+`shared/lib/erp.ts`). Tables: migrations `0013` to `0018`.
+
+| Module | What it does |
+| --- | --- |
+| Invoices | Drafts with positions from the catalog; finalizing assigns the next number (R-2026-0001), freezes seller and buyer, renders the ZUGFeRD PDF and the XML once and stores both. Corrections only by cancellation (Stornorechnung, type 381). Sent by e-mail as rechnung@ through Postfix (archived by always_bcc). |
+| Payments and dunning | Payments (also partial) per invoice; open and overdue invoices; Zahlungserinnerung, 1. and 2. Mahnung by e-mail with a new deadline of 10 days. |
+| Incoming invoices | Upload of ZUGFeRD PDFs and XRechnung/CII XML (read automatically), other PDFs and photos (typed in). The file is kept unchanged; duplicates are refused; an IBAN that differs from the supplier's earlier invoices is flagged. |
+| Recurring invoices | On each date the background jobs write a draft for the period (Leistungszeitraum on the invoice); finalizing stays manual. |
+| Quotes and orders | Angebote (A-) and Auftragsbestätigungen (AB-) as PDF; quote → order → invoice draft. |
+| Time and services | Hours or flat services per customer, project and order; selected entries become one invoice draft. |
+| Export and evaluation | ZIP of a period with every document and file as stored plus CSV lists; yearly sums (by invoice date and by payment date, as the EÜR counts) and the § 19 UStG limits. |
+
+**The e-invoice stays in PHP.** `server/lib/erp/engine.ts` runs `php bin/invoice.php render|read`
+with JSON on stdin and stdout; horstoeko/zugferd builds and reads the XML, CI validates samples
+with Mustang (`.github/workflows/einvoice.yml`). The deploy therefore ships `bin/invoice.php`,
+`src/`, `vendor/` and `resources/fonts` next to `node/`; `NUXT_ERP_PHP_BINARY` and
+`NUXT_ERP_PHP_DIR` override `php` and the folder above the app.
+
+**What is issued cannot change** (§ 146 Abs. 4 AO, GoBD): triggers refuse any update or delete
+of finalized invoices, their lines and files, received files and issued quotes. Each
+finalized invoice carries `hash = SHA-256(prev_hash | number | sha256(xml) | sha256(pdf))` in the
+order of `chain_no`; `GET /api/erp/invoices/verify` and every export recompute the chain.
+
 ## Deployment
 
 A merge to `main` runs `.github/workflows/deploy.yml`: CI of both cockpits, then the PHP files as
