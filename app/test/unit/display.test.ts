@@ -122,3 +122,27 @@ describe('labels', () => {
     expect(summary.stable).toEqual({ running: [], last: null, failed: null })
   })
 })
+
+describe('costs page and installation chart', async () => {
+  const { chargeSummary, moneyList } = await import('../../shared/lib/costs')
+  const { usageBars } = await import('../../shared/lib/status')
+
+  it('sums Vercel charges', () => {
+    const s = chargeSummary([
+      { service: 'Functions', category: 'Usage', project: 'a', billedCost: 1.5, effectiveCost: 1.5, currency: 'USD' },
+      { service: 'Pro', category: 'Purchase', project: null, billedCost: 20, effectiveCost: 20, currency: 'USD' },
+      { service: 'Functions', category: 'Usage', project: 'b', billedCost: 0.001, effectiveCost: 0, currency: 'USD' },
+    ])
+    expect(moneyList(s.total)).toBe('21,50 US$')
+    expect(s.byCategory.map(([k]) => k)).toEqual(['Purchase', 'Usage'])
+    expect(s.byProject.map(([k]) => k)).toEqual(['a'])
+  })
+
+  it('draws one bar per day, small figures as 5', () => {
+    const bars = usageBars([{ day: '2026-11-25', d1: 2 }, { day: '2026-11-26', d1: 10 }, { day: '2026-10-01', d1: 3 }], '2026-11-26')
+    expect(bars).toEqual([
+      { x: 281, y: 31, width: 8, height: 29, title: '25.11.2026: < 5' },
+      { x: 291, y: 2, width: 8, height: 58, title: '26.11.2026: 10' },
+    ])
+  })
+})

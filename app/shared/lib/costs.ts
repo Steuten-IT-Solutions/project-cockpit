@@ -98,3 +98,46 @@ export function costTotals(costs: Pick<CostInput, 'amountCents' | 'currency' | '
 export function money(cents: number, currency: string): string {
   return `${decimal(cents / 100)}\u00A0${CURRENCIES[currency] ?? currency}`
 }
+
+export interface Charge {
+  service: string
+  category: string
+  project: string | null
+  billedCost: number
+  effectiveCost: number
+  currency: string
+}
+
+/** Amounts per currency in currency units, e.g. { EUR: 12.5 }. */
+export type ByCurrency = Record<string, number>
+
+export const CHARGE_CATEGORIES: Record<string, string> = {
+  Usage: 'Nutzung', Purchase: 'Käufe', Credit: 'Gutschriften', Tax: 'Steuern', Adjustment: 'Korrekturen', Other: 'Sonstiges',
+}
+
+function sumBy(charges: Charge[], key: (c: Charge) => string): [string, ByCurrency][] {
+  const out = new Map<string, ByCurrency>()
+  for (const c of charges) {
+    const entry = out.get(key(c)) ?? {}
+    entry[c.currency] = (entry[c.currency] ?? 0) + c.billedCost
+    out.set(key(c), entry)
+  }
+  const total = (v: ByCurrency) => Object.values(v).reduce((a, b) => a + b, 0)
+  return [...out.entries()].sort(([, a], [, b]) => total(b) - total(a))
+}
+
+/** The Vercel charges summed like templates/costs.php: in total, per category, per service, per project. */
+export function chargeSummary(charges: Charge[]) {
+  const visible = ([, v]: [string, ByCurrency]) => Math.abs(Object.values(v).reduce((a, b) => a + b, 0)) >= 0.005
+  return {
+    total: sumBy(charges, () => 'all')[0]?.[1] ?? {},
+    byCategory: sumBy(charges, c => c.category),
+    byService: sumBy(charges, c => c.service).filter(visible),
+    byProject: sumBy(charges.filter(c => c.project !== null), c => c.project!).filter(visible),
+  }
+}
+
+/** "12,50 €, 3,00 US$" for amounts in currency units. */
+export function moneyList(byCurrency: ByCurrency): string {
+  return Object.entries(byCurrency).map(([currency, value]) => money(value * 100, currency)).join(', ')
+}

@@ -10,7 +10,9 @@ export default defineNuxtConfig({
     head: {
       htmlAttrs: { lang: 'de' },
       title: 'Cockpit',
-      meta: [{ name: 'robots', content: 'noindex, nofollow' }],
+      meta: [{ name: 'robots', content: 'noindex, nofollow' }, { name: 'color-scheme', content: 'light dark' }],
+      // Installable on the phone's home screen (needed for push on iPhones).
+      link: [{ rel: 'manifest', href: '/manifest.webmanifest' }],
     },
   },
 

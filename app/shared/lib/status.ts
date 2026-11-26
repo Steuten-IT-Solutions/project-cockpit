@@ -150,3 +150,21 @@ export function variantLabel(variant: string): string {
 function compareStrings(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
+
+/**
+ * Bars of the 30-day activity chart (viewBox 300×60), like templates/installation.php:
+ * one bar per day, small figures drawn as SMALL_FIGURE so they cannot be told apart.
+ * `today` is the current UTC day 'YYYY-MM-DD'.
+ */
+export function usageBars(days: { day: string, d1: number }[], today: string) {
+  const shown = (n: number) => (n > 0 && n < SMALL_FIGURE ? SMALL_FIGURE : n)
+  const max = Math.max(SMALL_FIGURE, ...days.map(d => shown(d.d1)))
+  const step = 300 / 30
+  const dayMs = (d: string) => Date.parse(`${d}T00:00:00Z`)
+  return days.flatMap((d) => {
+    const index = 29 - Math.round((dayMs(today) - dayMs(d.day)) / 86_400_000)
+    if (index < 0 || index >= 30) return []
+    const height = Math.max(1, Math.round(shown(d.d1) / max * 58))
+    return [{ x: index * step + 1, y: 60 - height, width: step - 2, height, title: `${d.day.split('-').reverse().join('.')}: ${figure(d.d1)}` }]
+  })
+}

@@ -12,10 +12,15 @@ export async function refreshCockpitSession(): Promise<CockpitSession> {
   return state.value
 }
 
+/** A request that changes something (POST, PUT, DELETE), with the CSRF token. */
+export function cockpitSend<T>(method: 'POST' | 'PUT' | 'DELETE', url: string, body?: Record<string, unknown>): Promise<T> {
+  const csrf = useCockpitSession().value?.csrf ?? ''
+  return $fetch<T>(url, { method, body, headers: { 'X-CSRF-Token': csrf } })
+}
+
 /** POST to the cockpit's API with the CSRF token. */
 export function cockpitPost<T>(url: string, body: Record<string, unknown> = {}): Promise<T> {
-  const csrf = useCockpitSession().value?.csrf ?? ''
-  return $fetch<T>(url, { method: 'POST', body, headers: { 'X-CSRF-Token': csrf } })
+  return cockpitSend<T>('POST', url, body)
 }
 
 /** The German message of a failed request, as the server phrased it. */
