@@ -1,39 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { codeAt } from '../../server/lib/totp'
+import { Client } from './client'
 import { BASE, USER, resetDatabase, startServer, stopServer } from './setup'
-
-/** A tiny browser: keeps the session cookie and the CSRF token. */
-class Client {
-  cookie = ''
-  csrf = ''
-
-  async request(path: string, init: RequestInit = {}): Promise<Response> {
-    const headers = new Headers(init.headers)
-    if (this.cookie !== '') {
-      headers.set('cookie', this.cookie)
-    }
-    if (init.method === 'POST') {
-      headers.set('content-type', 'application/json')
-      headers.set('x-csrf-token', this.csrf)
-    }
-    const response = await fetch(`${BASE}${path}`, { ...init, headers, redirect: 'manual' })
-    const set = response.headers.getSetCookie().find(c => c.startsWith('cockpit_session_dev='))
-    if (set !== undefined) {
-      this.cookie = set.split(';')[0]!
-    }
-    return response
-  }
-
-  async session() {
-    const state = await (await this.request('/api/session')).json() as { user: { username: string } | null, pending: boolean, csrf: string, flash: string | null }
-    this.csrf = state.csrf
-    return state
-  }
-
-  post(path: string, body: unknown): Promise<Response> {
-    return this.request(path, { method: 'POST', body: JSON.stringify(body) })
-  }
-}
 
 const totpNow = () => codeAt(USER.totp, Math.floor(Date.now() / 30000))
 

@@ -1,13 +1,25 @@
 import type { H3Event } from 'h3'
 import { AuthLog, Throttle, UserRepository } from '../lib/auth'
+import { type CockpitConfig, parseConfig, type RawConfig } from '../lib/config'
 import { Crypto, deriveAppKey } from '../lib/crypto'
-import { database } from '../lib/db'
+import { database, databasePool } from '../lib/db'
 import { Session } from '../lib/session'
 
 // Shared services for the server routes. Files in server/utils are auto-imported
 // by Nuxt, so routes call useCockpit(event) without an import.
 
 let crypto: { appKey: string, instance: Crypto } | undefined
+let settings: { raw: string, config: CockpitConfig } | undefined
+
+/** The validated settings; an invalid value stops every request with a clear log line. */
+export function cockpitConfig(event?: H3Event): CockpitConfig {
+  const runtime = useRuntimeConfig(event)
+  const raw = JSON.stringify(runtime)
+  if (settings?.raw !== raw) {
+    settings = { raw, config: parseConfig(runtime as unknown as RawConfig) }
+  }
+  return settings.config
+}
 
 export function useCockpit(event: H3Event) {
   const config = useRuntimeConfig(event)
@@ -20,6 +32,8 @@ export function useCockpit(event: H3Event) {
   const db = database(config.databaseUrl)
   return {
     db,
+    pool: databasePool(config.databaseUrl),
+    config: cockpitConfig(event),
     crypto: crypto.instance,
     users: new UserRepository(db),
     throttle: new Throttle(db, crypto.instance),
@@ -38,6 +52,16 @@ export function requireSession(event: H3Event): Session {
     throw createError({ statusCode: 500, statusMessage: 'Session not loaded' })
   }
   return session
+}
+
+/** The logged-in user; answers 401 otherwise. Every API route except login calls it. */
+export async function requireUser(event: H3Event) {
+  const session = requireSession(event)
+  const user = session.userId === null ? null : await useCockpit(event).users.findById(session.userId)
+  if (user === null) {
+    throw createError({ statusCode: 401, statusMessage: 'Bitte melde dich an.' })
+  }
+  return user
 }
 
 /** Writes changes of the session and (re)sends its cookie. Call before answering. */

@@ -7,7 +7,9 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 export default defineEventHandler(async (event) => {
   const path = event.path
-  if (path.startsWith('/_nuxt/') || path.startsWith('/__nuxt') || path === '/favicon.ico') {
+  // Static build files need no session. /__nuxt_error does: Nuxt renders the error page
+  // through it with the visitor's cookies, and the page must still know who is logged in.
+  if (path.startsWith('/_nuxt/') || path === '/favicon.ico') {
     return
   }
 

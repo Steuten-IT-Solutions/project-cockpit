@@ -26,6 +26,21 @@ export default defineNuxtConfig({
     },
     // true behind HTTPS: cookies get the __Host- prefix and the Secure flag.
     secureCookies: true,
+    // The sections of the PHP cockpit's config.php. Validated by server/lib/config.ts;
+    // a section is off while its first value is empty.
+    baseUrl: '',
+    timezone: 'Europe/Berlin',
+    setupToken: '',
+    github: { clientId: '', privateKeyFile: '', accounts: '', apiBase: '' },
+    vercel: { token: '', teamId: '', apiBase: '', billing: '' },
+    statusReports: { org: '' },
+    alerts: { email: '', from: '' },
+    push: { privateKeyFile: '', subject: '' },
+    bugReports: { repo: '', labelPrefix: '', clientId: '', privateKeyFile: '' },
+    releases: { repo: '', webhookSecret: '' },
+    mail: { sendmail: '' },
+    // Folder with the SQL migrations, shared with the PHP cockpit.
+    migrationsDir: '',
   },
 
   // Close to the PHP cockpit's policy (src/Security/Headers.php), with two

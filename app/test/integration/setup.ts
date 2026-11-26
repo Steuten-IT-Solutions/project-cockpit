@@ -13,7 +13,7 @@ export const USER = { username: 'christian', password: 'correct horse battery st
 export const PORT = 3999
 export const BASE = `http://127.0.0.1:${PORT}`
 
-const databaseUrl = process.env.TEST_DATABASE_URL ?? 'mysql://cockpit:cockpit@127.0.0.1:3306/cockpit_test'
+export const databaseUrl = process.env.TEST_DATABASE_URL ?? 'mysql://cockpit:cockpit@127.0.0.1:3306/cockpit_test'
 
 export async function resetDatabase(): Promise<void> {
   const url = new URL(databaseUrl)
@@ -59,4 +59,16 @@ export async function startServer(): Promise<void> {
 
 export function stopServer(): void {
   server?.kill()
+}
+
+/** Runs SQL against the test database, e.g. to add rows the sync would write. */
+export async function sql(statement: string, params: unknown[] = []): Promise<unknown> {
+  const db = await mysql.createConnection({ uri: databaseUrl })
+  try {
+    const [rows] = await db.query(statement, params)
+    return rows
+  }
+  finally {
+    await db.end()
+  }
 }
