@@ -8,6 +8,10 @@
 #                                after outbound port 25 and reverse DNS of MAIL_HOST are verified
 #   bin/server-setup.sh mail-password <address>
 #                                set or change the password of one mailbox (asks twice)
+#   bin/server-setup.sh mail-import <address>
+#                                copy the mail of the same address from the old IMAP server
+#                                (IMPORT_HOST, default imap.ionos.de; IMPORT_USER, default the
+#                                same address); asks for its password
 #
 # The script is idempotent: running it again keeps existing data, passwords and keys.
 # See README.md, "Own server" and "Mail server".
@@ -505,10 +509,44 @@ mail_password() {
     echo "server-setup: password of $address set."
 }
 
+# Copy all folders of <address> from the old provider into the local mailbox of the same name.
+# One-way and repeatable: mail that is only here stays, mail already copied is not copied twice.
+# A full comparison (-f) on every run, because a quick check can miss new mail on both sides.
+# The password goes into a root-only file read by the config parser, never onto a command line.
+mail_import() {
+    local address="${1:-}" box found=""
+    for box in $MAILBOXES; do
+        [ "$address" = "$box@$MAIL_DOMAIN" ] && found=1
+    done
+    [ -n "$found" ] || die "unknown mailbox '$address'"
+    local host="${IMPORT_HOST:-imap.ionos.de}" user="${IMPORT_USER:-$address}" password dir
+    read -r -s -p "Password of $user at $host: " password
+    echo
+    [ -n "$password" ] || die "no password given"
+    dir="$(mktemp -d)"
+    # shellcheck disable=SC2064
+    trap "rm -rf '$dir'" EXIT
+    printf '%s' "$password" > "$dir/password"
+    cat > "$dir/import.conf" <<EOF
+dovecot_config_version = 2.4.0
+dovecot_storage_version = 2.4.0
+!include /etc/dovecot/dovecot.conf
+imapc_host = $host
+imapc_port = 993
+imapc_ssl = imaps
+imapc_user = $user
+imapc_password = <$dir/password
+EOF
+    doveadm -c "$dir/import.conf" sync -1 -f -R -u "$address" imapc:
+    echo "server-setup: copied. Folders of $address now:"
+    doveadm mailbox status -u "$address" messages '*'
+}
+
 case "${1:-}" in
     base) base ;;
     certs) certs ;;
     mail) mailserver ;;
     mail-password) mail_password "${2:-}" ;;
-    *) die "usage: $0 base|certs|mail|mail-password <address>" ;;
+    mail-import) mail_import "${2:-}" ;;
+    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>" ;;
 esac
