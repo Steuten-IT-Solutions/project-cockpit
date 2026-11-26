@@ -16,7 +16,12 @@ final class InvoicePdf
     private const LEFT = 20.0;
     private const WIDTH = 170.0;
 
-    public static function render(Invoice $invoice, string $fontDir): string
+    /**
+     * @param array{logo?: array{data: string, type: string}, title?: string, meta?: array<string, string>, closing?: string, watermark?: string} $options
+     *        logo: PNG or JPEG bytes printed top left; title, meta and closing replace the invoice's heading,
+     *        date block and payment text (used for quotes and order confirmations); watermark: e.g. "ENTWURF"
+     */
+    public static function render(Invoice $invoice, string $fontDir, array $options = []): string
     {
         $pdf = new class ('P', 'mm', 'A4') extends FPDF {
             private ?int $created = null;
@@ -41,7 +46,8 @@ final class InvoicePdf
         $pdf->AddFont('DejaVu', 'B', 'DejaVuSans-Bold.json', $fontDir);
         $pdf->SetMargins(self::LEFT, 20, 20);
         $pdf->SetAutoPageBreak(true, 30);
-        $pdf->SetTitle(self::title($invoice) . ' ' . $invoice->number, true);
+        $title = $options['title'] ?? self::title($invoice);
+        $pdf->SetTitle($title . ' ' . $invoice->number, true);
         $pdf->SetAuthor($invoice->seller->name, true);
         $pdf->SetCreator('Steuten IT Cockpit', true);
         $pdf->setCreated($invoice->issueDate->getTimestamp());
@@ -49,6 +55,17 @@ final class InvoicePdf
 
         $seller = $invoice->seller;
         $buyer = $invoice->buyer;
+
+        if (isset($options['watermark'])) {
+            $pdf->SetFont('DejaVu', 'B', 60);
+            $pdf->SetTextColor(225, 225, 225);
+            $pdf->SetXY(self::LEFT, 140);
+            $pdf->Cell(self::WIDTH, 30, self::t($options['watermark']), 0, 0, 'C');
+            $pdf->SetTextColor(0, 0, 0);
+        }
+        if (isset($options['logo'])) {
+            self::logo($pdf, $options['logo']);
+        }
 
         // Sender line and address block (DIN 5008 window position).
         $pdf->SetFont('DejaVu', '', 7.5);
@@ -77,6 +94,7 @@ final class InvoicePdf
             unset($meta['Fällig am']);
             $meta['Storniert'] = (string)$invoice->precedingNumber;
         }
+        $meta = $options['meta'] ?? $meta;
         $pdf->SetXY(125, 60);
         foreach ($meta as $label => $value) {
             $pdf->SetX(125);
@@ -88,7 +106,7 @@ final class InvoicePdf
 
         $pdf->SetXY(self::LEFT, 95);
         $pdf->SetFont('DejaVu', 'B', 15);
-        $pdf->Cell(self::WIDTH, 8, self::t(self::title($invoice) . ' ' . $invoice->number), 0, 1);
+        $pdf->Cell(self::WIDTH, 8, self::t($title . ' ' . $invoice->number), 0, 1);
         if ($invoice->note !== null && trim($invoice->note) !== '') {
             $pdf->SetFont('DejaVu', '', 10);
             $pdf->MultiCell(self::WIDTH, 5, self::t($invoice->note), 0, 'L');
@@ -155,10 +173,10 @@ final class InvoicePdf
         if ($invoice->vatBreakdown() !== [] && in_array('E', array_column($invoice->vatBreakdown(), 'category'), true)) {
             $notes[] = $invoice->exemptionText();
         }
-        $notes[] = $invoice->type === Invoice::TYPE_CREDIT_NOTE
+        $notes[] = $options['closing'] ?? ($invoice->type === Invoice::TYPE_CREDIT_NOTE
             ? 'Diese Stornorechnung hebt die Rechnung ' . $invoice->precedingNumber . ' vollständig auf.'
             : 'Zahlbar ohne Abzug bis zum ' . $invoice->dueDate->format('d.m.Y')
-                . ' unter Angabe der Rechnungsnummer auf das unten genannte Konto.';
+                . ' unter Angabe der Rechnungsnummer auf das unten genannte Konto.');
         $pdf->MultiCell(self::WIDTH, 5, self::t(implode("\n", $notes)), 0, 'L');
 
         // Footer with the seller's mandatory details, on the last page.
@@ -178,6 +196,36 @@ final class InvoicePdf
         ])), 'T', 'C');
 
         return $pdf->Output('S');
+    }
+
+    /**
+     * The logo in the top left corner, at most 70 x 25 mm, keeping its proportions.
+     *
+     * @param array{data: string, type: string} $logo
+     */
+    private static function logo(FPDF $pdf, array $logo): void
+    {
+        $type = match ($logo['type']) {
+            'image/png' => 'png',
+            'image/jpeg' => 'jpg',
+            default => throw new \InvalidArgumentException('The logo must be a PNG or JPEG image.'),
+        };
+        $size = getimagesizefromstring($logo['data']);
+        if ($size === false || $size[0] <= 0 || $size[1] <= 0) {
+            throw new \InvalidArgumentException('The logo cannot be read.');
+        }
+        $scale = min(70 / $size[0], 25 / $size[1]);
+        // FPDF reads images from files only.
+        $file = tempnam(sys_get_temp_dir(), 'logo');
+        if ($file === false) {
+            throw new \RuntimeException('No temporary file for the logo.');
+        }
+        try {
+            file_put_contents($file, $logo['data']);
+            $pdf->Image($file, self::LEFT, 15, $size[0] * $scale, $size[1] * $scale, $type);
+        } finally {
+            unlink($file);
+        }
     }
 
     public static function title(Invoice $invoice): string

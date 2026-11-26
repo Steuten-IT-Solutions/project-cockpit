@@ -34,3 +34,14 @@ foreach (Samples::all() as $name => $invoice) {
     file_put_contents("$dir/$name.xml", $files['xml']);
     echo "$dir/$name.pdf\n$dir/$name.xml\n";
 }
+
+// With a logo (PNG with transparency, as the cockpit's settings page accepts it): PDF/A-3
+// allows transparency, and Mustang's veraPDF check proves the result still conforms.
+$logo = file_get_contents(dirname(__DIR__) . '/tests/fixtures/logo.png');
+if ($logo === false) {
+    fwrite(STDERR, "tests/fixtures/logo.png is missing\n");
+    exit(1);
+}
+$files = HybridInvoice::create(Samples::all()['kleinunternehmer'], true, ['logo' => ['data' => $logo, 'type' => 'image/png']]);
+file_put_contents("$dir/mit-logo.pdf", $files['pdf']);
+echo "$dir/mit-logo.pdf\n";
