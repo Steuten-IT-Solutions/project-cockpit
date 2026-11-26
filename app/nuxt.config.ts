@@ -41,8 +41,11 @@ export default defineNuxtConfig({
     bugReports: { repo: '', labelPrefix: '', clientId: '', privateKeyFile: '' },
     releases: { repo: '', webhookSecret: '' },
     mail: { sendmail: '' },
-    // Folder with the SQL migrations, shared with the PHP cockpit.
+    // Folder with the SQL migrations, shared with the PHP cockpit. Empty: ../migrations.
     migrationsDir: '',
+    // false: the 15-minute background jobs do nothing (tests, the rehearsal on a copy of
+    // the database, which must not send alert e-mails). The refresh button still works.
+    scheduledJobs: true,
   },
 
   // Close to the PHP cockpit's policy (src/Security/Headers.php), with two
@@ -100,6 +103,10 @@ export default defineNuxtConfig({
   nitro: {
     // Listen on localhost only; Apache terminates TLS and forwards (see README).
     preset: 'node-server',
+    // The background jobs (server/tasks/cockpit/jobs.ts) run inside the Node process every
+    // 15 minutes, like the PHP cron job did. The database lock keeps runs from overlapping.
+    experimental: { tasks: true },
+    scheduledTasks: { '*/15 * * * *': ['cockpit:jobs'] },
   },
 
   ui: {

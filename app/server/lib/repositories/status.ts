@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, gte, isNull, or } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Alert, Installation, StatusReport } from '#shared/types/cockpit'
-import { alerts, installations, statusEvents, statusHeartbeats, statusReports, statusUsage } from '../../database/schema'
+import { alerts, installations, statusEvents, statusHeartbeats, statusNonces, statusReports, statusUsage } from '../../database/schema'
 import type { Database } from '../db'
 
 // Reading status reports and alerts, like src/Status/StatusRepository.php,
@@ -9,6 +9,11 @@ import type { Database } from '../db'
 
 export class StatusRepository {
   constructor(private readonly db: Database) {}
+
+  /** Removes format 1 reports not renewed since the cutoff, e.g. after consent was withdrawn. */
+  async pruneBefore(cutoff: string): Promise<void> {
+    await this.db.delete(statusReports).where(lt(statusReports.receivedAt, cutoff))
+  }
 
   /** Format 1 reports. */
   async all(): Promise<StatusReport[]> {
@@ -110,6 +115,28 @@ export class InstallationRepository {
     return rows.map(r => ({ ...r, day: r.day.slice(0, 10) }))
   }
 
+  /** Events received since the cutoff, oldest first. */
+  async eventsSince(cutoff: string): Promise<{ installationId: string, code: string, detail: string | null, version: string, receivedAt: string }[]> {
+    return this.db.select({ installationId: statusEvents.installationId, code: statusEvents.code, detail: statusEvents.detail, version: statusEvents.version, receivedAt: statusEvents.receivedAt })
+      .from(statusEvents).where(gte(statusEvents.receivedAt, cutoff)).orderBy(asc(statusEvents.receivedAt), asc(statusEvents.id))
+  }
+
+  /**
+   * Removes history, nonces, usage figures and installations older than the cutoffs. An
+   * installation silent for the whole retention period (e.g. consent withdrawn) goes with its
+   * alerts and daily figures: otherwise the next evaluation would report them as resolved.
+   */
+  async prune(historyCutoff: string, nonceCutoff: string, usageCutoff: string): Promise<void> {
+    const stale = sql`(SELECT id FROM installations WHERE last_seen < ${historyCutoff})`
+    await this.db.delete(statusUsage).where(lt(statusUsage.day, usageCutoff.slice(0, 10)))
+    await this.db.delete(statusUsage).where(sql`${statusUsage.installationId} IN ${stale}`)
+    await this.db.delete(statusHeartbeats).where(lt(statusHeartbeats.receivedAt, historyCutoff))
+    await this.db.delete(statusEvents).where(lt(statusEvents.receivedAt, historyCutoff))
+    await this.db.delete(statusNonces).where(lt(statusNonces.receivedAt, nonceCutoff))
+    await this.db.delete(alerts).where(sql`${alerts.installationId} IN ${stale}`)
+    await this.db.delete(installations).where(lt(installations.lastSeen, historyCutoff))
+  }
+
   /** Heartbeats and events since the cutoff, newest first. */
   async history(id: string, cutoff: string, limit: number): Promise<HistoryEntry[]> {
     const beats = await this.db.select().from(statusHeartbeats)
@@ -145,6 +172,37 @@ export class AlertRepository {
   async recent(cutoff: string, limit: number): Promise<Alert[]> {
     return this.db.select().from(alerts).where(or(isNull(alerts.resolvedAt), gte(alerts.resolvedAt, cutoff)))
       .orderBy(desc(alerts.openedAt), desc(alerts.id)).limit(limit)
+  }
+
+  async openAlert(alert: { installationId: string | null, kompanie: string, variant: string | null, alertKey: string, detail: string }, now: string): Promise<void> {
+    await this.db.insert(alerts).values({ ...alert, openedAt: now, lastSeenAt: now })
+  }
+
+  async touch(id: number, detail: string, now: string): Promise<void> {
+    await this.db.update(alerts).set({ lastSeenAt: now, detail }).where(eq(alerts.id, id))
+  }
+
+  async resolve(id: number, now: string): Promise<void> {
+    await this.db.update(alerts).set({ resolvedAt: now }).where(and(eq(alerts.id, id), isNull(alerts.resolvedAt)))
+  }
+
+  /** Alerts whose opening or resolution has not been notified yet. */
+  async unnotified(): Promise<Alert[]> {
+    return this.db.select().from(alerts)
+      .where(or(isNull(alerts.notifiedAt), and(isNotNull(alerts.resolvedAt), isNull(alerts.resolvedNotifiedAt))))
+      .orderBy(asc(alerts.openedAt), asc(alerts.id))
+  }
+
+  async markNotified(ids: number[], now: string): Promise<void> {
+    if (ids.length === 0) return
+    await this.db.update(alerts).set({ notifiedAt: sql`COALESCE(${alerts.notifiedAt}, ${now})` }).where(inArray(alerts.id, ids))
+    await this.db.update(alerts).set({ resolvedNotifiedAt: now })
+      .where(and(isNotNull(alerts.resolvedAt), isNull(alerts.resolvedNotifiedAt), inArray(alerts.id, ids)))
+  }
+
+  /** Removes resolved alerts older than the cutoff. */
+  async prune(cutoff: string): Promise<void> {
+    await this.db.delete(alerts).where(and(isNotNull(alerts.resolvedAt), lt(alerts.resolvedAt, cutoff)))
   }
 
   async forInstallation(id: string, limit: number): Promise<Alert[]> {

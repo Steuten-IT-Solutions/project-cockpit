@@ -60,8 +60,9 @@ const refreshing = ref(false)
 async function runJobs() {
   refreshing.value = true
   try {
-    const result = await cockpitPost<{ message: string }>('/api/refresh')
-    notice.ok(result.message)
+    const result = await cockpitPost<{ status: string, message: string }>('/api/refresh')
+    if (result.status === 'ok') notice.ok(result.message)
+    else notice.warn(result.message)
     await refresh()
   }
   catch (e) {

@@ -16,6 +16,7 @@ export function useNotice() {
   const toast = useToast()
   return {
     ok: (title: string) => toast.add({ title, color: 'success', icon: 'i-lucide-check' }),
+    warn: (title: string) => toast.add({ title, color: 'warning', icon: 'i-lucide-circle-alert' }),
     fail: (error: unknown) => toast.add({ title: errorMessage(error), color: 'error', icon: 'i-lucide-triangle-alert' }),
   }
 }

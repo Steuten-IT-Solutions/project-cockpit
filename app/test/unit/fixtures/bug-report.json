@@ -1,0 +1,675 @@
+{
+    "fields": {
+        "description": "@octocat schau mal #1\n```\n<img src=x onerror=alert(1)>",
+        "expected": "Bitte\n  so",
+        "page": "#/termine | ` x",
+        "version": "1.4.0.3",
+        "variant": "wordpress",
+        "userAgent": "UA",
+        "role": "ohne Anmeldung",
+        "name": null,
+        "lastError": null,
+        "created": 1792368000
+    },
+    "fieldsSummer": {
+        "created": 1783000000,
+        "name": "Max ` Mustermann",
+        "lastError": "x  y",
+        "description": "@octocat schau mal #1\n```\n<img src=x onerror=alert(1)>",
+        "expected": "Bitte\n  so",
+        "page": "#/termine | ` x",
+        "version": "1.4.0.3",
+        "variant": "wordpress",
+        "userAgent": "UA",
+        "role": "ohne Anmeldung"
+    },
+    "body": "| Angabe | Wert |\n|---|---|\n| Kompanie | ` Steuten-IT-Solutions/kompanie-musterstadt ` |\n| Seite in der App | `` #/termine \\| ` x `` |\n| App-Version | ` 1.4.0.3 (wordpress) ` |\n| Gerät/Browser | ` UA ` |\n| Rolle | ` ohne Anmeldung ` |\n| Name | ` – (nicht mitgeschickt) ` |\n| Zeit | ` 19.10.2026 02:00 (Europe/Berlin) ` |\n| Letzte Fehlermeldung | ` – ` |\n| Installation | ` 0123456789abcdef0123456789abcdef ` |\n| Meldungs-ID | ` r1 ` |\n\n### Beschreibung\n\n````text\n@octocat schau mal #1\n```\n<img src=x onerror=alert(1)>\n````\n\n### Erwartet\n\n```text\nBitte\n  so\n```\n\n### Bildschirmfoto\n\n![Bildschirmfoto](https://github.com/o/r/blob/main/screenshots/2026/10/r1.png?raw=true)\n\n[Bildschirmfoto öffnen](https://github.com/o/r/blob/main/screenshots/2026/10/r1.png)\n\n<sub>Gemeldet über „Fehler melden“ in der App, mit Einwilligung der meldenden Person.</sub>\n",
+    "bodySummer": "| Angabe | Wert |\n|---|---|\n| Kompanie | ` O/k ` |\n| Seite in der App | `` #/termine \\| ` x `` |\n| App-Version | ` 1.4.0.3 (wordpress) ` |\n| Gerät/Browser | ` UA ` |\n| Rolle | ` ohne Anmeldung ` |\n| Name | `` Max ` Mustermann `` |\n| Zeit | ` 02.07.2026 15:46 (Europe/Berlin) ` |\n| Letzte Fehlermeldung | ` x y ` |\n| Installation | ` i ` |\n| Meldungs-ID | ` r ` |\n\n### Beschreibung\n\n````text\n@octocat schau mal #1\n```\n<img src=x onerror=alert(1)>\n````\n\n### Erwartet\n\n```text\nBitte\n  so\n```\n\n<sub>Gemeldet über „Fehler melden“ in der App, mit Einwilligung der meldenden Person.</sub>\n",
+    "titles": [
+        [
+            "  Der Knopf geht nicht  \nZweite Zeile",
+            "Der Knopf geht nicht"
+        ],
+        [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  yyyy",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…"
+        ],
+        [
+            "a  b\tc",
+            "a b c"
+        ],
+        [
+            "ääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää",
+            "äääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää…"
+        ]
+    ],
+    "labels": [
+        [
+            "kompanie:",
+            "Steuten-IT-Solutions/Kompanie-Musterstadt",
+            "kompanie:kompanie-musterstadt"
+        ],
+        [
+            "ü:",
+            "O/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "ü:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+    ],
+    "payloads": [
+        {
+            "name": "valid",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": {
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "key": null,
+                "report_id": "abababababababababababababababab",
+                "fields": {
+                    "description": "Der Knopf\ngeht nicht",
+                    "expected": "",
+                    "page": "#/a b",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler 500",
+                    "created": 1792367940
+                },
+                "screenshot": null,
+                "screenshot_type": null
+            }
+        },
+        {
+            "name": "with key and png",
+            "input": {
+                "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "screenshot": {
+                    "type": "image/png",
+                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAADElEQVQImWNgIAoAAAAnAAGfWjwcAAAAAElFTkSuQmCC"
+                },
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                }
+            },
+            "result": {
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "report_id": "abababababababababababababababab",
+                "fields": {
+                    "description": "Der Knopf\ngeht nicht",
+                    "expected": "",
+                    "page": "#/a b",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler 500",
+                    "created": 1792367940
+                },
+                "screenshot": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAADElEQVQImWNgIAoAAAAnAAGfWjwcAAAAAElFTkSuQmCC",
+                "screenshot_type": "image/png"
+            }
+        },
+        {
+            "name": "png labelled jpeg",
+            "input": {
+                "screenshot": {
+                    "type": "image/jpeg",
+                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAADElEQVQImWNgIAoAAAAnAAGfWjwcAAAAAElFTkSuQmCC"
+                },
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                }
+            },
+            "result": null
+        },
+        {
+            "name": "gif",
+            "input": {
+                "screenshot": {
+                    "type": "image/gif",
+                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAADElEQVQImWNgIAoAAAAnAAGfWjwcAAAAAElFTkSuQmCC"
+                },
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                }
+            },
+            "result": null
+        },
+        {
+            "name": "not an image",
+            "input": {
+                "screenshot": {
+                    "type": "image/png",
+                    "data": "a2VpbiBCaWxk"
+                },
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                }
+            },
+            "result": null
+        },
+        {
+            "name": "base64 with space",
+            "input": {
+                "screenshot": {
+                    "type": "image/png",
+                    "data": "iVBORw0KGgoAAAANSUhE\nUgAAAAQAAAADCAIAAAA7ljmRAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAADElEQVQImWNgIAoAAAAnAAGfWjwcAAAAAElFTkSuQmCC"
+                },
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                }
+            },
+            "result": {
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "key": null,
+                "report_id": "abababababababababababababababab",
+                "fields": {
+                    "description": "Der Knopf\ngeht nicht",
+                    "expected": "",
+                    "page": "#/a b",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler 500",
+                    "created": 1792367940
+                },
+                "screenshot": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAADElEQVQImWNgIAoAAAAnAAGfWjwcAAAAAElFTkSuQmCC",
+                "screenshot_type": "image/png"
+            }
+        },
+        {
+            "name": "other org",
+            "input": {
+                "kompanie": "Andere-Org/repo",
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": null
+        },
+        {
+            "name": "format 2",
+            "input": {
+                "format": 2,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": null
+        },
+        {
+            "name": "bad key",
+            "input": {
+                "key": "zz",
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": null
+        },
+        {
+            "name": "blank description",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": null
+        },
+        {
+            "name": "long umlauts ok",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": "ääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": {
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "key": null,
+                "report_id": "abababababababababababababababab",
+                "fields": {
+                    "description": "ääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää",
+                    "expected": "",
+                    "page": "#/a b",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler 500",
+                    "created": 1792367940
+                },
+                "screenshot": null,
+                "screenshot_type": null
+            }
+        },
+        {
+            "name": "too long",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": null
+        },
+        {
+            "name": "empty name",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": "",
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": null
+        },
+        {
+            "name": "name",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": " Max ",
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": {
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "key": null,
+                "report_id": "abababababababababababababababab",
+                "fields": {
+                    "description": "Der Knopf\ngeht nicht",
+                    "expected": "",
+                    "page": "#/a b",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": "Max",
+                    "lastError": "Fehler 500",
+                    "created": 1792367940
+                },
+                "screenshot": null,
+                "screenshot_type": null
+            }
+        },
+        {
+            "name": "variant",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "other",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": null
+        },
+        {
+            "name": "too old",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1500000000
+                },
+                "screenshot": null
+            },
+            "result": null
+        },
+        {
+            "name": "future",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792454401
+                },
+                "screenshot": null
+            },
+            "result": null
+        },
+        {
+            "name": "defaults",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": {
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "key": null,
+                "report_id": "abababababababababababababababab",
+                "fields": {
+                    "description": "Der Knopf\ngeht nicht",
+                    "expected": "",
+                    "page": "",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "",
+                    "role": "Mitglied",
+                    "name": null,
+                    "lastError": "Fehler 500",
+                    "created": 1792367940
+                },
+                "screenshot": null,
+                "screenshot_type": null
+            }
+        },
+        {
+            "name": "role number",
+            "input": {
+                "format": 1,
+                "installation": "0123456789abcdef0123456789abcdef",
+                "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+                "sent": 1792367995,
+                "nonce": "0011223344556677",
+                "report": {
+                    "id": "abababababababababababababababab",
+                    "description": " Der Knopf\r\ngeht\u0001 nicht ",
+                    "expected": "",
+                    "page": "#/a\tb",
+                    "version": "1.4.0.3",
+                    "variant": "standalone",
+                    "userAgent": "Mozilla",
+                    "role": 5,
+                    "name": null,
+                    "lastError": "Fehler\n500",
+                    "created": 1792367940
+                },
+                "screenshot": null
+            },
+            "result": null
+        }
+    ]
+}

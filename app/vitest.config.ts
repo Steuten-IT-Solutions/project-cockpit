@@ -1,6 +1,9 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  // Nuxt's alias for shared/, used by server code that the unit tests import.
+  resolve: { alias: { '#shared': fileURLToPath(new URL('./shared', import.meta.url)) } },
   test: {
     projects: [
       // Server logic in plain Node, without Nuxt or a database.
