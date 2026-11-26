@@ -76,6 +76,11 @@ updates, fail2ban, a cron job every 15 minutes in `/etc/cron.d/cockpit` and a ni
 dump to `/var/backups/cockpit/` (one file per weekday), so a file backup of the server holds a
 consistent copy of the database. It is safe to run again.
 
+Every run also installs `/usr/local/sbin/cockpit-setup`: `cockpit-setup <step> …` loads the
+current `bin/server-setup.sh` from `main` on GitHub and runs it, so it never has to be copied by
+hand (e.g. `ssh -t root@<server> "cockpit-setup archive"`). For a first run without it:
+`curl -fsSL https://raw.githubusercontent.com/Steuten-IT-Solutions/project-cockpit/main/bin/server-setup.sh -o /root/server-setup.sh && bash /root/server-setup.sh <step>`.
+
 1. **Server:** order the VPS with the Debian 13 image, log in as root with an SSH key, copy
    `bin/server-setup.sh` to the server and run `bash server-setup.sh base`.
 2. **Deploy key:** create one locally (`ssh-keygen -t ed25519 -f cockpit-deploy -N ''`), put

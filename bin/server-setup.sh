@@ -19,6 +19,7 @@
 #                                same address; IMPORT_SEPARATOR, its folder separator, default /);
 #                                asks for its password
 #
+# On the server, "cockpit-setup <step>" loads the current version from GitHub (main) and runs it.
 # The script is idempotent: running it again keeps existing data, passwords and keys.
 # See README.md, "Own server" and "Mail server".
 #
@@ -64,6 +65,26 @@ die() { echo "server-setup: $*" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || die "run as root"
 . /etc/os-release
 [ "${ID:-}" = "debian" ] && [ "${VERSION_ID:-}" = "13" ] || die "expects Debian 13, found ${PRETTY_NAME:-unknown}"
+
+# "cockpit-setup <step> ..." on the server loads the current version of this script from main
+# and runs it, so it never has to be copied by hand. Installed by every run of this script.
+install_wrapper() {
+    cat > /usr/local/sbin/cockpit-setup <<'EOF'
+#!/bin/bash
+# Written by server-setup.sh. Loads bin/server-setup.sh from the main branch and runs it.
+set -euo pipefail
+url="https://raw.githubusercontent.com/Steuten-IT-Solutions/project-cockpit/main/bin/server-setup.sh"
+tmp="$(mktemp /root/server-setup.XXXXXX)"
+trap 'rm -f "$tmp"' EXIT
+curl -fsSL --proto '=https' "$url" -o "$tmp"
+bash -n "$tmp"
+install -m 700 "$tmp" /root/server-setup.sh
+rm -f "$tmp"
+exec bash /root/server-setup.sh "$@"
+EOF
+    chmod 755 /usr/local/sbin/cockpit-setup
+}
+install_wrapper
 
 base() {
     export DEBIAN_FRONTEND=noninteractive
