@@ -18,6 +18,9 @@ name: Deploy
 #                     the subdomain's document root must be <that folder>/public, the
 #                     status subdomain's (optional) <that folder>/receiver
 #
+# The Nuxt cockpit (app/) is built here and uploaded to <SFTP_TARGET_DIR>/node; it serves the
+# host names only after "cockpit-setup cutover" on the VPS (app/README.md, "Cutover").
+#
 # Never deployed or deleted on the server: config/config.php, config/*.pem and var/.
 # bin/deploy-sftp.sh refuses to deploy into a folder with foreign content.
 
@@ -40,8 +43,11 @@ jobs:
   einvoice:
     uses: ./.github/workflows/einvoice.yml
 
+  app:
+    uses: ./.github/workflows/app.yml
+
   deploy:
-    needs: [ci, einvoice]
+    needs: [ci, einvoice, app]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -51,6 +57,18 @@ jobs:
           php-version: '8.4'
           extensions: curl, mbstring, openssl, pdo, pdo_mysql, sodium
           coverage: none
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build the Nuxt cockpit
+        working-directory: app
+        run: |
+          npm ci
+          npm run build
 
       - name: Install production dependencies
         run: composer install --no-dev --no-interaction --no-progress --prefer-dist --classmap-authoritative
@@ -62,6 +80,9 @@ jobs:
           cp .htaccess composer.json build/
           cp config/config.example.php build/config/
           echo "Deployed by project-cockpit. Marks this directory as a deployment target; see bin/deploy-sftp.sh." > build/.cockpit-deploy
+          # The Node server with its bundled dependencies; rewriting the marker restarts it.
+          cp -R app/.output build/node
+          echo "$GITHUB_SHA $(date -u +%FT%TZ)" > build/.node-deployed
 
       - name: Check that all secrets are set
         env:

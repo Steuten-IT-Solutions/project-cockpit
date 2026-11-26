@@ -1,0 +1,48 @@
+{
+  "name": "project-cockpit-app",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "node .output/server/index.mjs",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run --project unit",
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "test:integration": "vitest run --project integration"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.160",
+    "@node-rs/argon2": "^2.2.2",
+    "@nuxt/ui": "^4.13.1",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.45.4",
+    "mysql2": "^3.24.6",
+    "nuxt": "^4.7.0",
+    "nuxt-security": "^2.7.0",
+    "qrcode": "1.5.4",
+    "tailwindcss": "^4.3.5",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.17.0",
+    "@nuxt/test-utils": "^4.4.0",
+    "@types/qrcode": "1.5.5",
+    "@vue/test-utils": "^2.6.0",
+    "eslint": "^10.15.0",
+    "h3": "~1.15.11",
+    "happy-dom": "^21.0.4",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.2",
+    "vue-tsc": "^3.3.14"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "vue-demi": false
+  }
+}

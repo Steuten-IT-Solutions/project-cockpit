@@ -32,3 +32,18 @@ architecture, server setup and security model.
   the own VPS has, but keep migrations working without it).
 - Must work on phones and desktop: mobile-first CSS, cards in `.grid` from 900 px.
 - Do not suppress PHPStan errors; fix the cause.
+
+## New cockpit (app/)
+
+The cockpit is being rebuilt in Nuxt in `app/` (see `app/README.md`). It replaces the PHP
+cockpit on one cutover day; until then the PHP cockpit only gets bug fixes.
+
+- Run `npm run check` and `npm run build` in `app/` before pushing; CI also runs the integration
+  tests against MariaDB (`.github/workflows/app.yml`).
+- Same database and `app_key` as the PHP cockpit: never change how stored data is read or
+  written without keeping the PHP cockpit working until the cutover.
+- Schema changes stay SQL files in `migrations/`; `server/database/schema.ts` only describes them.
+- No `v-html` and no inline scripts; the CSP allows scripts only with Nuxt's nonce.
+- State changes only via POST/PUT/DELETE with the `X-CSRF-Token` header (`cockpitPost()`).
+- Keep pure logic in `server/lib/` with unit tests; the owner is new to Vue and TypeScript, so
+  comment the why and explain changes in plain words in the PR description.

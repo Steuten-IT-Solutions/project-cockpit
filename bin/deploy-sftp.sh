@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Uploads build/ to the target directory with lftp mirror --delete.
 #
+# The Nuxt cockpit's build (build/node) goes to node-next/ first and is then renamed to node/,
+# so a running Node process sees the old or the new build, never half of each. Last, the
+# marker .node-deployed is rewritten; on the VPS that restarts the Node services
+# (cockpit-app-deploy.path, bin/server-setup.sh node).
+#
 # Because --delete removes everything in the target that is not part of the build,
 # a wrong target path could wipe unrelated folders. The upload therefore only runs if
 # the target directory is empty, contains the marker file .cockpit-deploy from an
@@ -16,7 +21,8 @@ url="${LFTP_URL:-sftp://${SFTP_HOST:?}}"
 target="${SFTP_TARGET_DIR%/}"
 [ -n "$target" ] || target="/"
 
-settings="set net:max-retries 3; set net:timeout 30"
+# cmd:fail-exit: a failing command stops the script with an error instead of running on.
+settings="set cmd:fail-exit yes; set net:max-retries 3; set net:timeout 30"
 key="${SFTP_KEY_FILE:-}"
 if [[ "$url" == sftp://* ]]; then
   ssh_cmd="ssh -a -x -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
@@ -40,13 +46,14 @@ run_lftp() {
 
 # mirror --delete removes a whole directory that is missing from the build, including
 # excluded files in it. Without build/config/ the server's config.php would be deleted.
-if [ ! -f build/config/config.example.php ] || [ ! -f build/.cockpit-deploy ]; then
+if [ ! -f build/config/config.example.php ] || [ ! -f build/.cockpit-deploy ] \
+  || [ ! -f build/node/server/index.mjs ] || [ ! -f build/.node-deployed ]; then
   echo "::error::build/ is incomplete; refusing to deploy."
   exit 1
 fi
 
 # Names a deployment of this project may leave in the target directory.
-allowed=(.htaccess .cockpit-deploy composer.json config cron migrations public receiver src templates vendor var)
+allowed=(.htaccess .cockpit-deploy .node-deployed composer.json config cron migrations node node-next node-old public receiver src templates vendor var)
 
 listing="$(run_lftp "mkdir -p -f \"$target\"; cls -1 -a --basename \"$target/\"")"
 entries="$(printf '%s\n' "$listing" | sed 's#/$##' | grep -vx -e '' -e '\.' -e '\.\.' || true)"
@@ -62,4 +69,15 @@ if ! printf '%s\n' "$entries" | grep -qxF '.cockpit-deploy'; then
 fi
 
 # Excluded paths (server-only secrets and runtime data) are neither uploaded nor deleted by --delete.
-run_lftp "mirror --reverse --delete --verbose=1 --exclude-glob config/config.php --exclude-glob 'config/*.pem' --exclude-glob var/ build/ \"$target\""
+# The Node build has its own steps below.
+run_lftp "mirror --reverse --delete --verbose=1 --exclude-glob config/config.php --exclude-glob 'config/*.pem' --exclude-glob var/ \
+  --exclude-glob node/ --exclude-glob node-next/ --exclude-glob node-old/ --exclude-glob .node-deployed build/ \"$target\""
+
+# Node build: upload next to the running one, then swap the folders in two quick renames.
+run_lftp "mirror --reverse --delete --verbose=1 build/node/ \"$target/node-next\""
+swap="rm -r -f \"$target/node-old\""
+if printf '%s\n' "$entries" | grep -qxF 'node'; then
+  swap="$swap; mv \"$target/node\" \"$target/node-old\""
+fi
+# make-backup off: lftp would otherwise keep the old marker as .node-deployed~<time>~.
+run_lftp "$swap; mv \"$target/node-next\" \"$target/node\"; set xfer:make-backup off; put build/.node-deployed -o \"$target/.node-deployed\""

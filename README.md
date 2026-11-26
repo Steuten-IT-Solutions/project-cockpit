@@ -81,6 +81,9 @@ current `bin/server-setup.sh` from `main` on GitHub and runs it, so it never has
 hand (e.g. `ssh -t root@<server> "cockpit-setup archive"`). For a first run without it:
 `curl -fsSL https://raw.githubusercontent.com/Steuten-IT-Solutions/project-cockpit/main/bin/server-setup.sh -o /root/server-setup.sh && bash /root/server-setup.sh <step>`.
 
+The steps `node`, `rehearsal`, `rehearsal-stop`, `cutover` and `rollback` prepare and switch to
+the new Nuxt cockpit; see `app/README.md`, "Deployment" and "Cutover checklist".
+
 1. **Server:** order the VPS with the Debian 13 image, log in as root with an SSH key, copy
    `bin/server-setup.sh` to the server and run `bash server-setup.sh base`.
 2. **Deploy key:** create one locally (`ssh-keygen -t ed25519 -f cockpit-deploy -N ''`), put
