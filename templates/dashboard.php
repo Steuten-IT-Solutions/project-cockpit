@@ -223,7 +223,7 @@ if ($lastCron !== null && is_string($lastCron['started_at'] ?? null)) {
       <?php if (!preg_match('#^[A-Za-z0-9_./-]+$#', $cronCommand)): ?>
         <br><small class="error">Der Pfad enthält Zeichen, die der IONOS Cron-Manager nicht annimmt.</small>
       <?php endif; ?>
-      <br><small class="muted">Im IONOS Cron-Manager als UnixCron eintragen, Minuten <code>*/15</code>, alle anderen Felder <code>*</code>.</small>
+      <br><small class="muted">Alle 15 Minuten ausführen: auf dem eigenen Server per <code>/etc/cron.d/cockpit</code> (legt <code>bin/server-setup.sh</code> an), im IONOS Cron-Manager als UnixCron mit Minuten <code>*/15</code> und allen anderen Feldern <code>*</code>.</small>
     </dd>
     <dt>Wiederherstellungscodes</dt>
     <dd><span class="badge <?= $recoveryLeft >= 3 ? 'ok' : 'warn' ?>"><?= $e($recoveryLeft) ?> übrig</span></dd>

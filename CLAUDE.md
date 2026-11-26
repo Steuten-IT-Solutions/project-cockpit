@@ -28,6 +28,7 @@ architecture, server setup and security model.
   session). State changes only via POST.
 - Store timestamps in UTC (`gmdate`); convert for display with `View::localTime()`.
 - Schema changes are new files in `migrations/` (`NNNN_name.sql`), never edits of applied ones.
-  There is no SSH on the host: migrations run from `cron/run.php` and the setup page.
+  Migrations run from `cron/run.php` and the setup page (the IONOS webspace has no SSH;
+  the own VPS has, but keep migrations working without it).
 - Must work on phones and desktop: mobile-first CSS, cards in `.grid` from 900 px.
 - Do not suppress PHPStan errors; fix the cause.

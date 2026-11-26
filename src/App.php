@@ -17,6 +17,7 @@ use Cockpit\Http\Request;
 use Cockpit\Http\Response;
 use Cockpit\Http\Router;
 use Cockpit\Jobs\Runner;
+use Cockpit\Mcp\Probe;
 use Cockpit\Notify\PushSubscriptionRepository;
 use Cockpit\Notify\WebPush;
 use Cockpit\Projects\NoteRepository;
@@ -74,14 +75,22 @@ final class App
         $secure = $request->secure || str_starts_with($config->baseUrl, 'https://');
 
         $session = new Session($root . '/var/sessions', $secure, $config->idleTimeout, $config->absoluteTimeout);
-        // The release box reloads itself every few seconds; that alone must not count as activity.
-        $session->start(!($request->method === 'GET' && $request->path === '/releases'));
+        // MCP requests come from programs with a bearer token, never with the session cookie.
+        if (!Probe::handles($request->path)) {
+            // The release box reloads itself every few seconds; that alone must not count as activity.
+            $session->start(!($request->method === 'GET' && $request->path === '/releases'));
+        }
 
         return new self($config, Connection::create($config->database), $session, $root, $secure);
     }
 
     public function handle(Request $request): Response
     {
+        // Machine endpoints: no session, no CSRF token (they authenticate with a bearer token instead).
+        if (Probe::handles($request->path)) {
+            return (new Probe($this->config->baseUrl, $this->config->mcp))->handle($request);
+        }
+
         $router = new Router();
         $router->add('GET', '/', $this->dashboard(...));
         $router->add('GET', '/project', $this->project(...));
@@ -179,7 +188,7 @@ final class App
             'statusReceiver' => $this->config->statusReports !== null,
             'phpVersion' => PHP_VERSION,
             'schemaVersion' => (new Migrator($this->pdo, $this->root . '/migrations'))->currentVersion(),
-            // Absolute path for the IONOS cron manager, which only accepts a bare path.
+            // Absolute path for cron: a bare path, because the IONOS cron manager accepts nothing else.
             'cronCommand' => (realpath($this->root) ?: $this->root) . '/cron/run.sh',
             'lastCron' => $lastCron,
             'recoveryLeft' => $this->users->remainingRecoveryCodes($user['id']),

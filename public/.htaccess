@@ -8,7 +8,14 @@ AddType application/manifest+json .webmanifest
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Never serve dotfiles.
+    # Hand the Authorization header to PHP: under CGI/FastCGI Apache hides it otherwise. PHP then sees it as
+    # HTTP_AUTHORIZATION, or as REDIRECT_HTTP_AUTHORIZATION after the rewrite to index.php. Needed for /mcp.
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Never serve dotfiles. Only the OAuth metadata under /.well-known/ passes, to the front controller
+    # (no such file exists, so the rule below rewrites it to index.php).
+    RewriteCond %{REQUEST_URI} !^/\.well-known/oauth-protected-resource(/mcp)?$
     RewriteRule (^|/)\. - [F]
 
     # Everything that is not an existing asset goes to the front controller.

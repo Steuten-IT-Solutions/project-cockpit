@@ -94,10 +94,10 @@ return [
 
     // Alerts of the status reports (optional): e-mail via PHP mail() when an installation turns red,
     // goes silent or reports a severe error, and again when the problem is gone. "from" must be an
-    // address of this domain (IONOS sends only from own addresses).
+    // existing address of this domain, so that the mail server signs it and bounces arrive.
     // 'alerts' => [
     //     'email' => 'CHANGE-ME@example.org',
-    //     'from' => 'Cockpit <cockpit@steuten-it-solutions.de>',
+    //     'from' => 'Cockpit <noreply@steuten-it-solutions.de>',
     // ],
 
     // Web push to the cockpit on your phone (optional). Create the key locally and upload it over
@@ -114,5 +114,13 @@ return [
     //     'client_id' => 'Iv23-CHANGE-ME',
     //     'private_key_file' => __DIR__ . '/github-app.pem',
     //     'accounts' => ['Steuten-IT-Solutions'],
+    // ],
+
+    // MCP server (optional, in preparation). For now only a probe at POST /mcp and
+    // GET /.well-known/oauth-protected-resource/mcp that checks whether the host passes the
+    // Authorization header to PHP (see README, "MCP server"). probe_token: at least 32 characters,
+    // letters, digits and . _ ~ - only. Remove the section to switch /mcp off (404).
+    // 'mcp' => [
+    //     'probe_token' => 'CHANGE-ME',
     // ],
 ];

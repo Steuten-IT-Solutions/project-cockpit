@@ -1,7 +1,8 @@
 # Project Cockpit
 
 Private management cockpit for all Steuten IT Solutions projects, served at
-`https://cockpit.steuten-it-solutions.de` from the IONOS webspace.
+`https://cockpit.steuten-it-solutions.de`. It is moving from the IONOS webspace to an own VPS
+(Strato, Debian 13); see "Own server" below. Until the move is finished, both setups are documented.
 
 The user interface is German; code, comments, commits and documentation are English.
 
@@ -39,7 +40,7 @@ var/          sessions (server only, never deployed)
 Only `public/` and `receiver/` may be reachable from the web. A root `.htaccess` denies everything
 in case the document root is ever pointed at the project root by mistake.
 
-## Server setup (one-time)
+## Server setup on the IONOS webspace (one-time, legacy)
 
 1. **Subdomain:** `cockpit.steuten-it-solutions.de` → folder `cockpit/public`, SSL on.
    Keep `cockpit/` outside any other domain's document root (e.g. at the webspace root next to
@@ -65,6 +66,134 @@ in case the document root is ever pointed at the project root by mistake.
 7. **First user:** open `https://cockpit.steuten-it-solutions.de/setup?token=<setup_token>`,
    create the account, enrol the authenticator app and store the recovery codes.
    Then remove `setup_token` from `config.php`. The page answers 404 as soon as a user exists.
+
+## Own server (Debian 13 VPS)
+
+`bin/server-setup.sh` sets up a fresh Debian 13 server as root: Apache with the build's
+`.htaccess` files (`AllowOverride All`), PHP 8.4 FPM in a pool running as user `cockpit`,
+MariaDB, firewall (22, 80, 443), key-only SSH (only if a key is installed), automatic security
+updates, fail2ban, a cron job every 15 minutes in `/etc/cron.d/cockpit` and a nightly database
+dump to `/var/backups/cockpit/` (one file per weekday), so a file backup of the server holds a
+consistent copy of the database. It is safe to run again.
+
+Every run also installs `/usr/local/sbin/cockpit-setup`: `cockpit-setup <step> …` loads the
+current `bin/server-setup.sh` from `main` on GitHub and runs it, so it never has to be copied by
+hand (e.g. `ssh -t root@<server> "cockpit-setup archive"`). For a first run without it:
+`curl -fsSL https://raw.githubusercontent.com/Steuten-IT-Solutions/project-cockpit/main/bin/server-setup.sh -o /root/server-setup.sh && bash /root/server-setup.sh <step>`.
+
+1. **Server:** order the VPS with the Debian 13 image, log in as root with an SSH key, copy
+   `bin/server-setup.sh` to the server and run `bash server-setup.sh base`.
+2. **Deploy key:** create one locally (`ssh-keygen -t ed25519 -f cockpit-deploy -N ''`), put
+   `cockpit-deploy.pub` into `/srv/cockpit/.ssh/authorized_keys` on the server.
+3. **GitHub secrets:** `SFTP_HOST` (server name or IP), `SFTP_USER` = `cockpit`,
+   `SFTP_PRIVATE_KEY` (content of `cockpit-deploy`), `SFTP_KNOWN_HOSTS` (`ssh-keyscan <host>`;
+   compare the fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the
+   server), `SFTP_TARGET_DIR` = `/srv/cockpit/app`. Remove `SFTP_PASSWORD`. Then run *Deploy*.
+4. **Data from the webspace:** download `config/config.php`, `config/*.pem` and `var/` over
+   SFTP, export the database in phpMyAdmin. On the server put the files into
+   `/srv/cockpit/app/config/`, set the `database` values from `/root/cockpit-database.txt`,
+   `chown cockpit: /srv/cockpit/app/config/* && chmod 600 /srv/cockpit/app/config/*`, and import
+   the dump with `mariadb cockpit < dump.sql`. Keep `app_key` and `vapid.pem` unchanged: a new
+   `app_key` invalidates every TOTP enrolment and recovery code, a new VAPID key every push
+   subscription.
+5. **Switch:** switch off the IONOS cron job, import a fresh dump, point the A/AAAA records of
+   `cockpit.` and `status.` to the server, then run `bash server-setup.sh certs`. The MX records
+   stay unchanged until the mail server is verified.
+6. **Mail:** alert e-mails use PHP `mail()`, which needs a local `sendmail`; see *Mail server*.
+
+## Mail server
+
+`bash server-setup.sh mail` turns the VPS into the mail server of `steuten-it-solutions.de`:
+Postfix replaces exim4, receives on port 25 and accepts mail from clients on 587 (STARTTLS) and
+465 (TLS) with login only; Dovecot keeps the mailboxes under `/var/vmail` and serves IMAP on 993
+only; Rspamd rejects obvious spam, moves likely spam to *Junk* and DKIM-signs every outgoing
+mail, including the cockpit's `mail()`. The certificate for `mail.steuten-it-solutions.de` comes
+from Let's Encrypt; a renewal hook reloads Postfix and Dovecot. Only root and `cockpit` may use
+the local `sendmail`; mail for root goes to the admin mailbox.
+
+The addresses are the `MAILBOXES` and `FORWARDS` lists at the top of the script; run `mail`
+again after changing them. Each mailbox may send as itself, each forwarding's target as the
+forwarding too (`rechnung@` sends as `invoice@`):
+
+| Address | Kind |
+|---|---|
+| `christian.steuten@` | mailbox |
+| `info@` | mailbox |
+| `rechnung@` | mailbox; the cockpit sends invoices from here |
+| `eingangsrechnung@` | mailbox for supplier invoices; the cockpit will read it over IMAP |
+| `dmarc@` | mailbox for DMARC reports |
+| `invoice@` | → `rechnung@` |
+| `belege@` | → `eingangsrechnung@` |
+| `noreply@` | → `christian.steuten@` (sender of cockpit alerts; bounces arrive there) |
+| `postmaster@`, `abuse@` | → `christian.steuten@` |
+
+1. **Preconditions:** outbound port 25 open, A/AAAA of `mail.` point to the server, reverse DNS of
+   the IPv4 (and IPv6) address is `mail.steuten-it-solutions.de`.
+2. **Install:** `bash server-setup.sh mail`. It prints the DNS records of step 4.
+3. **Passwords:** `bash server-setup.sh mail-password <address>` for every mailbox. It asks
+   twice; the password is stored as an Argon2id hash in `/etc/dovecot/passwd` and never
+   appears on the command line.
+4. **DNS** (keep the MX records unchanged for now):
+   - `TXT s2026._domainkey` = the DKIM value printed by the script,
+   - `TXT _dmarc` = `v=DMARC1; p=none; rua=mailto:dmarc@steuten-it-solutions.de`,
+   - SPF (`TXT @`): add `ip4:<IPv4> ip6:<IPv6>` of the server to the existing record, keep the
+     IONOS part until the move is finished.
+5. **Test:** set up a mail client (IMAP `mail.steuten-it-solutions.de` 993 SSL/TLS, SMTP 465
+   SSL/TLS or 587 STARTTLS, user name = full address) and send to an external mailbox (Gmail:
+   *Show original* must say SPF, DKIM and DMARC *PASS*) and to a mail tester. Check the server's
+   IP addresses on public blocklists.
+6. **Move:** copy the mails of the old IONOS mailbox with `bash server-setup.sh mail-import
+   info@steuten-it-solutions.de` (asks for the IONOS password; all folders, read/unread flags
+   kept). Then point the MX record of the domain to `mail.steuten-it-solutions.de`, wait a day
+   and run `mail-import` once more for mail that still reached IONOS. Mail already on the new
+   server stays; nothing is copied twice. Afterwards remove the IONOS part of SPF and
+   raise DMARC to `p=quarantine` once the reports look clean.
+7. **Cockpit alerts:** in `config.php`, set `alerts.from` to `Cockpit <noreply@steuten-it-solutions.de>`
+   (an address that does not exist here gets its bounces rejected).
+
+`/var/vmail` holds the mail; include it in the server backup.
+
+## Backup
+
+`bash server-setup.sh backup uXXXXX@uXXXXX.your-storagebox.de` sets up a nightly off-site backup
+(03:15, after the database dump) with restic to a Hetzner Storage Box over SFTP (port 23). It asks
+for the Storage Box password once to install a dedicated SSH key, creates the encrypted repository
+and runs the first backup. Saved: `/var/vmail`, `/srv/cockpit/app/config`, `/var/backups/cockpit`,
+`/etc`, `/root`, `/var/lib/rspamd/dkim`. Kept: 7 daily, 5 weekly, 12 monthly snapshots; on Sundays
+the repository is checked. A failed run prints its log, which cron mails to root (the admin
+mailbox).
+
+- Store `/root/restic-password` in a password manager. Without it nothing can be restored.
+- Enable automatic snapshots of the Storage Box in the Hetzner console, so a compromised server
+  cannot delete the history.
+- Restore: `set -a; . /root/restic.env; set +a; restic restore latest --target /tmp/restore`.
+
+## Mail archive
+
+`bash server-setup.sh archive` (after `mail` and `backup`) sets up a GoBD mail archive with
+[piler](https://www.mailpiler.org). Postfix hands a copy of every message it accepts (incoming,
+outgoing, local mail of the cockpit) to piler on `127.0.0.1:2525` (`always_bcc`), before any
+mail client can delete it. Each recipient accepted by smtpd is noted in an `X-Envelope-To`
+header, so Bcc recipients are archived too; the header goes to piler only and is stripped
+before any other delivery. Mail already in the mailboxes is imported once.
+
+- piler stores each message compressed, encrypted with `/etc/piler/piler.key` and with its
+  digest, and keeps it 3653 days (10 years: vouchers 8 years from the end of the calendar year,
+  business letters 6). Deleting in the web interface is off; `pilerpurge` removes messages only
+  after their retention period. Searches, logins and views are logged (*Administration → Audit*).
+- There is no Debian 13 package: piler is built from the pinned commit `PILER_COMMIT`, Manticore
+  (piler's search index) comes from Manticore's repository at `MANTICORE_VERSION` (held), with
+  its signing key checked against `MANTICORE_KEY`. To update, change these values after reading
+  piler's upgrade notes and run `archive` again.
+- Web interface: `https://mail.steuten-it-solutions.de/`, HTTP basic auth (`archiv`) in front of
+  piler's own login. `auditor@local` searches all mail, `admin@local` administers. The step writes
+  the generated passwords to `/root/piler-access.txt` once: store them, then delete the file.
+  Enable two-factor authentication for both accounts under *Settings*. For a tax audit, create
+  another auditor account or export with `pilerexport` (EML or ZIP).
+- Backup: nightly at 04:15 into its own restic repository `cockpit-archive` on the Storage Box,
+  never thinned out: the encrypted messages, `/etc/piler` (with the key), a database dump and
+  the access log. The search index can be rebuilt from the messages. Test a restore once a year.
+- Running `mail` again keeps the archive's Postfix settings.
 
 ## GitHub App (phase 2)
 
@@ -294,9 +423,32 @@ Outgoing invoices as ZUGFeRD/Factur-X hybrid PDFs (PDF/A-3 with the EN 16931 XML
   7 % and exempt lines are supported for later.
 - `resources/fonts/`: DejaVu Sans converted for FPDF (license in `LICENSE-DejaVu.txt`); PDF/A needs embedded fonts.
 - CI (`.github/workflows/einvoice.yml`) writes sample invoices with `bin/einvoice-samples.php` and validates them
-  with [Mustang](https://www.mustangproject.org/) (schema, EN 16931 schematron, PDF/A-3 via veraPDF). The webspace
-  has no Java, so this check runs before every deployment instead of on the server.
+  with [Mustang](https://www.mustangproject.org/) (schema, EN 16931 schematron, PDF/A-3 via veraPDF). The IONOS webspace
+  had no Java, so this check runs before every deployment; on the VPS it could also run server-side later.
 - Nothing is reachable from the web yet: no routes, no database tables.
+
+## MCP server (in preparation)
+
+The cockpit will offer an MCP server at `https://cockpit.steuten-it-solutions.de/mcp` (plan: read-only tools first,
+OAuth with the cockpit's own login and TOTP). The first step is a **probe** that checks whether the host can serve it:
+whether `/.well-known/` reaches the front controller and whether the `Authorization` header reaches PHP. Under
+CGI/FastCGI Apache hides that header; `public/.htaccess` copies it into the environment.
+
+- `GET /.well-known/oauth-protected-resource/mcp` (and without `/mcp`): Protected Resource Metadata (RFC 9728).
+- `POST /mcp` without a token: `401` with `WWW-Authenticate: Bearer resource_metadata="…"`.
+- `POST /mcp` with `Authorization: Bearer <probe_token>`: `200` and the server variable the header arrived in.
+  The token is never echoed. A `401` with `"error": "unauthorized"` although a token was sent means the header
+  does not reach PHP.
+- `/mcp` needs no session and no CSRF token; without an `mcp` section in `config.php` every path answers `404`.
+
+Test after the deployment, with an `mcp` section holding a random `probe_token`:
+
+```bash
+curl -i https://cockpit.steuten-it-solutions.de/.well-known/oauth-protected-resource/mcp
+curl -i -X POST https://cockpit.steuten-it-solutions.de/mcp
+read -rs TOKEN   # paste the probe_token, so it stays out of the shell history
+curl -i -X POST -H "Authorization: Bearer $TOKEN" https://cockpit.steuten-it-solutions.de/mcp
+```
 
 ## Security model
 
