@@ -36,7 +36,7 @@ base() {
     apt-get install -y -q \
         apache2 "php$PHP-fpm" "php$PHP-cli" "php$PHP-curl" "php$PHP-mbstring" "php$PHP-mysql" \
         "php$PHP-xml" "php$PHP-zip" mariadb-server ufw unattended-upgrades certbot python3-certbot-apache \
-        fail2ban python3-systemd rsync
+        fail2ban python3-systemd rsync cron
 
     # Security updates install themselves (Debian's default origins: security archive).
     dpkg-reconfigure -f noninteractive unattended-upgrades
@@ -114,7 +114,8 @@ EOF
         (umask 077 && printf "dsn: mysql:host=localhost;port=3306;dbname=cockpit;charset=utf8mb4\nuser: cockpit\npassword: %s\n" "$password" > "$secret")
     fi
 
-    # Cron every 15 minutes as the deploy user.
+    # Cron every 15 minutes as the deploy user. Minimal Debian images ship without a cron daemon.
+    systemctl enable --now cron
     cat > /etc/cron.d/cockpit <<EOF
 */15 * * * * $USER_NAME [ -f $APP/cron/run.sh ] && /bin/sh $APP/cron/run.sh > /dev/null
 EOF
