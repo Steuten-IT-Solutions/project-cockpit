@@ -91,7 +91,7 @@ base() {
     apt-get update -q
     apt-get install -y -q \
         apache2 "php$PHP-fpm" "php$PHP-cli" "php$PHP-curl" "php$PHP-mbstring" "php$PHP-mysql" \
-        "php$PHP-xml" "php$PHP-zip" mariadb-server ufw unattended-upgrades certbot python3-certbot-apache \
+        "php$PHP-xml" "php$PHP-zip" "php$PHP-gd" mariadb-server ufw unattended-upgrades certbot python3-certbot-apache \
         fail2ban python3-systemd rsync cron
 
     # Security updates install themselves (Debian's default origins: security archive).

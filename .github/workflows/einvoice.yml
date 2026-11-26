@@ -1,0 +1,67 @@
+name: E-Invoice validation
+
+# Generates sample invoices with the cockpit's own code and validates them with
+# Mustang (ZUGFeRD/Factur-X XML schema + EN 16931 schematron + PDF/A-3 via veraPDF).
+# The production webspace has no Java, so this check runs here before code ships.
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  MUSTANG_VERSION: '2.26.0'
+  # SHA-256 of Mustang-CLI-2.26.0.jar from Maven Central (its published SHA-1 is
+  # 8755fc333032f802ad7dcf3930201edfe64014e2).
+  MUSTANG_SHA256: '42d7868cb68264874a7b8cab4c3587b03b23ccc7cd72373da917f66758bb9736'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl, mbstring, openssl, pdo, pdo_mysql, sodium, dom, fileinfo, zip
+          coverage: none
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Download Mustang CLI
+        run: |
+          curl -fsSL -o mustang.jar "https://repo1.maven.org/maven2/org/mustangproject/Mustang-CLI/${MUSTANG_VERSION}/Mustang-CLI-${MUSTANG_VERSION}.jar"
+          echo "${MUSTANG_SHA256}  mustang.jar" | sha256sum -c -
+
+      - name: Generate sample invoices
+        run: php bin/einvoice-samples.php build/einvoice
+
+      - name: Validate
+        run: |
+          status=0
+          for file in build/einvoice/*.pdf build/einvoice/*.xml; do
+            echo "::group::$file"
+            if java -Xmx1G -Dfile.encoding=UTF-8 -jar mustang.jar --no-notices --action validate --source "$file" > "$file.report.xml"; then
+              echo "valid"
+            else
+              echo "::error file=$file::Mustang reports the invoice as invalid"
+              status=1
+            fi
+            cat "$file.report.xml"
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: einvoice-samples
+          path: build/einvoice/
+          retention-days: 14
