@@ -4,6 +4,8 @@ import { bigint, boolean, char, customType, date, datetime, decimal, int, medium
 // in ../migrations; these declarations only describe it for typed queries.
 // Every DATETIME holds UTC as 'YYYY-MM-DD HH:MM:SS' (see server/lib/time.ts).
 // TINYINT(1) columns are declared as boolean: the driver's 0/1 becomes false/true.
+// The ERP's tables (migrations 0013 to 0018) are not declared here: server/lib/erp reads
+// and writes them with plain SQL, because finalizing needs row locks in one transaction.
 
 /** MEDIUMBLOB (screenshots of bug reports), read and written as a Buffer. */
 const mediumblob = customType<{ data: Buffer, driverData: Buffer }>({

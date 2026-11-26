@@ -6,6 +6,7 @@ const LINKS = [
   { to: '/', label: 'Projekte' },
   { to: '/alerts', label: 'Warnungen' },
   { to: '/costs', label: 'Kosten' },
+  { to: '/erp', label: 'ERP' },
 ]
 
 async function logout() {
