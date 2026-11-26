@@ -77,6 +77,8 @@ jobs:
         run: |
           mkdir -p build/config
           cp -R public receiver src templates migrations cron resources vendor build/
+          # The e-invoice engine the Node server calls (app/server/lib/erp/engine.ts).
+          mkdir -p build/bin && cp bin/invoice.php build/bin/
           cp .htaccess composer.json build/
           cp config/config.example.php build/config/
           echo "Deployed by project-cockpit. Marks this directory as a deployment target; see bin/deploy-sftp.sh." > build/.cockpit-deploy
