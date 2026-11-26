@@ -728,9 +728,10 @@ EOF
     # piler runs its own searchd (pilersearch.service) with its own configuration.
     systemctl disable --now manticore > /dev/null 2>&1 || true
 
-    # Build tools, libraries, attachment text extractors, PHP modules of the web interface.
+    # Build tools, libraries, attachment text extractors, PHP modules of the web interface;
+    # sysstat provides mpstat for the CPU load on piler's status page.
     apt-get install -y -q gcc make libc6-dev git libssl-dev libtre-dev libzip-dev libmariadb-dev \
-        libcurl4-openssl-dev zlib1g-dev catdoc unrtf poppler-utils tnef python3 python3-mysqldb \
+        libcurl4-openssl-dev zlib1g-dev catdoc unrtf poppler-utils tnef python3 python3-mysqldb sysstat \
         "php$PHP-cli" "php$PHP-fpm" "php$PHP-mysql" "php$PHP-gd" "php$PHP-ldap" "php$PHP-zip" \
         "php$PHP-curl" "php$PHP-xml" "php$PHP-mbstring" apache2-utils
 
