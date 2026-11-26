@@ -1,0 +1,1354 @@
+[
+    {
+        "name": "f1 valid",
+        "format": 1,
+        "json": "{\"format\":1,\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": null,
+            "gallery_at": null,
+            "sent_at": "2026-10-18 23:59:00"
+        }
+    },
+    {
+        "name": "f1 other org",
+        "format": 1,
+        "json": "{\"kompanie\":\"Someone-Else\\/kompanie-x\",\"format\":1,\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": null
+    },
+    {
+        "name": "f1 org prefix only",
+        "format": 1,
+        "json": "{\"kompanie\":\"Steuten-IT-Solutions-Fake\\/kompanie-x\",\"format\":1,\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": null
+    },
+    {
+        "name": "f1 trailing newline",
+        "format": 1,
+        "json": "{\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-x\\n\",\"format\":1,\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": null
+    },
+    {
+        "name": "f1 nested path",
+        "format": 1,
+        "json": "{\"kompanie\":\"Steuten-IT-Solutions\\/a\\/b\",\"format\":1,\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": null
+    },
+    {
+        "name": "f1 format",
+        "format": 1,
+        "json": "{\"format\":2,\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": null
+    },
+    {
+        "name": "f1 format as string",
+        "format": 1,
+        "json": "{\"format\":\"1\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": null
+    },
+    {
+        "name": "f1 version",
+        "format": 1,
+        "json": "{\"version\":\"1.4\",\"format\":1,\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": null
+    },
+    {
+        "name": "f1 version type",
+        "format": 1,
+        "json": "{\"version\":1.4,\"format\":1,\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": null
+    },
+    {
+        "name": "f1 variant",
+        "format": 1,
+        "json": "{\"variant\":\"docker\",\"format\":1,\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"php\":\"8.3\",\"database\":\"sqlite\",\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": null
+    },
+    {
+        "name": "f1 not an object",
+        "format": 1,
+        "json": "\"not an object\"",
+        "result": null
+    },
+    {
+        "name": "f1 normalised",
+        "format": 1,
+        "json": "{\"php\":\"<b>8<\\/b>\",\"database\":\"oracle\",\"update\":{\"ok\":\"yes\",\"at\":99999999999,\"to\":\"1.0; DROP\"},\"updateCheckOk\":1,\"gallery\":{\"ok\":false,\"at\":\"yesterday\"},\"sent\":1000,\"format\":1,\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "?",
+            "db_driver": "?",
+            "update_ok": 0,
+            "update_at": null,
+            "update_to": null,
+            "update_check_ok": 0,
+            "gallery_ok": 0,
+            "gallery_at": null,
+            "sent_at": null
+        }
+    },
+    {
+        "name": "f1 update as list",
+        "format": 1,
+        "json": "{\"update\":[true,5],\"format\":1,\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 0,
+            "update_at": null,
+            "update_to": null,
+            "update_check_ok": 1,
+            "gallery_ok": null,
+            "gallery_at": null,
+            "sent_at": "2026-10-18 23:59:00"
+        }
+    },
+    {
+        "name": "f1 empty update",
+        "format": 1,
+        "json": "{\"update\":[],\"format\":1,\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"updateCheckOk\":true,\"sent\":1792367940}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 0,
+            "update_at": null,
+            "update_to": null,
+            "update_check_ok": 1,
+            "gallery_ok": null,
+            "gallery_at": null,
+            "sent_at": "2026-10-18 23:59:00"
+        }
+    },
+    {
+        "name": "f2 valid",
+        "format": 2,
+        "json": "{\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 maintenance",
+        "format": 2,
+        "json": "{\"maintenance\":true,\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 1,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 maintenance text",
+        "format": 2,
+        "json": "{\"maintenance\":\"ja\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 many features",
+        "format": 2,
+        "json": "{\"features\":[\"a\",\"aa\",\"aaa\",\"aaaa\",\"aaaaa\",\"aaaaaa\",\"aaaaaaa\",\"aaaaaaaa\",\"aaaaaaaaa\",\"aaaaaaaaaa\",\"aaaaaaaaaaa\",\"aaaaaaaaaaaa\",\"aaaaaaaaaaaaa\",\"aaaaaaaaaaaaaa\"],\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "a",
+                "aa",
+                "aaa",
+                "aaaa",
+                "aaaaa",
+                "aaaaaa",
+                "aaaaaaa",
+                "aaaaaaaa",
+                "aaaaaaaaa",
+                "aaaaaaaaaa",
+                "aaaaaaaaaaa",
+                "aaaaaaaaaaaa",
+                "aaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaa"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 text in a check",
+        "format": 2,
+        "json": "{\"checks\":{\"gallery\":\"Ordner von max@example.org fehlt\"},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 bad check key",
+        "format": 2,
+        "json": "{\"checks\":{\"Gallery Key\":\"ok\"},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 error text instead of code",
+        "format": 2,
+        "json": "{\"errors\":{\"Kalender kaputt\":1},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 count not an int",
+        "format": 2,
+        "json": "{\"errors\":{\"DB_ERROR\":\"3\"},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 checks as list",
+        "format": 2,
+        "json": "{\"checks\":[\"ok\",\"error\"],\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 unknown cron kind",
+        "format": 2,
+        "json": "{\"cron\":{\"kind\":\"systemd\"},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 event without code",
+        "format": 2,
+        "json": "{\"kind\":\"event\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 bad event code",
+        "format": 2,
+        "json": "{\"kind\":\"event\",\"event\":\"kaputt!\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 short installation id",
+        "format": 2,
+        "json": "{\"installation\":\"abc\",\"format\":2,\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 bad nonce",
+        "format": 2,
+        "json": "{\"nonce\":\"x\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995}",
+        "result": null
+    },
+    {
+        "name": "f2 bad key",
+        "format": 2,
+        "json": "{\"key\":\"not-hex\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 other organisation",
+        "format": 2,
+        "json": "{\"kompanie\":\"Fremde\\/kompanie\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 too many errors",
+        "format": 2,
+        "json": "{\"errors\":{\"E1\":1,\"E2\":1,\"E3\":1,\"E4\":1,\"E5\":1,\"E6\":1,\"E7\":1,\"E8\":1,\"E9\":1,\"E10\":1,\"E11\":1,\"E12\":1,\"E13\":1,\"E14\":1,\"E15\":1,\"E16\":1,\"E17\":1,\"E18\":1,\"E19\":1,\"E20\":1,\"E21\":1,\"E22\":1,\"E23\":1,\"E24\":1,\"E25\":1,\"E26\":1,\"E27\":1,\"E28\":1,\"E29\":1,\"E30\":1,\"E31\":1},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 feature with text",
+        "format": 2,
+        "json": "{\"features\":[\"events\",\"max@example.org\"],\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 too many features",
+        "format": 2,
+        "json": "{\"features\":[\"aax\",\"aaax\",\"aaaax\",\"aaaaax\",\"aaaaaax\",\"aaaaaaax\",\"aaaaaaaax\",\"aaaaaaaaax\",\"aaaaaaaaaax\",\"aaaaaaaaaaax\",\"aaaaaaaaaaaax\",\"aaaaaaaaaaaaax\",\"aaaaaaaaaaaaaax\",\"aaaaaaaaaaaaaaax\",\"aaaaaaaaaaaaaaaax\",\"aaaaaaaaaaaaaaaaax\",\"aaaaaaaaaaaaaaaaaax\",\"aaaaaaaaaaaaaaaaaaax\",\"ax\",\"aax\",\"aaax\",\"aaaax\",\"aaaaax\",\"aaaaaax\",\"aaaaaaax\",\"aaaaaaaax\",\"aaaaaaaaax\",\"aaaaaaaaaax\",\"aaaaaaaaaaax\",\"aaaaaaaaaaaax\",\"aaaaaaaaaaaaax\"],\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 numeric error code",
+        "format": 2,
+        "json": "{\"errors\":{\"123\":1},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 numeric long error code",
+        "format": 2,
+        "json": "{\"errors\":{\"9999999999999999999999999\":1},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "9999999999999999999999999": 1
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 features as object",
+        "format": 2,
+        "json": "{\"features\":{\"a\":\"events\"},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 sent as string",
+        "format": 2,
+        "json": "{\"sent\":\"1792367995\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 empty errors",
+        "format": 2,
+        "json": "{\"errors\":[],\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": [],
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 details",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":{\"ics_http_404\":2,\"ics_timeout\":1},\"UPDATE_FAILED\":{\"download_http_503\":1}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": {
+                "CALENDAR_FETCH": {
+                    "ics_http_404": 2,
+                    "ics_timeout": 1
+                },
+                "UPDATE_FAILED": {
+                    "download_http_503": 1
+                }
+            },
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 event with detail",
+        "format": 2,
+        "json": "{\"kind\":\"event\",\"event\":\"UPDATE_FAILED\",\"detail\":\"download_http_503\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "event",
+            "event": "UPDATE_FAILED",
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": "download_http_503",
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 event without detail",
+        "format": 2,
+        "json": "{\"kind\":\"event\",\"event\":\"UPDATE_FAILED\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "event",
+            "event": "UPDATE_FAILED",
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 details empty",
+        "format": 2,
+        "json": "{\"details\":[],\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 details null",
+        "format": 2,
+        "json": "{\"details\":null,\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 60 causes",
+        "format": 2,
+        "json": "{\"details\":{\"SERVER_ERROR\":{\"cause_1\":1,\"cause_2\":1,\"cause_3\":1,\"cause_4\":1,\"cause_5\":1,\"cause_6\":1,\"cause_7\":1,\"cause_8\":1,\"cause_9\":1,\"cause_10\":1,\"cause_11\":1,\"cause_12\":1,\"cause_13\":1,\"cause_14\":1,\"cause_15\":1,\"cause_16\":1,\"cause_17\":1,\"cause_18\":1,\"cause_19\":1,\"cause_20\":1,\"cause_21\":1,\"cause_22\":1,\"cause_23\":1,\"cause_24\":1,\"cause_25\":1,\"cause_26\":1,\"cause_27\":1,\"cause_28\":1,\"cause_29\":1,\"cause_30\":1,\"cause_31\":1,\"cause_32\":1,\"cause_33\":1,\"cause_34\":1,\"cause_35\":1,\"cause_36\":1,\"cause_37\":1,\"cause_38\":1,\"cause_39\":1,\"cause_40\":1,\"cause_41\":1,\"cause_42\":1,\"cause_43\":1,\"cause_44\":1,\"cause_45\":1,\"cause_46\":1,\"cause_47\":1,\"cause_48\":1,\"cause_49\":1,\"cause_50\":1,\"cause_51\":1,\"cause_52\":1,\"cause_53\":1,\"cause_54\":1,\"cause_55\":1,\"cause_56\":1,\"cause_57\":1,\"cause_58\":1,\"cause_59\":1,\"cause_60\":1}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": {
+                "SERVER_ERROR": {
+                    "cause_1": 1,
+                    "cause_2": 1,
+                    "cause_3": 1,
+                    "cause_4": 1,
+                    "cause_5": 1,
+                    "cause_6": 1,
+                    "cause_7": 1,
+                    "cause_8": 1,
+                    "cause_9": 1,
+                    "cause_10": 1,
+                    "cause_11": 1,
+                    "cause_12": 1,
+                    "cause_13": 1,
+                    "cause_14": 1,
+                    "cause_15": 1,
+                    "cause_16": 1,
+                    "cause_17": 1,
+                    "cause_18": 1,
+                    "cause_19": 1,
+                    "cause_20": 1,
+                    "cause_21": 1,
+                    "cause_22": 1,
+                    "cause_23": 1,
+                    "cause_24": 1,
+                    "cause_25": 1,
+                    "cause_26": 1,
+                    "cause_27": 1,
+                    "cause_28": 1,
+                    "cause_29": 1,
+                    "cause_30": 1,
+                    "cause_31": 1,
+                    "cause_32": 1,
+                    "cause_33": 1,
+                    "cause_34": 1,
+                    "cause_35": 1,
+                    "cause_36": 1,
+                    "cause_37": 1,
+                    "cause_38": 1,
+                    "cause_39": 1,
+                    "cause_40": 1,
+                    "cause_41": 1,
+                    "cause_42": 1,
+                    "cause_43": 1,
+                    "cause_44": 1,
+                    "cause_45": 1,
+                    "cause_46": 1,
+                    "cause_47": 1,
+                    "cause_48": 1,
+                    "cause_49": 1,
+                    "cause_50": 1,
+                    "cause_51": 1,
+                    "cause_52": 1,
+                    "cause_53": 1,
+                    "cause_54": 1,
+                    "cause_55": 1,
+                    "cause_56": 1,
+                    "cause_57": 1,
+                    "cause_58": 1,
+                    "cause_59": 1,
+                    "cause_60": 1
+                }
+            },
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f2 details as list",
+        "format": 2,
+        "json": "{\"details\":[\"ics_http_404\"],\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 causes as list",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":[\"ics_http_404\"]},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 causes not an object",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":\"ics_http_404\"},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 bad code",
+        "format": 2,
+        "json": "{\"details\":{\"Kalender\":{\"ics_http_404\":1}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 error text as cause",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":{\"Kalender von max@example.org nicht erreichbar\":1}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 cause with capitals",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":{\"ICS_HTTP_404\":1}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 cause starting with a digit",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":{\"404\":1}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 cause too long",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":{\"abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\":1}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 cause count not an int",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":{\"ics_timeout\":\"1\"}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 count zero",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":{\"ics_timeout\":0}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 count too high",
+        "format": 2,
+        "json": "{\"details\":{\"CALENDAR_FETCH\":{\"ics_timeout\":1000001}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 too many codes",
+        "format": 2,
+        "json": "{\"details\":{\"E1\":{\"other\":1},\"E2\":{\"other\":1},\"E3\":{\"other\":1},\"E4\":{\"other\":1},\"E5\":{\"other\":1},\"E6\":{\"other\":1},\"E7\":{\"other\":1},\"E8\":{\"other\":1},\"E9\":{\"other\":1},\"E10\":{\"other\":1},\"E11\":{\"other\":1},\"E12\":{\"other\":1},\"E13\":{\"other\":1},\"E14\":{\"other\":1},\"E15\":{\"other\":1},\"E16\":{\"other\":1},\"E17\":{\"other\":1},\"E18\":{\"other\":1},\"E19\":{\"other\":1},\"E20\":{\"other\":1},\"E21\":{\"other\":1},\"E22\":{\"other\":1},\"E23\":{\"other\":1},\"E24\":{\"other\":1},\"E25\":{\"other\":1},\"E26\":{\"other\":1},\"E27\":{\"other\":1},\"E28\":{\"other\":1},\"E29\":{\"other\":1},\"E30\":{\"other\":1},\"E31\":{\"other\":1}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 too many causes",
+        "format": 2,
+        "json": "{\"details\":{\"SERVER_ERROR\":{\"cause_1\":1,\"cause_2\":1,\"cause_3\":1,\"cause_4\":1,\"cause_5\":1,\"cause_6\":1,\"cause_7\":1,\"cause_8\":1,\"cause_9\":1,\"cause_10\":1,\"cause_11\":1,\"cause_12\":1,\"cause_13\":1,\"cause_14\":1,\"cause_15\":1,\"cause_16\":1,\"cause_17\":1,\"cause_18\":1,\"cause_19\":1,\"cause_20\":1,\"cause_21\":1,\"cause_22\":1,\"cause_23\":1,\"cause_24\":1,\"cause_25\":1,\"cause_26\":1,\"cause_27\":1,\"cause_28\":1,\"cause_29\":1,\"cause_30\":1,\"cause_31\":1,\"cause_32\":1,\"cause_33\":1,\"cause_34\":1,\"cause_35\":1,\"cause_36\":1,\"cause_37\":1,\"cause_38\":1,\"cause_39\":1,\"cause_40\":1,\"cause_41\":1,\"cause_42\":1,\"cause_43\":1,\"cause_44\":1,\"cause_45\":1,\"cause_46\":1,\"cause_47\":1,\"cause_48\":1,\"cause_49\":1,\"cause_50\":1,\"cause_51\":1,\"cause_52\":1,\"cause_53\":1,\"cause_54\":1,\"cause_55\":1,\"cause_56\":1,\"cause_57\":1,\"cause_58\":1,\"cause_59\":1,\"cause_60\":1,\"cause_61\":1}},\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 detail in a heartbeat",
+        "format": 2,
+        "json": "{\"detail\":\"download_http_503\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 bad event detail",
+        "format": 2,
+        "json": "{\"kind\":\"event\",\"event\":\"UPDATE_FAILED\",\"detail\":\"Download: HTTP 503\",\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f2 event detail not a string",
+        "format": 2,
+        "json": "{\"kind\":\"event\",\"event\":\"UPDATE_FAILED\",\"detail\":503,\"format\":2,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 usage",
+        "format": 2,
+        "json": "{\"format\":3,\"usage\":{\"users\":42,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38},\"areas\":{\"app\":20,\"events\":35,\"login\":31,\"points\":3}},\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": {
+                "users": 42,
+                "d1": 12,
+                "d7": 30,
+                "d30": 38,
+                "areas": {
+                    "app": 20,
+                    "events": 35,
+                    "login": 31,
+                    "points": 3
+                }
+            }
+        }
+    },
+    {
+        "name": "f3 without usage",
+        "format": 2,
+        "json": "{\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f3 usage null",
+        "format": 2,
+        "json": "{\"format\":3,\"usage\":null,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": null
+        }
+    },
+    {
+        "name": "f3 nobody",
+        "format": 2,
+        "json": "{\"format\":3,\"usage\":{\"users\":0,\"active\":{\"d1\":0,\"d7\":0,\"d30\":0},\"areas\":[]},\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": {
+                "users": 0,
+                "d1": 0,
+                "d7": 0,
+                "d30": 0,
+                "areas": []
+            }
+        }
+    },
+    {
+        "name": "f3 later figure",
+        "format": 2,
+        "json": "{\"format\":3,\"usage\":{\"users\":42,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38},\"areas\":{\"app\":20,\"events\":35,\"login\":31,\"points\":3},\"guests\":5},\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": {
+                "users": 42,
+                "d1": 12,
+                "d7": 30,
+                "d30": 38,
+                "areas": {
+                    "app": 20,
+                    "events": 35,
+                    "login": 31,
+                    "points": 3
+                }
+            }
+        }
+    },
+    {
+        "name": "f3 32 areas",
+        "format": 2,
+        "json": "{\"format\":3,\"usage\":{\"areas\":{\"aab\":1,\"aac\":1,\"aad\":1,\"aae\":1,\"aaf\":1,\"aag\":1,\"aah\":1,\"aai\":1,\"aaj\":1,\"aak\":1,\"aal\":1,\"aam\":1,\"aan\":1,\"aao\":1,\"aap\":1,\"aaq\":1,\"aar\":1,\"aas\":1,\"aat\":1,\"aau\":1,\"aav\":1,\"aaw\":1,\"aax\":1,\"aay\":1,\"aaz\":1,\"aba\":1,\"abb\":1,\"abc\":1,\"abd\":1,\"abe\":1,\"abf\":1,\"abg\":1},\"users\":42,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38}},\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": {
+            "kompanie": "Steuten-IT-Solutions/kompanie-musterstadt",
+            "variant": "standalone",
+            "version": "1.4.0.3",
+            "php": "8.3",
+            "db_driver": "sqlite",
+            "update_ok": 1,
+            "update_at": "2026-10-18 23:00:00",
+            "update_to": "1.4.0.3",
+            "update_check_ok": 1,
+            "gallery_ok": 0,
+            "gallery_at": "2026-10-18 23:50:00",
+            "sent_at": "2026-10-18 23:59:55",
+            "installation": "0123456789abcdef0123456789abcdef",
+            "kind": "heartbeat",
+            "event": null,
+            "checks": {
+                "updates": "ok",
+                "gallery": "error",
+                "calendar": "off"
+            },
+            "errors": {
+                "GALLERY_SYNC": 2
+            },
+            "details": [],
+            "detail": null,
+            "cron_kind": "real",
+            "cron_last": "2026-10-18 23:55:00",
+            "features": [
+                "events",
+                "gallery"
+            ],
+            "maintenance": 0,
+            "sent": 1792367995,
+            "nonce": "0011223344556677",
+            "key": null,
+            "usage": {
+                "users": 42,
+                "d1": 12,
+                "d7": 30,
+                "d30": 38,
+                "areas": {
+                    "aab": 1,
+                    "aac": 1,
+                    "aad": 1,
+                    "aae": 1,
+                    "aaf": 1,
+                    "aag": 1,
+                    "aah": 1,
+                    "aai": 1,
+                    "aaj": 1,
+                    "aak": 1,
+                    "aal": 1,
+                    "aam": 1,
+                    "aan": 1,
+                    "aao": 1,
+                    "aap": 1,
+                    "aaq": 1,
+                    "aar": 1,
+                    "aas": 1,
+                    "aat": 1,
+                    "aau": 1,
+                    "aav": 1,
+                    "aaw": 1,
+                    "aax": 1,
+                    "aay": 1,
+                    "aaz": 1,
+                    "aba": 1,
+                    "abb": 1,
+                    "abc": 1,
+                    "abd": 1,
+                    "abe": 1,
+                    "abf": 1,
+                    "abg": 1
+                }
+            }
+        }
+    },
+    {
+        "name": "f3 format 4",
+        "format": 2,
+        "json": "{\"format\":4,\"usage\":{\"users\":42,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38},\"areas\":{\"app\":20,\"events\":35,\"login\":31,\"points\":3}},\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 usage in an event",
+        "format": 2,
+        "json": "{\"kind\":\"event\",\"event\":\"DB_ERROR\",\"usage\":{\"users\":42,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38},\"areas\":{\"app\":20,\"events\":35,\"login\":31,\"points\":3}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 usage as list",
+        "format": 2,
+        "json": "{\"usage\":[1,2,3],\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 users missing",
+        "format": 2,
+        "json": "{\"usage\":{\"active\":{\"d1\":12,\"d7\":30,\"d30\":38},\"areas\":[]},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 active missing",
+        "format": 2,
+        "json": "{\"usage\":{\"users\":42,\"areas\":[]},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 areas missing",
+        "format": 2,
+        "json": "{\"usage\":{\"users\":42,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 negative",
+        "format": 2,
+        "json": "{\"usage\":{\"users\":-1,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38},\"areas\":{\"app\":20,\"events\":35,\"login\":31,\"points\":3}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 too large",
+        "format": 2,
+        "json": "{\"usage\":{\"users\":100001,\"active\":{\"d1\":1,\"d7\":1,\"d30\":1},\"areas\":[]},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 not an int",
+        "format": 2,
+        "json": "{\"usage\":{\"users\":\"42\",\"active\":{\"d1\":12,\"d7\":30,\"d30\":38},\"areas\":{\"app\":20,\"events\":35,\"login\":31,\"points\":3}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 fraction",
+        "format": 2,
+        "json": "{\"usage\":{\"users\":42.5,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38},\"areas\":{\"app\":20,\"events\":35,\"login\":31,\"points\":3}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 d1 above d7",
+        "format": 2,
+        "json": "{\"usage\":{\"active\":{\"d1\":31,\"d7\":30,\"d30\":38},\"users\":42,\"areas\":{\"app\":20,\"events\":35,\"login\":31,\"points\":3}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 d30 above users",
+        "format": 2,
+        "json": "{\"usage\":{\"active\":{\"d1\":1,\"d7\":2,\"d30\":43},\"users\":42,\"areas\":{\"app\":20,\"events\":35,\"login\":31,\"points\":3}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 area with text",
+        "format": 2,
+        "json": "{\"usage\":{\"areas\":{\"Max Mustermann\":1},\"users\":42,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 area count not an int",
+        "format": 2,
+        "json": "{\"usage\":{\"areas\":{\"events\":\"3\"},\"users\":42,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    },
+    {
+        "name": "f3 too many areas",
+        "format": 2,
+        "json": "{\"usage\":{\"areas\":{\"aab\":1,\"aac\":1,\"aad\":1,\"aae\":1,\"aaf\":1,\"aag\":1,\"aah\":1,\"aai\":1,\"aaj\":1,\"aak\":1,\"aal\":1,\"aam\":1,\"aan\":1,\"aao\":1,\"aap\":1,\"aaq\":1,\"aar\":1,\"aas\":1,\"aat\":1,\"aau\":1,\"aav\":1,\"aaw\":1,\"aax\":1,\"aay\":1,\"aaz\":1,\"aba\":1,\"abb\":1,\"abc\":1,\"abd\":1,\"abe\":1,\"abf\":1,\"abg\":1,\"zzz\":1},\"users\":42,\"active\":{\"d1\":12,\"d7\":30,\"d30\":38}},\"format\":3,\"installation\":\"0123456789abcdef0123456789abcdef\",\"kompanie\":\"Steuten-IT-Solutions\\/kompanie-musterstadt\",\"version\":\"1.4.0.3\",\"variant\":\"standalone\",\"php\":\"8.3\",\"database\":\"sqlite\",\"kind\":\"heartbeat\",\"checks\":{\"updates\":\"ok\",\"gallery\":\"error\",\"calendar\":\"off\"},\"errors\":{\"GALLERY_SYNC\":2},\"cron\":{\"kind\":\"real\",\"last\":1792367700},\"features\":[\"events\",\"gallery\"],\"update\":{\"ok\":true,\"at\":1792364400,\"to\":\"1.4.0.3\"},\"updateCheckOk\":true,\"gallery\":{\"ok\":false,\"at\":1792367400},\"sent\":1792367995,\"nonce\":\"0011223344556677\"}",
+        "result": null
+    }
+]

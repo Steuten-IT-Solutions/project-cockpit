@@ -51,6 +51,22 @@ export class UserRepository {
     await this.db.update(users).set({ passwordHash: hash }).where(eq(users.id, userId))
   }
 
+  async count(): Promise<number> {
+    const [row] = await this.db.select({ n: count() }).from(users)
+    return row?.n ?? 0
+  }
+
+  /** The first account with its recovery codes, in one transaction. */
+  async create(username: string, passwordHash: string, totpSecretEnc: string, totpStep: number, recoveryCodeHashes: string[]): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      const [created] = await tx.insert(users).values({ username, passwordHash, totpSecretEnc, totpLastStep: totpStep, createdAt: utc() }).$returningId()
+      for (const codeHash of recoveryCodeHashes) {
+        await tx.insert(recoveryCodes).values({ userId: created!.id, codeHash })
+      }
+      return created!.id
+    })
+  }
+
   async touchLogin(userId: number): Promise<void> {
     await this.db.update(users).set({ lastLoginAt: utc() }).where(eq(users.id, userId))
   }

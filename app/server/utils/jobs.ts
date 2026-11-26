@@ -17,3 +17,8 @@ export function jobContext(event?: H3Event): JobContext {
     migrationsDir: runtime.migrationsDir !== '' ? runtime.migrationsDir : resolve(process.cwd(), '../migrations'),
   }
 }
+
+/** Reads a key file named in the settings (GitHub App, VAPID). */
+export function readKeyFile(path: string): Promise<string> {
+  return import('node:fs/promises').then(fs => fs.readFile(path, 'utf8'))
+}

@@ -46,6 +46,9 @@ export default defineNuxtConfig({
     // false: the 15-minute background jobs do nothing (tests, the rehearsal on a copy of
     // the database, which must not send alert e-mails). The refresh button still works.
     scheduledJobs: true,
+    // Host name of the status subdomain (e.g. status.steuten-it-solutions.de). When set, the
+    // receiver (server/routes/_receiver) answers only requests for that host.
+    receiverHost: '',
   },
 
   // Close to the PHP cockpit's policy (src/Security/Headers.php), with two
@@ -84,6 +87,10 @@ export default defineNuxtConfig({
     },
     // The cockpit has its own CSRF token check (server/middleware/session.ts).
     csrf: false,
+    // Off: it rejects any request body containing "<" or similar (a note like "Preis < 10 €"
+    // got 400), and it reads the body before the receiver can check its signature. Output is
+    // escaped by Vue everywhere (no v-html) and the CSP forbids inline scripts.
+    xssValidator: false,
     rateLimiter: false,
     // Same-origin only: no Access-Control-Allow-Origin header at all.
     corsHandler: false,
@@ -92,6 +99,8 @@ export default defineNuxtConfig({
 
   routeRules: {
     '/**': { headers: { 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store' } },
+    // Bug reports carry a screenshot of up to 2 MB as base64 (the receiver checks its own limits).
+    '/_receiver/**': { security: { requestSizeLimiter: { maxRequestSizeInBytes: 3_100_000, maxUploadFileRequestInBytes: 3_100_000 } } },
   },
 
   build: {

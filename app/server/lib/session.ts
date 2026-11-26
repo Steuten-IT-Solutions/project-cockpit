@@ -12,6 +12,8 @@ export interface SessionData {
   pendingAt?: number
   /** One-time message for the next page. */
   flash?: string
+  /** First account being set up: name, password hash and the encrypted TOTP secret. */
+  setup?: { username: string, passwordHash: string, secretEnc: string }
 }
 
 export interface SessionOptions {

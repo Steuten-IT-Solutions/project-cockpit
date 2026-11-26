@@ -48,12 +48,14 @@ describe('projects', () => {
     expect(await response.json()).toEqual({ message: 'Notiz gespeichert.' })
     response = await client.post('/api/projects/1/note', { body: 'Erste\nNotiz' })
     expect(await response.json()).toEqual({ message: 'Keine Änderung – nichts gespeichert.' })
-    await client.post('/api/projects/1/note', { body: 'Zweite' })
+    // Text that looks like markup is a normal note (stored as typed, shown escaped).
+    response = await client.post('/api/projects/1/note', { body: 'Zweite: Preis < 10 € & <b>fett</b>' })
+    expect(response.status).toBe(200)
     response = await client.post('/api/projects/1/visibility', { hidden: true })
     expect(response.status).toBe(200)
 
     const page = await client.json<ProjectPage>('/api/projects/1')
-    expect(page.history.map(n => n.body)).toEqual(['Zweite', 'Erste\nNotiz'])
+    expect(page.history.map(n => n.body)).toEqual(['Zweite: Preis < 10 € & <b>fett</b>', 'Erste\nNotiz'])
     expect(page.project.hidden).toBe(true)
     expect(page.project.hasNote).toBe(true)
     expect(page.vercel.map(v => v.id)).toEqual(['prj_a'])
