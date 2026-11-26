@@ -137,8 +137,11 @@ forwarding too (`rechnung@` sends as `invoice@`):
    SSL/TLS or 587 STARTTLS, user name = full address) and send to an external mailbox (Gmail:
    *Show original* must say SPF, DKIM and DMARC *PASS*) and to a mail tester. Check the server's
    IP addresses on public blocklists.
-6. **Move:** copy the mails of the old IONOS mailbox, then point the MX record of the domain to
-   `mail.steuten-it-solutions.de` and copy once more. Afterwards remove the IONOS part of SPF and
+6. **Move:** copy the mails of the old IONOS mailbox with `bash server-setup.sh mail-import
+   info@steuten-it-solutions.de` (asks for the IONOS password; all folders, read/unread flags
+   kept). Then point the MX record of the domain to `mail.steuten-it-solutions.de`, wait a day
+   and run `mail-import` once more for mail that still reached IONOS. Mail already on the new
+   server stays; nothing is copied twice. Afterwards remove the IONOS part of SPF and
    raise DMARC to `p=quarantine` once the reports look clean.
 7. **Cockpit alerts:** in `config.php`, set `alerts.from` to `Cockpit <noreply@steuten-it-solutions.de>`
    (an address that does not exist here gets its bounces rejected).
