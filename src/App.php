@@ -188,7 +188,7 @@ final class App
             'statusReceiver' => $this->config->statusReports !== null,
             'phpVersion' => PHP_VERSION,
             'schemaVersion' => (new Migrator($this->pdo, $this->root . '/migrations'))->currentVersion(),
-            // Absolute path for the IONOS cron manager, which only accepts a bare path.
+            // Absolute path for cron: a bare path, because the IONOS cron manager accepts nothing else.
             'cronCommand' => (realpath($this->root) ?: $this->root) . '/cron/run.sh',
             'lastCron' => $lastCron,
             'recoveryLeft' => $this->users->remainingRecoveryCodes($user['id']),

@@ -1,7 +1,8 @@
 # Project Cockpit
 
 Private management cockpit for all Steuten IT Solutions projects, served at
-`https://cockpit.steuten-it-solutions.de` from the IONOS webspace.
+`https://cockpit.steuten-it-solutions.de`. It is moving from the IONOS webspace to an own VPS
+(Strato, Debian 13); see "Own server" below. Until the move is finished, both setups are documented.
 
 The user interface is German; code, comments, commits and documentation are English.
 
@@ -39,7 +40,7 @@ var/          sessions (server only, never deployed)
 Only `public/` and `receiver/` may be reachable from the web. A root `.htaccess` denies everything
 in case the document root is ever pointed at the project root by mistake.
 
-## Server setup (one-time)
+## Server setup on the IONOS webspace (one-time, legacy)
 
 1. **Subdomain:** `cockpit.steuten-it-solutions.de` → folder `cockpit/public`, SSL on.
    Keep `cockpit/` outside any other domain's document root (e.g. at the webspace root next to
@@ -65,6 +66,37 @@ in case the document root is ever pointed at the project root by mistake.
 7. **First user:** open `https://cockpit.steuten-it-solutions.de/setup?token=<setup_token>`,
    create the account, enrol the authenticator app and store the recovery codes.
    Then remove `setup_token` from `config.php`. The page answers 404 as soon as a user exists.
+
+## Own server (Debian 13 VPS)
+
+`bin/server-setup.sh` sets up a fresh Debian 13 server as root: Apache with the build's
+`.htaccess` files (`AllowOverride All`), PHP 8.4 FPM in a pool running as user `cockpit`,
+MariaDB, firewall (22, 80, 443), key-only SSH (only if a key is installed), automatic security
+updates, fail2ban, a cron job every 15 minutes in `/etc/cron.d/cockpit` and a nightly database
+dump to `/var/backups/cockpit/` (one file per weekday), so a file backup of the server holds a
+consistent copy of the database. It is safe to run again.
+
+1. **Server:** order the VPS with the Debian 13 image, log in as root with an SSH key, copy
+   `bin/server-setup.sh` to the server and run `bash server-setup.sh base`.
+2. **Deploy key:** create one locally (`ssh-keygen -t ed25519 -f cockpit-deploy -N ''`), put
+   `cockpit-deploy.pub` into `/srv/cockpit/.ssh/authorized_keys` on the server.
+3. **GitHub secrets:** `SFTP_HOST` (server name or IP), `SFTP_USER` = `cockpit`,
+   `SFTP_PRIVATE_KEY` (content of `cockpit-deploy`), `SFTP_KNOWN_HOSTS` (`ssh-keyscan <host>`;
+   compare the fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the
+   server), `SFTP_TARGET_DIR` = `/srv/cockpit/app`. Remove `SFTP_PASSWORD`. Then run *Deploy*.
+4. **Data from the webspace:** download `config/config.php`, `config/*.pem` and `var/` over
+   SFTP, export the database in phpMyAdmin. On the server put the files into
+   `/srv/cockpit/app/config/`, set the `database` values from `/root/cockpit-database.txt`,
+   `chown cockpit: /srv/cockpit/app/config/* && chmod 600 /srv/cockpit/app/config/*`, and import
+   the dump with `mariadb cockpit < dump.sql`. Keep `app_key` and `vapid.pem` unchanged: a new
+   `app_key` invalidates every TOTP enrolment and recovery code, a new VAPID key every push
+   subscription.
+5. **Switch:** switch off the IONOS cron job, import a fresh dump, point the A/AAAA records of
+   `cockpit.` and `status.` to the server, then run `bash server-setup.sh certs`. The MX records
+   stay unchanged until the mail server is verified.
+6. **Mail:** alert e-mails use PHP `mail()`, which needs a local `sendmail`. The own mail server
+   (Postfix, Dovecot, Rspamd) follows in a separate step, after outbound port 25 and reverse DNS
+   have been checked on the server. Until then alerts by e-mail do not go out; push keeps working.
 
 ## GitHub App (phase 2)
 
