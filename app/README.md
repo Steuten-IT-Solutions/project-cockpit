@@ -2,8 +2,9 @@
 
 The new cockpit, built with [Nuxt](https://nuxt.com) (Vue 3, TypeScript). It replaces the
 PHP cockpit in the repository root on one cutover day; until then the PHP cockpit stays in
-production unchanged and this folder is not deployed. The plan is in the project's planning
-document "Cockpit-Neuentwicklung in Nuxt".
+production unchanged. This app's build is deployed alongside, but serves nothing before the
+cutover (see "Deployment" below). The plan is in the project's planning document
+"Cockpit-Neuentwicklung in Nuxt".
 
 Both cockpits share the same MariaDB database and the same `app_key`, so accounts, TOTP
 enrolments, recovery codes and all data carry over without any conversion.
@@ -93,12 +94,84 @@ The same rules as the PHP cockpit, checked by the integration tests:
 
 ## Status
 
+Everything the PHP cockpit does is rebuilt and tested; the cutover is prepared and waits for the
+owner's go.
+
 | Part | State |
 | --- | --- |
-| Login, logout, sessions, security headers | done |
-| Setup page for the first account | open |
-| Dashboard, projects, Vercel, releases | open |
-| Costs, status reports, alerts, push, bug reports | open |
-| Jobs (today `cron/run.php`) | open |
-| Receivers on the status subdomain | open |
-| Server setup (systemd, Apache) and cutover | open |
+| Login, logout, sessions, security headers, setup page for the first account | done |
+| Dashboard, projects, Vercel, releases, costs, installations, alerts, push | done |
+| Background jobs every 15 minutes (today `cron/run.php`) and the refresh button | done |
+| Receivers on the status subdomain (status reports, bug reports, GitHub webhook) | done |
+| Deployment, server setup (systemd, Apache), rehearsal, cutover and rollback | done, not yet run on the server |
+
+Known, accepted differences from the PHP cockpit:
+
+- JSON numbers like `5.0` count as whole numbers in JavaScript; PHP treats them as decimals and
+  refused them where a whole number is required. The company apps never send `5.0`.
+- The cron status shows `node 24.x` instead of the PHP version.
+- The MCP probe (`/mcp`, `/.well-known/oauth-protected-resource`) is not carried over: it only
+  tested the old webspace. The MCP server itself will be built in this app.
+
+## Deployment
+
+A merge to `main` runs `.github/workflows/deploy.yml`: CI of both cockpits, then the PHP files as
+before and this app's build (`.output`, Node server with all dependencies) to
+`/srv/cockpit/app/node` on the VPS (`bin/deploy-sftp.sh`). The new build is uploaded next to the
+running one and swapped in with two renames, so a running server never sees half of each. Then
+the file `.node-deployed` is rewritten, and systemd restarts the Node services
+(`cockpit-app-deploy.path`). The previous build stays in `node-old/`.
+
+On the server (all steps as root, `cockpit-setup <step>` loads the current `bin/server-setup.sh`
+from `main`):
+
+| Step | What it does |
+| --- | --- |
+| `cockpit-setup node` | Installs Node.js 24 (official build, checksum pinned), writes `/etc/cockpit/app.env` from `config/config.php` (`bin/config-to-env.php`) and the systemd units. Starts nothing before the cutover. Run it again after every change of `config.php`; a running cockpit then restarts with the new values. |
+| `cockpit-setup rehearsal` | Copies the database to `cockpit_rehearsal` and starts the Node cockpit on it at `127.0.0.1:3001`, without background jobs, e-mails, push, issues or receiver. Open it through an SSH tunnel (the step prints the command). |
+| `cockpit-setup rehearsal-stop` | Stops the rehearsal and drops the copy. |
+| `cockpit-setup cutover` | Switches both host names to the Node cockpit (details below). |
+| `cockpit-setup rollback` | Back to the PHP cockpit: its Apache sites and cron job again, Node stopped. |
+
+`config/config.php` stays the only place for settings, also after the cutover: the PHP cockpit
+remains deployed as the way back, and both read the same values, database and key files.
+
+### What the cutover does
+
+1. Writes `app.env` from `config.php`, starts `cockpit-app` (Node on `127.0.0.1:3000`) and checks
+   that the login page answers. If not, nothing is switched.
+2. Notes the enabled Apache sites of `cockpit.` and `status.` (the PHP ones, written by `base` and
+   certbot) in `/etc/cockpit/php-sites`, disables them and enables `cockpit-node`:
+   - `cockpit.steuten-it-solutions.de` → Node; `/_receiver` is blocked there.
+   - `status.steuten-it-solutions.de` → Node under `/_receiver/` (the receiver answers only this
+     host name); at most 3.2 MB per request.
+   - Port 80 redirects to HTTPS, except Let's Encrypt's challenges. TLS uses the existing
+     certificate.
+   An invalid configuration switches back at once.
+3. Checks through Apache that the cockpit page comes from Nuxt, the status receiver answers and
+   `/_receiver` is blocked on the cockpit host. If not, it switches back to PHP.
+4. Turns the PHP cron job off (`/etc/cron.d/cockpit`, saved for the rollback) and enables
+   `cockpit-app` at boot. The jobs now run inside Node every 15 minutes, with the same database
+   lock as before.
+5. Tests the certificate renewal (`certbot renew --dry-run`); a failure is only a warning.
+
+### Cutover checklist
+
+Before:
+
+1. Merge the pull request; wait until the deploy workflow is green.
+2. `cockpit-setup node`, then `cockpit-setup rehearsal`.
+3. On the PC: `ssh -N -L 3001:127.0.0.1:3001 root@<server>` and open `http://localhost:3001`.
+   Log in (same password and code), look at the overview, a project, costs, alerts and an
+   installation, press "Aktualisieren", save a note. Everything touches only the copy.
+4. `cockpit-setup rehearsal-stop`.
+
+Cutover (about 5 minutes, best when no release is running):
+
+5. `cockpit-setup cutover`.
+6. Log in at `https://cockpit.steuten-it-solutions.de` (the old session ends; log in again).
+7. Within an hour: the overview shows new heartbeats of the company apps, and the cron status a
+   run by `node`. `journalctl -u cockpit-app -f` shows the server's log.
+8. On the phone: open the cockpit once and check that push still works (page "Warnungen").
+
+If something is wrong: `cockpit-setup rollback`, and the PHP cockpit is back as before.

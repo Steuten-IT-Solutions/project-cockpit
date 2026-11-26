@@ -19,6 +19,17 @@
 #                                same address; IMPORT_SEPARATOR, its folder separator, default /);
 #                                asks for its password
 #
+# The new cockpit in Nuxt (app/), see app/README.md, "Cutover":
+#   bin/server-setup.sh node     Node.js, /etc/cockpit/app.env from config.php, systemd units;
+#                                starts nothing. Run again after every change of config.php.
+#   bin/server-setup.sh rehearsal
+#                                copy of the database, Node cockpit on 127.0.0.1:3001 for a test
+#                                over an SSH tunnel; no background jobs, no e-mails, no issues
+#   bin/server-setup.sh rehearsal-stop
+#                                stop it and drop the copy
+#   bin/server-setup.sh cutover  switch both host names to the Node cockpit and the PHP cron off
+#   bin/server-setup.sh rollback back to the PHP cockpit (keeps the Node build for later)
+#
 # On the server, "cockpit-setup <step>" loads the current version from GitHub (main) and runs it.
 # The script is idempotent: running it again keeps existing data, passwords and keys.
 # See README.md, "Own server" and "Mail server".
@@ -59,6 +70,15 @@ USER_NAME="cockpit"
 BASE="/srv/cockpit"
 APP="$BASE/app"
 SOCKET="/run/php/php$PHP-fpm-cockpit.sock"
+# Node.js for the Nuxt cockpit: the official build, checked against the SHA-256 that
+# https://nodejs.org/dist/v24.22.3/SHASUMS256.txt lists (compared on 2026-11-26).
+NODE_VERSION="24.22.3"
+NODE_SHA256="4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb"
+NODE_DIR="/opt/node-v$NODE_VERSION-linux-x64"
+ETC="/etc/cockpit"
+APP_PORT=3000
+REHEARSAL_PORT=3001
+REHEARSAL_DB="cockpit_rehearsal"
 
 die() { echo "server-setup: $*" >&2; exit 1; }
 
@@ -151,9 +171,13 @@ EOF
 
     a2enmod -q rewrite headers proxy_fcgi setenvif ssl > /dev/null
     a2dissite -q 000-default > /dev/null || true
-    vhost "$COCKPIT_HOST" "$APP/public" > /etc/apache2/sites-available/cockpit.conf
-    vhost "$STATUS_HOST" "$APP/receiver" > /etc/apache2/sites-available/cockpit-status.conf
-    a2ensite -q cockpit cockpit-status > /dev/null
+    # After the cutover to the Nuxt cockpit its site serves both host names (step "cutover");
+    # the PHP sites stay as they are for "rollback".
+    if [ ! -e /etc/apache2/sites-enabled/cockpit-node.conf ]; then
+        vhost "$COCKPIT_HOST" "$APP/public" > /etc/apache2/sites-available/cockpit.conf
+        vhost "$STATUS_HOST" "$APP/receiver" > /etc/apache2/sites-available/cockpit-status.conf
+        a2ensite -q cockpit cockpit-status > /dev/null
+    fi
     apache2ctl configtest
     systemctl reload apache2
 
@@ -172,9 +196,11 @@ EOF
 
     # Cron every 15 minutes as the deploy user. Minimal Debian images ship without a cron daemon.
     systemctl enable --now cron
-    cat > /etc/cron.d/cockpit <<EOF
+    if [ ! -e /etc/apache2/sites-enabled/cockpit-node.conf ]; then
+        cat > /etc/cron.d/cockpit <<EOF
 */15 * * * * $USER_NAME [ -f $APP/cron/run.sh ] && /bin/sh $APP/cron/run.sh > /dev/null
 EOF
+    fi
 
     # Nightly database dump, one file per weekday (kept 7 days). Any file backup of the server
     # (e.g. STRATO Cyber Protect) then holds a consistent copy of the database.
@@ -1009,6 +1035,380 @@ EOF
     /usr/local/sbin/cockpit-archive-backup
 }
 
+# ---------------------------------------------------------------------------------------------
+# The Nuxt cockpit (app/). The deployment puts its build into $APP/node (bin/deploy-sftp.sh) and
+# then rewrites $APP/.node-deployed, which restarts the running services (cockpit-app-deploy.path).
+# Both cockpits use the same database, app_key and key files; config/config.php stays the only
+# place for settings: /etc/cockpit/app.env is generated from it (bin/config-to-env.php).
+
+# bin/config-to-env.php next to this script, or the current version from main.
+converter() {
+    local here
+    here="$(cd "$(dirname "$0")" && pwd)"
+    if [ -f "$here/config-to-env.php" ]; then
+        echo "$here/config-to-env.php"
+        return
+    fi
+    curl -fsSL --proto '=https' \
+        "https://raw.githubusercontent.com/Steuten-IT-Solutions/project-cockpit/main/bin/config-to-env.php" \
+        -o /root/config-to-env.php
+    php -l /root/config-to-env.php > /dev/null
+    echo /root/config-to-env.php
+}
+
+# Writes an environment file atomically, readable by root only (systemd reads it as root).
+write_env() {
+    local target="$1" tmp
+    shift
+    tmp="$(mktemp "$ETC/.env.XXXXXX")"
+    if ! php "$(converter)" "$APP/config/config.php" "$@" > "$tmp"; then
+        rm -f "$tmp"
+        die "could not convert $APP/config/config.php"
+    fi
+    chmod 600 "$tmp"
+    mv "$tmp" "$target"
+}
+
+node_install() {
+    [ "$(uname -m)" = "x86_64" ] || die "the pinned Node.js build is for x86_64, this is $(uname -m)"
+    if [ -x "$NODE_DIR/bin/node" ]; then
+        return
+    fi
+    local tmp
+    tmp="$(mktemp -d)"
+    curl -fsSL --proto '=https' "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \
+        -o "$tmp/node.tar.xz"
+    echo "$NODE_SHA256  $tmp/node.tar.xz" | sha256sum -c --quiet - || { rm -rf "$tmp"; die "Node.js download has the wrong checksum"; }
+    tar -xJf "$tmp/node.tar.xz" -C /opt
+    chown -R root:root "$NODE_DIR"
+    rm -rf "$tmp"
+}
+
+# One systemd service for the cockpit, one for the rehearsal; both run as the deploy user.
+# Not NoNewPrivileges: sendmail (alert e-mails) hands mail to Postfix through the setgid postdrop.
+node_unit() {
+    local description="$1" env="$2"
+    cat <<EOF
+# Written by server-setup.sh (step "node").
+[Unit]
+Description=$description
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User=$USER_NAME
+Group=$USER_NAME
+WorkingDirectory=$APP/node
+EnvironmentFile=$env
+ExecStart=$NODE_DIR/bin/node $APP/node/server/index.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+node_setup() {
+    [ -f "$APP/config/config.php" ] || die "$APP/config/config.php is missing"
+    command -v php > /dev/null || die "php is missing"
+    node_install
+    install -d -m 700 "$ETC"
+    write_env "$ETC/app.env"
+
+    node_unit "Cockpit (Nuxt)" "$ETC/app.env" > /etc/systemd/system/cockpit-app.service
+    node_unit "Cockpit rehearsal on a copy of the database" "$ETC/rehearsal.env" > /etc/systemd/system/cockpit-rehearsal.service
+    # A deployment rewrites $APP/.node-deployed last; then running services load the new build.
+    [ -f "$APP/.node-deployed" ] || install -o "$USER_NAME" -g "$USER_NAME" -m 644 /dev/null "$APP/.node-deployed"
+    cat > /etc/systemd/system/cockpit-app-deploy.path <<EOF
+# Written by server-setup.sh (step "node").
+[Unit]
+Description=Restart the Nuxt cockpit after a deployment
+
+[Path]
+PathChanged=$APP/.node-deployed
+Unit=cockpit-app-deploy.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    cat > /etc/systemd/system/cockpit-app-deploy.service <<'EOF'
+# Written by server-setup.sh (step "node").
+[Unit]
+Description=Restart the Nuxt cockpit after a deployment
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl try-restart cockpit-app.service cockpit-rehearsal.service
+EOF
+    systemctl daemon-reload
+    systemctl enable --now cockpit-app-deploy.path > /dev/null
+    # After a change of config.php: a running cockpit takes over the new values.
+    systemctl try-restart cockpit-app.service cockpit-rehearsal.service
+
+    local state="not running (starts with the cutover)"
+    systemctl is-active --quiet cockpit-app.service && state="running, restarted with the new settings"
+    [ -f "$APP/node/server/index.mjs" ] || state="$state; no build in $APP/node yet: deploy main first"
+    echo "Node.js $NODE_VERSION in $NODE_DIR, settings in $ETC/app.env, cockpit-app: $state."
+}
+
+# Waits up to 30 s for an HTTP status from a URL; prints the status (000: no answer).
+wait_for() {
+    local url="$1" code="000"
+    shift
+    for _ in $(seq 30); do
+        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$@" "$url" || true)"
+        [ "$code" != "000" ] && break
+        sleep 1
+    done
+    echo "$code"
+}
+
+# The value of "dbname" and "user" from config.php, for the copy of the database.
+config_value() {
+    php -r '$c = require $argv[1]; $d = $c["database"] ?? [];
+        if ($argv[2] === "user") { echo $d["user"] ?? ""; exit; }
+        echo preg_match("/dbname=([A-Za-z0-9_]+)/", $d["dsn"] ?? "", $m) ? $m[1] : "";' "$APP/config/config.php" "$1"
+}
+
+rehearsal() {
+    [ -f "$ETC/app.env" ] || die "run the step \"node\" first"
+    [ -f "$APP/node/server/index.mjs" ] || die "no build in $APP/node: deploy main first"
+    local db user
+    db="$(config_value dbname)"
+    user="$(config_value user)"
+    [ -n "$db" ] && [ -n "$user" ] || die "database.dsn or database.user missing in config.php"
+    [ "$db" != "$REHEARSAL_DB" ] || die "the cockpit's database is already called $REHEARSAL_DB"
+    [[ "$user" =~ ^[A-Za-z0-9_]+$ ]] || die "unexpected database user name $user"
+
+    systemctl stop cockpit-rehearsal.service 2> /dev/null || true
+    echo "Copying database $db to $REHEARSAL_DB ..."
+    mariadb <<EOF
+DROP DATABASE IF EXISTS $REHEARSAL_DB;
+CREATE DATABASE $REHEARSAL_DB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+GRANT ALL PRIVILEGES ON $REHEARSAL_DB.* TO '$user'@'localhost';
+EOF
+    mariadb-dump --single-transaction --routines "$db" | mariadb "$REHEARSAL_DB"
+
+    # The copy must not reach the outside: no jobs every 15 minutes, no alert e-mails or push,
+    # no issues from bug reports, no receiver. GitHub and Vercel are only read (refresh button).
+    write_env "$ETC/rehearsal.env" --database="$REHEARSAL_DB" \
+        --set=PORT="$REHEARSAL_PORT" --set=NUXT_SCHEDULED_JOBS=false --set=NUXT_SECURE_COOKIES=false \
+        --set=NUXT_BASE_URL="http://localhost:$REHEARSAL_PORT" --set=NUXT_SETUP_TOKEN= \
+        --set=NUXT_ALERTS_EMAIL= --set=NUXT_PUSH_PRIVATE_KEY_FILE= --set=NUXT_BUG_REPORTS_REPO= \
+        --set=NUXT_RELEASES_WEBHOOK_SECRET= --set=NUXT_RECEIVER_HOST=rehearsal.invalid
+    systemctl start cockpit-rehearsal.service
+
+    local login receiver
+    login="$(wait_for "http://127.0.0.1:$REHEARSAL_PORT/login")"
+    receiver="$(wait_for "http://127.0.0.1:$REHEARSAL_PORT/_receiver/" -X POST -H 'Host: rehearsal.invalid' --data '{}')"
+    # 400: the receiver refused the empty report (404 without the status_reports section).
+    if [ "$login" != "200" ] || { [ "$receiver" != "400" ] && [ "$receiver" != "404" ]; }; then
+        journalctl -u cockpit-rehearsal.service -n 30 --no-pager || true
+        die "the rehearsal does not answer as expected (login page: $login, receiver: $receiver)"
+    fi
+    local ip
+    ip="$(hostname -I | awk '{print $1}')"
+    cat <<EOF
+
+The rehearsal runs on this server at 127.0.0.1:$REHEARSAL_PORT with a copy of the database.
+On your PC (Windows: CMD), keep this open while testing:
+    ssh -N -L $REHEARSAL_PORT:127.0.0.1:$REHEARSAL_PORT root@$ip
+then open http://localhost:$REHEARSAL_PORT and log in as usual (same password and code).
+Changes there touch only the copy. Afterwards: cockpit-setup rehearsal-stop
+EOF
+}
+
+rehearsal_stop() {
+    systemctl stop cockpit-rehearsal.service 2> /dev/null || true
+    mariadb -e "DROP DATABASE IF EXISTS $REHEARSAL_DB;"
+    rm -f "$ETC/rehearsal.env"
+    echo "Rehearsal stopped, $REHEARSAL_DB dropped."
+}
+
+# Enabled Apache sites (names) that serve one of the cockpit's host names, except our own.
+cockpit_sites() {
+    local f
+    for f in /etc/apache2/sites-enabled/*.conf; do
+        [ -e "$f" ] || continue
+        [ "$(basename "$f" .conf)" = "cockpit-node" ] && continue
+        if awk -v a="$COCKPIT_HOST" -v b="$STATUS_HOST" '
+            tolower($1) ~ /^server(name|alias)$/ { for (i = 2; i <= NF; i++) if (tolower($i) == a || tolower($i) == b) found = 1 }
+            END { exit !found }' "$f"; then
+            basename "$f" .conf
+        fi
+    done
+}
+
+# The certificate and key that an enabled site uses for a host name (certbot wrote them).
+cert_line() {
+    local host="$1" directive="$2" f
+    for f in /etc/apache2/sites-enabled/*.conf; do
+        [ -e "$f" ] || continue
+        awk -v h="$host" -v d="$directive" '
+            tolower($1) == "<virtualhost" { name = ""; file = "" }
+            tolower($1) == "servername" { name = tolower($2) }
+            $1 == d { file = $2 }
+            tolower($1) == "</virtualhost>" { if (name == h && file != "") { print file; exit } }' "$f"
+    done | head -n 1
+}
+
+# The Apache site of the Nuxt cockpit: TLS ends here, Node gets plain HTTP on localhost.
+# Apache appends the client's address to X-Forwarded-For; the app trusts only that last entry.
+node_site() {
+    local cc ck sc sk options=""
+    cc="$(cert_line "$COCKPIT_HOST" SSLCertificateFile)"
+    ck="$(cert_line "$COCKPIT_HOST" SSLCertificateKeyFile)"
+    sc="$(cert_line "$STATUS_HOST" SSLCertificateFile)"
+    sk="$(cert_line "$STATUS_HOST" SSLCertificateKeyFile)"
+    [ -n "$cc" ] && [ -n "$ck" ] && [ -n "$sc" ] && [ -n "$sk" ] || die "no TLS certificate found for $COCKPIT_HOST and $STATUS_HOST (step \"certs\")"
+    [ -f /etc/letsencrypt/options-ssl-apache.conf ] && options="Include /etc/letsencrypt/options-ssl-apache.conf"
+    cat <<EOF
+# Written by server-setup.sh cutover: both host names go to the Nuxt cockpit on port $APP_PORT.
+# "cockpit-setup rollback" switches back to the PHP cockpit's sites.
+<VirtualHost *:80>
+    ServerName $COCKPIT_HOST
+    ServerAlias $STATUS_HOST
+    RewriteEngine on
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
+    ErrorLog \${APACHE_LOG_DIR}/$COCKPIT_HOST-error.log
+    CustomLog \${APACHE_LOG_DIR}/$COCKPIT_HOST-access.log combined
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName $COCKPIT_HOST
+    SSLEngine on
+    SSLCertificateFile $cc
+    SSLCertificateKeyFile $ck
+    $options
+    ProxyRequests Off
+    ProxyPreserveHost On
+    ProxyTimeout 120
+    RequestHeader set X-Forwarded-Proto "https"
+    LimitRequestBody 10000000
+    # The receiver belongs to the status host only.
+    <Location "/_receiver">
+        Require all denied
+    </Location>
+    ProxyPass "/" "http://127.0.0.1:$APP_PORT/"
+    ProxyPassReverse "/" "http://127.0.0.1:$APP_PORT/"
+    ErrorLog \${APACHE_LOG_DIR}/$COCKPIT_HOST-error.log
+    CustomLog \${APACHE_LOG_DIR}/$COCKPIT_HOST-access.log combined
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName $STATUS_HOST
+    SSLEngine on
+    SSLCertificateFile $sc
+    SSLCertificateKeyFile $sk
+    $options
+    ProxyRequests Off
+    ProxyPreserveHost On
+    ProxyTimeout 120
+    # Bug reports with a screenshot are up to 3 MB; the receiver checks its own limits.
+    LimitRequestBody 3200000
+    ProxyPass "/" "http://127.0.0.1:$APP_PORT/_receiver/"
+    ProxyPassReverse "/" "http://127.0.0.1:$APP_PORT/_receiver/"
+    ErrorLog \${APACHE_LOG_DIR}/$STATUS_HOST-error.log
+    CustomLog \${APACHE_LOG_DIR}/$STATUS_HOST-access.log combined
+</VirtualHost>
+EOF
+}
+
+# Switches Apache to the PHP sites listed in $ETC/php-sites (the state before the cutover).
+php_sites_back() {
+    a2dissite -q cockpit-node > /dev/null 2>&1 || true
+    local site
+    while read -r site; do
+        [ -n "$site" ] && a2ensite -q "$site" > /dev/null
+    done < "$ETC/php-sites"
+}
+
+cutover() {
+    [ -f "$APP/node/server/index.mjs" ] || die "no build in $APP/node: merge and deploy first"
+    [ -f /etc/systemd/system/cockpit-app.service ] || die "run the step \"node\" first"
+    [ -e /etc/apache2/sites-enabled/cockpit-node.conf ] && die "already switched; \"cockpit-setup rollback\" goes back"
+
+    echo "1/5 Settings from config.php, starting the Node cockpit ..."
+    write_env "$ETC/app.env"
+    systemctl restart cockpit-app.service
+    local code
+    code="$(wait_for "http://127.0.0.1:$APP_PORT/login")"
+    if [ "$code" != "200" ]; then
+        journalctl -u cockpit-app.service -n 30 --no-pager || true
+        systemctl stop cockpit-app.service
+        die "the Node cockpit does not start (login page: $code). Nothing was switched."
+    fi
+
+    echo "2/5 Switching Apache ..."
+    cockpit_sites > "$ETC/php-sites"
+    [ -s "$ETC/php-sites" ] || die "no enabled Apache site for $COCKPIT_HOST found"
+    a2enmod -q proxy proxy_http headers rewrite ssl > /dev/null
+    node_site > /etc/apache2/sites-available/cockpit-node.conf
+    local site
+    while read -r site; do a2dissite -q "$site" > /dev/null; done < "$ETC/php-sites"
+    a2ensite -q cockpit-node > /dev/null
+    if ! apache2ctl configtest; then
+        php_sites_back
+        systemctl stop cockpit-app.service
+        die "the Apache configuration is invalid; the PHP sites are enabled again"
+    fi
+    systemctl reload apache2
+
+    echo "3/5 Checking both host names through Apache ..."
+    local page status blocked
+    page="$(curl -s --max-time 10 --resolve "$COCKPIT_HOST:443:127.0.0.1" "https://$COCKPIT_HOST/login" || true)"
+    status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --resolve "$STATUS_HOST:443:127.0.0.1" \
+        -X POST --data '{}' "https://$STATUS_HOST/" || true)"
+    blocked="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --resolve "$COCKPIT_HOST:443:127.0.0.1" \
+        -X POST --data '{}' "https://$COCKPIT_HOST/_receiver/" || true)"
+    if [[ "$page" != *__nuxt* ]] || { [ "$status" != "400" ] && [ "$status" != "404" ]; } || [ "$blocked" != "403" ]; then
+        php_sites_back
+        systemctl reload apache2
+        systemctl stop cockpit-app.service
+        die "check failed (cockpit page from Nuxt: $([[ "$page" == *__nuxt* ]] && echo yes || echo no), status receiver: $status, /_receiver on the cockpit host: $blocked); back to PHP"
+    fi
+
+    echo "4/5 PHP cron off, Node cockpit on at boot ..."
+    if [ -f /etc/cron.d/cockpit ] && [ ! -f "$ETC/cron.d-cockpit" ]; then
+        cp /etc/cron.d/cockpit "$ETC/cron.d-cockpit"
+    fi
+    echo "# The PHP cron job is off since the cutover to the Nuxt cockpit (its jobs run inside it)." > /etc/cron.d/cockpit
+    systemctl enable cockpit-app.service > /dev/null
+
+    echo "5/5 Test renewal of the certificate (Let's Encrypt staging) ..."
+    certbot renew --dry-run --cert-name "$(basename "$(dirname "$(cert_line "$COCKPIT_HOST" SSLCertificateFile)")")" \
+        || echo "WARNING: the test renewal failed; the certificate is still valid. Check 'certbot renew --dry-run'." >&2
+
+    cat <<EOF
+
+Done: https://$COCKPIT_HOST and https://$STATUS_HOST are served by the Nuxt cockpit.
+Back to the PHP cockpit at any time: cockpit-setup rollback
+EOF
+}
+
+rollback() {
+    [ -f "$ETC/php-sites" ] || die "no cutover recorded ($ETC/php-sites missing)"
+    php_sites_back
+    apache2ctl configtest
+    systemctl reload apache2
+    if [ -f "$ETC/cron.d-cockpit" ]; then
+        cp "$ETC/cron.d-cockpit" /etc/cron.d/cockpit
+        rm -f "$ETC/cron.d-cockpit"
+    fi
+    systemctl disable --now cockpit-app.service > /dev/null 2>&1 || true
+    echo "Back on the PHP cockpit: its Apache sites and cron job are active, the Node cockpit is stopped."
+}
+
 # crypt() hash for piler's user table (SHA-512, as piler itself writes).
 php_crypt() {
     php -r 'echo crypt($argv[1], "\$6\$rounds=5000\$" . bin2hex(random_bytes(8)) . "\$");' "$1"
@@ -1022,5 +1422,10 @@ case "${1:-}" in
     mail-import) mail_import "${2:-}" ;;
     backup) backup "${2:-}" ;;
     archive) archive ;;
-    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive" ;;
+    node) node_setup ;;
+    rehearsal) rehearsal ;;
+    rehearsal-stop) rehearsal_stop ;;
+    cutover) cutover ;;
+    rollback) rollback ;;
+    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback" ;;
 esac
