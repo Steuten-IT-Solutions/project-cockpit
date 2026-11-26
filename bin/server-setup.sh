@@ -36,7 +36,7 @@ base() {
     apt-get install -y -q \
         apache2 "php$PHP-fpm" "php$PHP-cli" "php$PHP-curl" "php$PHP-mbstring" "php$PHP-mysql" \
         "php$PHP-xml" "php$PHP-zip" mariadb-server ufw unattended-upgrades certbot python3-certbot-apache \
-        fail2ban rsync
+        fail2ban python3-systemd rsync
 
     # Security updates install themselves (Debian's default origins: security archive).
     dpkg-reconfigure -f noninteractive unattended-upgrades
@@ -58,6 +58,14 @@ EOF
     else
         echo "server-setup: no authorized_keys found; password login left on. Add a key and run again." >&2
     fi
+
+    # fail2ban reads SSH logins from the journal; Debian 13 has no /var/log/auth.log by default.
+    cat > /etc/fail2ban/jail.d/cockpit.local <<'EOF'
+[sshd]
+enabled = true
+backend = systemd
+EOF
+    systemctl restart fail2ban
 
     # Deploy user: SFTP with a key, owns the application.
     if ! id "$USER_NAME" > /dev/null 2>&1; then
