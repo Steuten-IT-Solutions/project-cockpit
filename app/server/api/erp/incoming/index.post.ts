@@ -1,6 +1,5 @@
 import { idField, incomingFromBody, projectSharesFromBody } from '../../../lib/erp/forms'
 import { IncomingRepository, type ManualEntry } from '../../../lib/erp/incoming'
-import { InvoiceError } from '../../../lib/erp/invoices'
 import { MailFileRepository } from '../../../lib/erp/mailbox'
 import { INCOMING_CATEGORIES } from '#shared/lib/erp'
 
@@ -37,14 +36,10 @@ export default defineEventHandler(async (event) => {
   const mailFiles = new MailFileRepository(erp.pool)
   const mailFileId = idField(body.mailFileId)
   const result = await erpAction(async () => {
+    // A refused entry leaves the mailbox file waiting, so a typo (e.g. the number of the
+    // original invoice on a credit note) never makes it disappear.
     try {
       return await new IncomingRepository(erp.pool).upload({ name: file.filename ?? 'rechnung', data: file.data }, manual, category, projects, erp.engine, erp.now())
-    }
-    catch (e) {
-      // The invoice is in the books already (the same file, or this supplier's invoice
-      // number from another file): the mailbox file need not wait any longer.
-      if (e instanceof InvoiceError && e.message.includes('bereits erfasst') && typeof mailFileId === 'number') await mailFiles.ignore(mailFileId, erp.now(), e.message)
-      throw e
     }
     finally {
       // A mailbox file with the same content as an entered invoice no longer waits.
