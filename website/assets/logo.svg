@@ -1,1 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><!-- Placeholder until the company logo is added. --><rect width="64" height="64" rx="14" fill="#0b5cad"/><text x="32" y="42" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="700" fill="#fff">S</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1120" height="276" viewBox="205 238 1120 276" role="img" aria-labelledby="title desc">
+  <title id="title">Steuten IT Solutions</title>
+  <desc id="desc">Geometrisch rekonstruierte Wortmarke in Anthrazit mit grauen Abstufungen im S und transparentem Hintergrund. Alle Buchstaben sind Vektorpfade.</desc>
+  <defs>
+    <linearGradient id="dark" x1="230" y1="260" x2="420" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#20282b"/>
+      <stop offset="1" stop-color="#192124"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="233" y1="300" x2="341" y2="368" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#454b4e"/>
+      <stop offset="0.5" stop-color="#5b6063"/>
+      <stop offset="1" stop-color="#555b5e"/>
+    </linearGradient>
+    <linearGradient id="lower" x1="288" y1="416" x2="413" y2="383" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1e2629"/>
+      <stop offset="0.55" stop-color="#242c2f"/>
+      <stop offset="1" stop-color="#53595c"/>
+    </linearGradient>
+    <path id="letter-t" d="M435 262H473V300H518V328H473V380C473 392 479 398 491 398H518V427H484C452 427 435 410 435 379Z"/>
+    <path id="letter-e" fill-rule="evenodd" d="M586 300H644C678 300 695 317 695 350V376H569V380C569 392 575 398 587 398H691L684 427H586C550 427 531 408 531 374V353C531 319 550 300 586 300ZM584 328C574 328 569 334 569 347H658C658 334 653 328 643 328Z"/>
+  </defs>
+  <g id="monogram">
+    <path fill="url(#dark)" d="M235 297L271 263C278 256 285 254 295 254H421L375 300H252C243 300 237 302 232 306Z"/>
+    <path fill="url(#fold)" d="M252 300H258C265 300 271 303 277 308L345 368H296C287 368 281 365 274 359L237 328C225 318 224 307 235 302C239 300 245 300 252 300Z"/>
+    <path fill="url(#dark)" d="M306 317H363C397 317 420 338 420 368C420 401 394 425 363 425H222L267 381H362C370 381 374 377 374 370C374 363 370 359 362 359H351Z"/>
+    <path fill="url(#lower)" d="M267 381H404C410 381 414 382 417 385C410 409 389 425 363 425H222Z"/>
+  </g>
+  <g id="wordmark" fill="#20272a">
+    <use xlink:href="#letter-t"/>
+    <use xlink:href="#letter-e"/>
+    <path d="M707 300H744V380C744 392 750 398 762 398H801C813 398 820 392 820 380V300H856V375C856 409 838 427 805 427H758C724 427 707 409 707 375Z"/>
+    <use xlink:href="#letter-t" transform="translate(435 0)"/>
+    <use xlink:href="#letter-e" transform="translate(433 0)"/>
+    <path d="M1145 300H1258C1292 300 1309 317 1309 351V427H1271V347C1271 334 1265 328 1252 328H1183V427H1145Z"/>
+  </g>
+  <g id="tagline" fill="none" stroke="#20272a" stroke-width="4.5" stroke-linecap="butt" stroke-linejoin="round">
+    <path id="tag-I-1" d="M440 459V497"/>
+    <path id="tag-T-1" d="M487 461H527M507 461V497"/>
+    <path id="tag-S-1" d="M648 461H623C616 461 613 464 613 469C613 475 616 478 623 478H637C644 478 647 481 647 487C647 493 644 495 637 495H611"/>
+    <path id="tag-O-1" d="M708 461H722C731 461 734 464 734 473V483C734 492 731 495 722 495H708C699 495 696 492 696 483V473C696 464 699 461 708 461Z"/>
+    <path id="tag-L" d="M786 459V495H817"/>
+    <path id="tag-U" d="M865 459V484C865 492 868 495 876 495H889C897 495 901 492 901 484V459"/>
+    <path id="tag-T-2" d="M947 461H988M967.5 461V497"/>
+    <path id="tag-I-2" d="M1035 459V497"/>
+    <path id="tag-O-2" d="M1099 461H1113C1122 461 1125 464 1125 473V483C1125 492 1122 495 1113 495H1099C1090 495 1087 492 1087 483V473C1087 464 1090 461 1099 461Z"/>
+    <path id="tag-N" d="M1176 497V461L1216 495V459"/>
+    <path id="tag-S-2" d="M1305 461H1280C1273 461 1270 464 1270 469C1270 475 1273 478 1280 478H1294C1301 478 1304 481 1304 487C1304 493 1301 495 1294 495H1268"/>
+  </g>
+</svg>

@@ -18,12 +18,12 @@ if grep -rnoE '(src|href)="(https?:)?//[^"]*"' --include='*.html' . | grep -v 'm
     err "resource or link to another host found (see above); only files from this host are allowed"
 fi
 
-# Internal links: every src="/..." or href="/..." must name an existing file ("/x/" means x/index.html).
+# Internal links: every src, srcset or href="/..." must name an existing file ("/x/" means x/index.html).
 while IFS=: read -r file target; do
     target="${target#*=\"}"; target="${target%\"}"; target="${target%%#*}"
     path=".$target"
     case "$target" in */) path="${path}index.html" ;; esac
     [ -e "$path" ] || err "$file links to $target, which does not exist"
-done < <(grep -roE '(src|href)="/[^"]*"' --include='*.html' . || true)
+done < <(grep -roE '(src|srcset|href)="/[^"]*"' --include='*.html' . || true)
 
 exit "$fail"

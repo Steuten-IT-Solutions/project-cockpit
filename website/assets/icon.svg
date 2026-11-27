@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="212 232 216 216"><title>Steuten IT Solutions</title><defs>
+    <linearGradient id="dark" x1="230" y1="260" x2="420" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#20282b"/>
+      <stop offset="1" stop-color="#192124"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="233" y1="300" x2="341" y2="368" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#454b4e"/>
+      <stop offset="0.5" stop-color="#5b6063"/>
+      <stop offset="1" stop-color="#555b5e"/>
+    </linearGradient>
+    <linearGradient id="lower" x1="288" y1="416" x2="413" y2="383" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1e2629"/>
+      <stop offset="0.55" stop-color="#242c2f"/>
+      <stop offset="1" stop-color="#53595c"/>
+    </linearGradient>
+  </defs><rect x="212" y="232" width="216" height="216" rx="40" fill="#ffffff"/><g id="monogram">
+    <path fill="url(#dark)" d="M235 297L271 263C278 256 285 254 295 254H421L375 300H252C243 300 237 302 232 306Z"/>
+    <path fill="url(#fold)" d="M252 300H258C265 300 271 303 277 308L345 368H296C287 368 281 365 274 359L237 328C225 318 224 307 235 302C239 300 245 300 252 300Z"/>
+    <path fill="url(#dark)" d="M306 317H363C397 317 420 338 420 368C420 401 394 425 363 425H222L267 381H362C370 381 374 377 374 370C374 363 370 359 362 359H351Z"/>
+    <path fill="url(#lower)" d="M267 381H404C410 381 414 382 417 385C410 409 389 425 363 425H222Z"/>
+  </g></svg>

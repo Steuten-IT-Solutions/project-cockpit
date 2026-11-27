@@ -1,28 +1,32 @@
 /* Company website (www). Static, no scripts, no external resources: the CSP of its Apache
    site (bin/server-setup.sh, step "website") allows only files from this host.
-   The two brand colours come from the company logo; everything else derives from them. */
+   The colours come from the company logo: anthracite (#20272a, #192124) with the greys of
+   the folded S (#454b4e to #5b6063). Everything else derives from them. */
 :root {
-  --brand: #0b5cad;
-  --brand-2: #1f2937;
+  --brand: #20272a;
+  --brand-deep: #192124;
+  --brand-grey: #5b6063;
   --brand-text: #ffffff;
   --bg: #ffffff;
-  --bg-alt: #f4f6f9;
+  --bg-alt: #f3f4f5;
   --surface: #ffffff;
   --text: #1a1d23;
-  --muted: #5b6472;
-  --border: #e1e5eb;
+  --muted: #5b6063;
+  --border: #e2e4e6;
   --radius: 14px;
   --wrap: 1120px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0e1116;
-    --bg-alt: #151a21;
-    --surface: #1a2029;
+    --bg: #121719;
+    --bg-alt: #192124;
+    --surface: #1e2629;
     --text: #e8ecf1;
-    --muted: #9aa4b2;
-    --border: #2a323d;
+    --muted: #a3a9ad;
+    --border: #2f383c;
+    --brand: #e6e9ec;
+    --brand-text: #192124;
   }
 }
 
@@ -85,13 +89,13 @@ a:focus-visible, .button:focus-visible {
   letter-spacing: -0.01em;
 }
 
-.brand img { width: 36px; height: 36px; }
+.brand img { display: block; width: auto; height: 32px; }
+
+@media (min-width: 600px) {
+  .brand img { height: 36px; }
+}
 
 nav { display: flex; gap: 16px; font-size: 0.95rem; }
-
-@media (max-width: 420px) {
-  .brand span { font-size: 0.95rem; }
-}
 
 @media (min-width: 600px) {
   nav { gap: 24px; font-size: 1rem; }
@@ -110,15 +114,21 @@ nav a:hover, nav a[aria-current="page"] { color: var(--text); }
   position: relative;
   overflow: hidden;
   padding: 72px 0 80px;
+  color: #ffffff;
   background:
-    radial-gradient(1000px 420px at 85% -10%, color-mix(in srgb, var(--brand) 28%, transparent), transparent 70%),
-    radial-gradient(700px 380px at -10% 110%, color-mix(in srgb, var(--brand-2) 22%, transparent), transparent 70%),
-    var(--bg-alt);
+    radial-gradient(900px 460px at 90% -20%, color-mix(in srgb, var(--brand-grey) 55%, transparent), transparent 70%),
+    radial-gradient(600px 360px at -10% 120%, color-mix(in srgb, #454b4e 45%, transparent), transparent 70%),
+    linear-gradient(160deg, #20282b, var(--brand-deep));
 }
+
+.hero .eyebrow { color: #b6bbbe; }
+.hero .lead { color: #d5d9dc; }
+.hero .button { background: #ffffff; color: var(--brand-deep); }
+.hero .button:hover { box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 
 .eyebrow {
   margin: 0 0 12px;
-  color: var(--brand);
+  color: var(--muted);
   font-weight: 600;
   font-size: 0.9rem;
   letter-spacing: 0.08em;
@@ -168,7 +178,7 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.02em; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  border-top: 4px solid var(--brand);
+  border-top: 4px solid var(--brand-grey);
 }
 
 .card h3 { margin: 0 0 8px; font-size: 1.2rem; }
@@ -193,3 +203,4 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.02em; }
   color: var(--muted);
   font-size: 0.95rem;
 }
+.hero a:focus-visible { outline-color: #ffffff; }
