@@ -22,6 +22,11 @@ export interface CompanySettings {
   paymentDays: number
   exemptionReason: string | null
   mailFrom: string | null
+  mailFromInvoice: string | null
+  mailFromCancellation: string | null
+  mailFromReminder: string | null
+  mailFromQuote: string | null
+  mailFromOrder: string | null
   mailText: string | null
   hasLogo: boolean
 }

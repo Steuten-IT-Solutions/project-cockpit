@@ -16,7 +16,7 @@ const sendmail = join(dir, 'sendmail')
 const SETTINGS = {
   name: 'Steuten IT Solutions', contactName: 'Christian Steuten', street: 'Musterweg 1', postcode: '48143', city: 'Münster', country: 'DE',
   email: 'info@example.org', vatId: 'DE463748776', iban: 'DE89 3704 0044 0532 0130 00', smallBusiness: true, paymentDays: 14,
-  mailFrom: 'Steuten IT Solutions <rechnung@example.org>', mailText: 'Anbei {dokument} {nummer} über {betrag}.',
+  mailFrom: 'Steuten IT Solutions <rechnung@example.org>', mailFromOrder: 'Steuten IT Solutions <info@example.org>', mailText: 'Anbei {dokument} {nummer} über {betrag}.',
 }
 const LINE = { name: 'Beratung', description: 'Vor Ort', quantity: '1,5', unit: 'HUR', price: '90,00', vatRate: 0 }
 
@@ -67,6 +67,15 @@ describe('ERP', () => {
     const fake = new FormData()
     fake.append('logo', new Blob(['<svg/>'], { type: 'image/png' }), 'logo.png')
     expect((await upload('/api/erp/logo', fake)).status).toBe(422)
+    const hostile = new FormData()
+    hostile.append('logo', new Blob(['<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'], { type: 'image/svg+xml' }), 'logo.svg')
+    expect((await upload('/api/erp/logo', hostile)).json.statusMessage).toContain('Skripte')
+    // An SVG is stored (and printed on the invoices below) as PNG.
+    const svg = new FormData()
+    svg.append('logo', new Blob(['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40"><rect width="40" height="40" rx="8" fill="#0a5"/><path d="M50 10h60v20H50z" fill="#06c"/></svg>'], { type: 'image/svg+xml' }), 'logo.svg')
+    expect((await upload('/api/erp/logo', svg)).json.message).toBe('Logo gespeichert.')
+    const stored = await client.request('/api/erp/logo')
+    expect(stored.headers.get('content-type')).toBe('image/png')
   })
 
   it('writes, previews and finalizes an invoice', async () => {
@@ -104,6 +113,7 @@ describe('ERP', () => {
     expect(sent.json.message).toContain('kunde@example.org')
     const mail = readFileSync(mails, 'utf8')
     expect(mail).toContain('To: kunde@example.org')
+    expect(mail).toContain('From: Steuten IT Solutions <rechnung@example.org>')
     expect(mail).toContain(`filename="${invoiceNumber}.pdf"`)
     expect(Buffer.from(mail.split('\r\n\r\n')[2]!.split('\r\n--')[0]!.replaceAll('\r\n', ''), 'base64').toString()).toContain(`Anbei Rechnung ${invoiceNumber} über 135,00`)
 
@@ -174,6 +184,8 @@ describe('ERP', () => {
     const { document } = await client.json<{ document: { status: string, invoiceId: number } }>(`/api/erp/sales/${orderId}`)
     expect(document).toMatchObject({ status: 'invoiced', invoiceId: invoice.json.invoiceId })
     expect((await send('POST', `/api/erp/sales/${orderId}/send`, {})).json.message).toContain('Auftragsbestätigung')
+    // Order confirmations have their own sender in SETTINGS.
+    expect(readFileSync(mails, 'utf8').split('----').at(-2)).toContain('From: Steuten IT Solutions <info@example.org>')
     // Deleting the draft frees the order again.
     await send('DELETE', `/api/erp/invoices/${invoice.json.invoiceId as number}`)
     expect((await client.json<{ document: { status: string } }>(`/api/erp/sales/${orderId}`)).document.status).toBe('sent')

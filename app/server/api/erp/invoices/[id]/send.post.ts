@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
     const settings = await erp.master.settings()
     const document = invoice.type === '381' ? 'Stornorechnung' : 'Rechnung'
     const text = mailText(settings?.mailText ?? null, { document, number: file.number, grossCents: invoice.grossCents, dueDate: invoice.dueDate, sender: settings?.contactName ?? settings?.name ?? '' })
-    await sendDocument(erp.mail, settings, to, `${document} ${file.number} – ${settings?.name ?? ''}`, text, [{ filename: `${file.number}.pdf`, contentType: 'application/pdf', content: file.content }])
+    await sendDocument(erp.mail, settings, invoice.type === '381' ? 'cancellation' : 'invoice', to, `${document} ${file.number} – ${settings?.name ?? ''}`, text, [{ filename: `${file.number}.pdf`, contentType: 'application/pdf', content: file.content }])
     await repository.event(erp.pool, id, 'sent', to, erp.now())
     return { message: `${document} ${file.number} an ${to} gesendet.` }
   })

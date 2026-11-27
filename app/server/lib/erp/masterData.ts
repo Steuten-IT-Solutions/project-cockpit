@@ -7,7 +7,9 @@ import { exec, one, rows, type Sql } from './sql'
 
 const SETTINGS_COLUMNS = `name, contact_name AS contactName, street, postcode, city, country, email, phone, website,
   tax_number AS taxNumber, vat_id AS vatId, iban, bic, bank_name AS bankName, small_business AS smallBusiness,
-  payment_days AS paymentDays, exemption_reason AS exemptionReason, mail_from AS mailFrom, mail_text AS mailText,
+  payment_days AS paymentDays, exemption_reason AS exemptionReason, mail_from AS mailFrom,
+  mail_from_invoice AS mailFromInvoice, mail_from_cancellation AS mailFromCancellation, mail_from_reminder AS mailFromReminder,
+  mail_from_quote AS mailFromQuote, mail_from_order AS mailFromOrder, mail_text AS mailText,
   logo IS NOT NULL AS hasLogo`
 
 const CUSTOMER_COLUMNS = `id, kind, name, contact_name AS contactName, street, postcode, city, country, email,
@@ -31,15 +33,19 @@ export class MasterData {
 
   async saveSettings(s: SettingsInput, now: string): Promise<void> {
     const values = [s.name, s.contactName, s.street, s.postcode, s.city, s.country, s.email, s.phone, s.website, s.taxNumber, s.vatId,
-      s.iban, s.bic, s.bankName, s.smallBusiness ? 1 : 0, s.paymentDays, s.exemptionReason, s.mailFrom, s.mailText, now]
+      s.iban, s.bic, s.bankName, s.smallBusiness ? 1 : 0, s.paymentDays, s.exemptionReason, s.mailFrom,
+      s.mailFromInvoice, s.mailFromCancellation, s.mailFromReminder, s.mailFromQuote, s.mailFromOrder, s.mailText, now]
     await exec(this.db, `INSERT INTO company_settings (id, name, contact_name, street, postcode, city, country, email, phone, website,
-      tax_number, vat_id, iban, bic, bank_name, small_business, payment_days, exemption_reason, mail_from, mail_text, updated_at)
-      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      tax_number, vat_id, iban, bic, bank_name, small_business, payment_days, exemption_reason, mail_from,
+      mail_from_invoice, mail_from_cancellation, mail_from_reminder, mail_from_quote, mail_from_order, mail_text, updated_at)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE name = VALUES(name), contact_name = VALUES(contact_name), street = VALUES(street),
       postcode = VALUES(postcode), city = VALUES(city), country = VALUES(country), email = VALUES(email), phone = VALUES(phone),
       website = VALUES(website), tax_number = VALUES(tax_number), vat_id = VALUES(vat_id), iban = VALUES(iban), bic = VALUES(bic),
       bank_name = VALUES(bank_name), small_business = VALUES(small_business), payment_days = VALUES(payment_days),
-      exemption_reason = VALUES(exemption_reason), mail_from = VALUES(mail_from), mail_text = VALUES(mail_text), updated_at = VALUES(updated_at)`, values)
+      exemption_reason = VALUES(exemption_reason), mail_from = VALUES(mail_from),
+      mail_from_invoice = VALUES(mail_from_invoice), mail_from_cancellation = VALUES(mail_from_cancellation),
+      mail_from_reminder = VALUES(mail_from_reminder), mail_from_quote = VALUES(mail_from_quote), mail_from_order = VALUES(mail_from_order), mail_text = VALUES(mail_text), updated_at = VALUES(updated_at)`, values)
   }
 
   async logo(): Promise<{ data: Buffer, type: string } | null> {
