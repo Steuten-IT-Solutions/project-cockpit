@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Receives a deployment on the VPS: the build as one gzipped tar archive on stdin.
 #
-# Installed by "bin/server-setup.sh deploy" as /usr/local/bin/cockpit-receive-deploy and
-# bound to the deploy key in ~cockpit/.ssh/authorized_keys (command="...",restrict), so that
-# key can run nothing else: no shell, no SFTP. .github/workflows/deploy.yml calls
+# The script is part of the build (bin/receive-deploy.sh in the deployment target), so every
+# deployment brings the version the next one uses; nothing has to be installed by hand.
+# .github/workflows/deploy.yml calls, as the deploy user:
 #
-#   ssh cockpit@host cockpit-receive-deploy probe          answers "ready"
-#   ssh cockpit@host cockpit-receive-deploy < build.tgz    unpacks and switches over
+#   ssh cockpit@host APP=<target> bash <target>/bin/receive-deploy.sh probe       answers "ready"
+#   ssh cockpit@host APP=<target> bash <target>/bin/receive-deploy.sh < build.tgz
+#
+# The very first time the script is not on the server yet; the workflow then uploads file by
+# file over SFTP (bin/deploy-sftp.sh), which also brings this script for the next run.
 #
 # One archive instead of thousands of single SFTP transfers takes seconds instead of
 # about 40 minutes. The archive is unpacked next to the application (same file system),
@@ -19,7 +22,8 @@
 # file is updated), var/ (runtime data). The archive must contain the marker files of a
 # complete build, or nothing is changed.
 #
-# Runs as the deploy user. APP can be set for tests; on the server it is /srv/cockpit/app.
+# Runs as the deploy user. bash reads this file while it runs; the swap only renames bin/
+# into .previous/, so the open file stays the old version until the script ends.
 set -euo pipefail
 umask 022
 
@@ -27,10 +31,7 @@ APP="${APP:-/srv/cockpit/app}"
 # The archive is about 20 MB; anything far larger is not a build of this project.
 MAX_BYTES=$((500 * 1024 * 1024))
 
-# With command="..." in authorized_keys, the requested command arrives in SSH_ORIGINAL_COMMAND.
-command_line="${SSH_ORIGINAL_COMMAND:-}"
-request="${1:-${command_line##* }}"
-if [ "$request" = "probe" ]; then
+if [ "${1:-}" = "probe" ]; then
   echo "ready"
   exit 0
 fi
