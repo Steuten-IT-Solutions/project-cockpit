@@ -164,12 +164,14 @@ forwarding too (`rechnung@` sends as `invoice@`):
 
 ## Backup
 
-`bash server-setup.sh backup uXXXXX@uXXXXX.your-storagebox.de` sets up a nightly off-site backup
-(03:15, after the database dump) with restic to a Hetzner Storage Box over SFTP (port 23). It asks
-for the Storage Box password once to install a dedicated SSH key, creates the encrypted repository
-and runs the first backup. Saved: `/var/vmail`, `/srv/cockpit/app/config`, `/var/backups/cockpit`,
-`/etc`, `/root`, `/var/lib/rspamd/dkim`. Kept: 7 daily, 5 weekly, 12 monthly snapshots; on Sundays
-the repository is checked. A failed run prints its log, which cron mails to root (the admin
+`bash server-setup.sh backup uXXXXX@uXXXXX.your-storagebox.de` sets up an hourly off-site backup
+(at :15) with restic to a Hetzner Storage Box over SFTP (port 23). It asks for the Storage Box
+password once to install a dedicated SSH key, creates the encrypted repository and runs the first
+backup. Each run dumps the database to `/var/backups/cockpit/cockpit-hourly.sql.gz` first, so at
+most an hour of data is lost; restic uploads only what changed, so the runs are incremental.
+Saved: `/var/vmail`, `/srv/cockpit/app/config`, `/var/backups/cockpit`, `/etc`, `/root`,
+`/var/lib/rspamd/dkim`. The 03:15 UTC run prunes: kept are 48 hourly, 7 daily, 5 weekly and
+12 monthly snapshots; on Sundays it also checks the repository. A failed run prints its log, which cron mails to root (the admin
 mailbox).
 
 - Store `/root/restic-password` in a password manager. Without it nothing can be restored.
