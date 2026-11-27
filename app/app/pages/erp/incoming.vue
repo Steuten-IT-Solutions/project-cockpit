@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { day, euro, INCOMING_CATEGORIES, priceText, type ShareForm, sharesBody } from '#shared/lib/erp'
+import { day, euro, INCOMING_CATEGORIES, priceText, rateText, type ShareForm, sharesBody } from '#shared/lib/erp'
 import type { Choice, IncomingInvoice, IncomingMailFile, Supplier } from '#shared/types/erp'
 
 // Incoming invoices: upload, attachments from the mailbox to enter, open ones to pay, all received.
@@ -15,7 +15,9 @@ const supplierItems = computed(() => [{ value: NEW, label: '+ neuer Lieferant' }
 const file = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const showManual = ref(false)
-const form = reactive({ category: 'other', supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '' })
+const form = reactive({ category: 'other', supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '', currency: 'EUR', rate: '' })
+// "€", or the code of another currency the amounts are typed in.
+const sign = computed(() => form.currency === 'EUR' ? '€' : form.currency)
 // The projects the invoice is split across (components/ErpProjectShares.vue).
 const shares = ref<ShareForm[]>([{ projectId: NONE, share: '' }])
 const error = ref<string | null>(null)
@@ -35,7 +37,9 @@ interface Suggestion {
   source: 'pdf' | 'ocr' | null
   problem: string | null
   fields: { number: string | null, issueDate: string | null, dueDate: string | null, netCents: number | null, taxCents: number | null,
-    iban: string | null, supplierId: number | null } | null
+    iban: string | null, supplierId: number | null, currency: string } | null
+  /** The ECB rate of the invoice date, for an invoice in another currency. */
+  rate: { rate: number, date: string } | null
 }
 const suggestion = ref<Suggestion | null>(null)
 async function suggest(selected: File, senderName: string | null) {
@@ -61,6 +65,9 @@ async function suggest(selected: File, senderName: string | null) {
     net: f.netCents !== null ? priceText(f.netCents) : form.net,
     tax: f.taxCents !== null ? priceText(f.taxCents) : form.tax,
     iban: f.iban ?? form.iban,
+    // Amounts in another currency stay as printed; the rate converts them to euros.
+    currency: f.currency,
+    rate: result.rate !== null ? rateText(result.rate.rate) : '',
   })
 }
 const suggestionNote = computed(() => {
@@ -142,7 +149,7 @@ async function upload() {
     if (fileInput.value) fileInput.value.value = ''
     showManual.value = false
     suggestion.value = null
-    Object.assign(form, { supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '' })
+    Object.assign(form, { supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '', currency: 'EUR', rate: '' })
     shares.value = [{ projectId: NONE, share: '' }]
     await refresh()
     if (result.warnings.length === 0) await navigateTo(`/erp/incoming-invoice?id=${result.id}`)
@@ -297,10 +304,10 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
               <UFormField label="Rechnungsdatum">
                 <UInput v-model="form.issueDate" type="date" class="w-full" />
               </UFormField>
-              <UFormField label="Netto (€)">
+              <UFormField :label="`Netto (${sign})`">
                 <UInput v-model="form.net" inputmode="decimal" class="w-full" />
               </UFormField>
-              <UFormField label="Umsatzsteuer (€)">
+              <UFormField :label="`Umsatzsteuer (${sign})`">
                 <UInput v-model="form.tax" inputmode="decimal" class="w-full" />
               </UFormField>
               <UFormField label="Fällig am" hint="optional">
@@ -310,6 +317,9 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
                 <UInput v-model="form.iban" class="w-full" />
               </UFormField>
             </div>
+            <UFormField label="Währung">
+              <ErpCurrency v-model:currency="form.currency" v-model:rate="form.rate" :issue-date="form.issueDate" :net="form.net" :tax="form.tax" />
+            </UFormField>
             <UFormField label="Notiz" hint="optional">
               <UInput v-model="form.note" :maxlength="500" class="w-full" />
             </UFormField>

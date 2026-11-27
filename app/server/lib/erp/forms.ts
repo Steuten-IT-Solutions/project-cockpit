@@ -1,6 +1,6 @@
 import { parseAmount } from '#shared/lib/costs'
 import type { ProjectShare } from '#shared/types/erp'
-import { cleanText, CUSTOMER_KINDS, INCOMING_CATEGORIES, isEmail, isoDate, isValidIban, isVatId, MAIL_SENDERS, type MailSenderField, parsePercent, parseQuantity, SUBSCRIPTION_INTERVALS, UNITS, VAT_RATES } from '#shared/lib/erp'
+import { cleanText, CURRENCIES, CUSTOMER_KINDS, INCOMING_CATEGORIES, isEmail, isoDate, isValidIban, isVatId, MAIL_SENDERS, type MailSenderField, parsePercent, parseQuantity, parseRate, SUBSCRIPTION_INTERVALS, toEuroCents, UNITS, VAT_RATES } from '#shared/lib/erp'
 
 // Validation of the ERP's forms. Each function takes the request body and returns the
 // clean values or a German message for the user. Pure, unit tested.
@@ -140,6 +140,8 @@ export function supplierFromBody(body: Body): SupplierInput | string {
 export interface IncomingInput {
   number: string, issueDate: string, dueDate: string | null, netCents: number, taxCents: number, grossCents: number
   category: string, projects: ProjectShare[], iban: string | null, note: string | null
+  /** The invoice's currency; for another one than EUR the amounts above are converted to euros. */
+  currency: string, originalNetCents: number | null, originalTaxCents: number | null, exchangeRate: number | null
 }
 
 /**
@@ -191,13 +193,27 @@ export function incomingFromBody(body: Body, projectIds: number[]): IncomingInpu
   const netCents = parseAmount(String(field(body, 'net') ?? ''))
   const taxCents = parseAmount(String(field(body, 'tax') ?? '0') || '0')
   if (netCents === null || taxCents === null) return 'Netto und Steuer müssen Beträge wie 49,90 sein.'
+  // An invoice in another currency: net and tax are typed in that currency and converted
+  // with the rate (units per euro, as the ECB quotes it); the euro amounts are stored.
+  const currency = String(field(body, 'currency') ?? 'EUR') || 'EUR'
+  if (!(currency in CURRENCIES)) return 'Unbekannte Währung.'
+  let exchangeRate: number | null = null
+  if (currency !== 'EUR') {
+    exchangeRate = parseRate(String(field(body, 'rate') ?? ''))
+    if (exchangeRate === null) return `Bitte den Kurs angeben: wie viel ${currency} ein Euro ist, z. B. 1,0989.`
+  }
+  const euro = (cents: number) => exchangeRate === null ? cents : toEuroCents(cents, exchangeRate)
   const category = String(field(body, 'category') ?? '')
   if (!(category in INCOMING_CATEGORIES)) return 'Bitte eine Kategorie wählen.'
   const projects = projectSharesFromBody(body, projectIds)
   if (typeof projects === 'string') return projects
   const iban = optional(body, 'iban', 50)?.replaceAll(' ', '').toUpperCase() ?? null
   if (iban !== null && !isValidIban(iban)) return 'Die IBAN ist ungültig.'
-  return { number, issueDate, dueDate, netCents, taxCents, grossCents: netCents + taxCents, category, projects, iban, note: cleanText(field(body, 'note'), 500, true) }
+  return {
+    number, issueDate, dueDate, netCents: euro(netCents), taxCents: euro(taxCents), grossCents: euro(netCents) + euro(taxCents), category, projects, iban,
+    note: cleanText(field(body, 'note'), 500, true), currency, exchangeRate,
+    originalNetCents: exchangeRate === null ? null : netCents, originalTaxCents: exchangeRate === null ? null : taxCents,
+  }
 }
 
 export interface TimeInput {
