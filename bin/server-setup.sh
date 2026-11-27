@@ -30,6 +30,9 @@
 #   bin/server-setup.sh cutover  switch both host names to the Node cockpit and the PHP cron off
 #   bin/server-setup.sh rollback back to the PHP cockpit (keeps the Node build for later)
 #
+#   bin/server-setup.sh deploy   fast deployments: installs bin/receive-deploy.sh and binds the
+#                                deploy key to it (no shell, no SFTP for that key any more)
+#
 # On the server, "cockpit-setup <step>" loads the current version from GitHub (main) and runs it.
 # The script is idempotent: running it again keeps existing data, passwords and keys.
 # See README.md, "Own server" and "Mail server".
@@ -1414,6 +1417,23 @@ php_crypt() {
     php -r 'echo crypt($argv[1], "\$6\$rounds=5000\$" . bin2hex(random_bytes(8)) . "\$");' "$1"
 }
 
+# Fast deployments (bin/receive-deploy.sh): the build arrives as one archive over SSH instead
+# of thousands of SFTP transfers. Every key of the deploy user may then only run that script.
+deploy_setup() {
+    local tmp keys="$BASE/.ssh/authorized_keys"
+    tmp="$(mktemp)"
+    curl -fsSL --proto '=https' "https://raw.githubusercontent.com/Steuten-IT-Solutions/project-cockpit/main/bin/receive-deploy.sh" -o "$tmp"
+    bash -n "$tmp" || { rm -f "$tmp"; die "bin/receive-deploy.sh does not parse"; }
+    install -o root -g root -m 755 "$tmp" /usr/local/bin/cockpit-receive-deploy
+    rm -f "$tmp"
+    [ -s "$keys" ] || die "no key in $keys: put the deploy key's public half there first"
+    cp -p "$keys" "$keys.before-deploy-step"
+    # Lines that already carry an option (command=...) stay as they are.
+    sed -i -E '/^(ssh-|ecdsa-|sk-)/s#^#restrict,command="/usr/local/bin/cockpit-receive-deploy" #' "$keys"
+    echo "server-setup: deploy keys of $USER_NAME now only run cockpit-receive-deploy (backup: $keys.before-deploy-step)."
+    grep -c 'cockpit-receive-deploy' "$keys" | sed 's/^/server-setup: restricted keys: /'
+}
+
 case "${1:-}" in
     base) base ;;
     certs) certs ;;
@@ -1427,5 +1447,6 @@ case "${1:-}" in
     rehearsal-stop) rehearsal_stop ;;
     cutover) cutover ;;
     rollback) rollback ;;
-    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback" ;;
+    deploy) deploy_setup ;;
+    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback|deploy" ;;
 esac
