@@ -4,7 +4,8 @@ import { priceText } from './erp'
 // Search and filters of the incoming invoices list. Pure, so it is unit tested and the page
 // filters the already loaded list without asking the server again.
 
-export interface IncomingFilter {
+// A type (not an interface) so it fits useListState's Record<string, string>.
+export type IncomingFilter = {
   /** Free text: supplier, number, note, file name or an amount such as "23,80". */
   query: string
   status: 'all' | 'open' | 'paid' | 'discarded'
@@ -19,6 +20,9 @@ export interface IncomingFilter {
   from: string
   to: string
 }
+
+/** Allowed values of the button filters, for reading them from the address. */
+export const FILTER_CHOICES = { status: ['all', 'open', 'paid', 'discarded'], kind: ['all', 'invoice', 'credit'] } as const
 
 export const emptyFilter = (): IncomingFilter => ({ query: '', status: 'open', kind: 'all', supplierId: '', category: '', projectId: '', from: '', to: '' })
 
