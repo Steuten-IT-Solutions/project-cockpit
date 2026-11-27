@@ -133,7 +133,9 @@ The brand colours are the two variables at the top of `website/assets/site.css`.
   www host name, mails the message from `noreply@` to `info@` through sendmail (Reply-To: the
   visitor) and redirects to `/kontakt/danke/` or `/kontakt/fehler/`. Spam protection without
   third parties: a honeypot field, a limit on links, 5 messages per IP and 30 in total per hour
-  (in memory only). Settings `NUXT_WEBSITE_HOST`, `NUXT_WEBSITE_CONTACT_TO`,
+  (in memory only). Rspamd would score the visitor's Reply-To as spoofed, so for mail from
+  127.0.0.1 with sender `noreply@` the steps `mail` and `website` switch off `SPOOF_REPLYTO` and
+  `FREEMAIL_REPLYTO_NEQ_FROM` (`/etc/rspamd/local.d/settings.conf`). Settings `NUXT_WEBSITE_HOST`, `NUXT_WEBSITE_CONTACT_TO`,
   `NUXT_WEBSITE_CONTACT_FROM` (defaults in `app/nuxt.config.ts`).
 - **Legal texts:** the Impressum (§ 5 DDG) and the privacy notice describe the real setup. When
   the site gets a contact form, analytics, external fonts or embedded media, update
