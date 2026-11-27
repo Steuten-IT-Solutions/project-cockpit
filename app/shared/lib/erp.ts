@@ -122,6 +122,20 @@ export function splitCents(totalCents: number, sharesBp: number[]): number[] {
   return parts
 }
 
+/** Currencies of incoming invoices; amounts in another one are converted to euros. */
+export const CURRENCIES: Record<string, string> = { EUR: 'Euro (€)', USD: 'US-Dollar ($)', GBP: 'Britisches Pfund (£)', CHF: 'Schweizer Franken (CHF)' }
+
+/**
+ * The euro amounts of an invoice in another currency: the euro total (e.g. as debited
+ * from the bank account) is split into net and tax in the proportion of the invoice's own
+ * net and tax, so that both add up to the total exactly.
+ */
+export function euroParts(euroGrossCents: number, originalNetCents: number, originalTaxCents: number): { netCents: number, taxCents: number } {
+  const total = originalNetCents + originalTaxCents
+  const netCents = total === 0 ? euroGrossCents : Math.round(euroGrossCents * originalNetCents / total)
+  return { netCents, taxCents: euroGrossCents - netCents }
+}
+
 /** One row of the project split in a form: a project id (or "none") and a share in percent. */
 export interface ShareForm { projectId: string, share: string }
 

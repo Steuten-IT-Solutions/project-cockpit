@@ -154,6 +154,12 @@ export interface IncomingInvoice {
   netCents: number
   taxCents: number
   grossCents: number
+  /** The invoice's currency; for another one than EUR the amounts above are in euros, converted at exchangeRate. */
+  currency: string
+  originalNetCents: number | null
+  originalTaxCents: number | null
+  /** Units of the currency per 1 euro (as the ECB quotes it). */
+  exchangeRate: number | null
   category: string
   /** The project with the largest share; see `projects` for all of them. */
   projectId: number | null

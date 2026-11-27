@@ -47,9 +47,9 @@ export async function exportArchive(pool: Pool, invoices: InvoiceRepository, fro
   entries.push({ name: 'zahlungseingaenge.csv', date, content: csv(['Rechnung', 'Datum', 'Betrag', 'Notiz'], payments.map(p => [p.number, day(p.paidOn), csvAmount(num(p.amount)), p.note])) })
 
   const incoming = await rows<{ id: number, supplier: string, vatId: string | null, number: string, issueDate: string, dueDate: string | null, net: number, tax: number,
-    gross: number, category: string, status: string, paidOn: string | null, reason: string | null, fileName: string, sha: string, format: string }>(pool,
+    gross: number, currency: string, originalNet: number | null, originalTax: number | null, rate: unknown, category: string, status: string, paidOn: string | null, reason: string | null, fileName: string, sha: string, format: string }>(pool,
   `SELECT i.id, s.name AS supplier, s.vat_id AS vatId, i.number, i.issue_date AS issueDate, i.due_date AS dueDate, i.net_cents AS net, i.tax_cents AS tax,
-    i.gross_cents AS gross, i.category, i.status, i.paid_on AS paidOn, i.discarded_reason AS reason, i.file_name AS fileName,
+    i.gross_cents AS gross, i.currency, i.original_net_cents AS originalNet, i.original_tax_cents AS originalTax, i.exchange_rate AS rate, i.category, i.status, i.paid_on AS paidOn, i.discarded_reason AS reason, i.file_name AS fileName,
     i.file_sha256 AS sha, i.format FROM incoming_invoices i JOIN suppliers s ON s.id = i.supplier_id
     WHERE i.issue_date BETWEEN ? AND ? ORDER BY i.issue_date, i.id`, [from, to])
   // "Projekt A (60 %), Projekt B (40 %)"; a single project without its 100 %.
@@ -70,8 +70,9 @@ export async function exportArchive(pool: Pool, invoices: InvoiceRepository, fro
   }
   entries.push({
     name: 'eingangsrechnungen.csv', date,
-    content: csv(['Nr.', 'Lieferant', 'USt-IdNr.', 'Rechnungsnummer', 'Rechnungsdatum', 'Fällig', 'Netto', 'USt', 'Brutto', 'Kategorie', 'Projekt', 'Status', 'Bezahlt am', 'Verworfen weil', 'E-Rechnung', 'Datei', 'SHA-256'],
-      incoming.map(i => [i.id, i.supplier, i.vatId, i.number, day(i.issueDate), i.dueDate ? day(i.dueDate) : null, csvAmount(num(i.net)), csvAmount(num(i.tax)), csvAmount(num(i.gross)),
+    content: csv(['Nr.', 'Lieferant', 'USt-IdNr.', 'Rechnungsnummer', 'Rechnungsdatum', 'Fällig', 'Netto', 'USt', 'Brutto', 'Währung der Rechnung', 'Brutto in Währung', 'Kurs (Währung je 1 EUR)', 'Kategorie', 'Projekt', 'Status', 'Bezahlt am', 'Verworfen weil', 'E-Rechnung', 'Datei', 'SHA-256'],
+      incoming.map(i => [i.id, i.supplier, i.vatId, i.number, day(i.issueDate), i.dueDate ? day(i.dueDate) : null, csvAmount(num(i.net)), csvAmount(num(i.tax)), csvAmount(num(i.gross)), i.currency,
+        i.currency === 'EUR' ? null : csvAmount(num(i.originalNet) + num(i.originalTax)), i.rate === null ? null : String(Number(i.rate)).replace('.', ','),
         INCOMING_CATEGORIES[i.category] ?? i.category, projectNames.get(i.id)?.join(', ') ?? null, { open: 'offen', paid: 'bezahlt', discarded: 'verworfen' }[i.status] ?? i.status, i.paidOn ? day(i.paidOn) : null,
         i.reason, i.format === 'other' ? 'nein' : 'ja', incomingNames.get(i.id) ?? '', i.sha])),
   })

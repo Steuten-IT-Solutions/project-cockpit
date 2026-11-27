@@ -17,6 +17,30 @@ export interface ExtractedFields {
   vatId: string | null
   /** A known supplier whose VAT id, IBAN or name appears in the text. */
   supplierId: number | null
+  /** The currency of the amounts (ISO 4217); EUR unless another one clearly dominates. */
+  currency: string
+}
+
+// Signs of a currency in the text. A US invoice writes "$12.00" or "USD"; "US$" counts once.
+const CURRENCIES: [string, RegExp][] = [
+  ['EUR', /€|\bEUR\b|\beuro?s?\b/gi],
+  ['USD', /US\$|(?<![A-Z])\$|\bUSD\b|\bUS dollars?\b/gi],
+  ['GBP', /£|\bGBP\b/gi],
+  ['CHF', /\bCHF\b|\bSFr\.?/gi],
+]
+
+/** The currency the text names most often; EUR on a tie or when none is named. */
+export function currencyOf(text: string): string {
+  let best = 'EUR'
+  let most = 0
+  for (const [code, sign] of CURRENCIES) {
+    const count = (text.match(sign) ?? []).length
+    if (count > most || (count === most && code === 'EUR')) {
+      best = code
+      most = count
+    }
+  }
+  return best
 }
 
 export interface KnownSupplier { id: number, name: string, vatId: string | null, iban: string | null }
@@ -151,5 +175,5 @@ export function extractFields(text: string, suppliers: KnownSupplier[], own: Own
     ?? suppliers.find(s => s.iban !== null && s.iban !== '' && compact.includes(s.iban.replaceAll(' ', '').toUpperCase()))
     ?? suppliers.find(s => name(s.name).length >= 4 && lower.includes(name(s.name)))
 
-  return { number, issueDate, dueDate, netCents: net, taxCents: tax, grossCents: gross, iban, vatId, supplierId: supplier?.id ?? null }
+  return { number, issueDate, dueDate, netCents: net, taxCents: tax, grossCents: gross, iban, vatId, supplierId: supplier?.id ?? null, currency: currencyOf(flat) }
 }

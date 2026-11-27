@@ -15,7 +15,8 @@ import { exec, num, one, rows, type Sql, transaction } from './sql'
 // the supplier's earlier invoices is flagged.
 
 const COLUMNS = `i.id, i.supplier_id AS supplierId, s.name AS supplierName, i.status, i.number, i.issue_date AS issueDate, i.due_date AS dueDate,
-  i.net_cents AS netCents, i.tax_cents AS taxCents, i.gross_cents AS grossCents, i.category, i.project_id AS projectId, i.iban, i.note,
+  i.net_cents AS netCents, i.tax_cents AS taxCents, i.gross_cents AS grossCents, i.currency, i.original_net_cents AS originalNetCents,
+  i.original_tax_cents AS originalTaxCents, i.exchange_rate AS exchangeRate, i.category, i.project_id AS projectId, i.iban, i.note,
   i.format, i.file_name AS fileName, i.file_type AS fileType, i.paid_on AS paidOn, i.discarded_reason AS discardedReason, i.created_at AS createdAt`
 
 const SUPPLIER_COLUMNS = 'id, name, vat_id AS vatId, tax_number AS taxNumber, iban, email, street, postcode, city, country, note'
@@ -23,7 +24,9 @@ const SUPPLIER_COLUMNS = 'id, name, vat_id AS vatId, tax_number AS taxNumber, ib
 /** What was typed in for a file without e-invoice data. */
 export interface ManualEntry { supplierId: number | null, supplierName: string | null, fields: IncomingInput }
 
-const amounts = (i: IncomingInvoice): IncomingInvoice => ({ ...i, netCents: num(i.netCents), taxCents: num(i.taxCents), grossCents: num(i.grossCents) })
+const maybe = (v: unknown) => v === null || v === undefined ? null : Number(v)
+const amounts = (i: IncomingInvoice): IncomingInvoice => ({ ...i, netCents: num(i.netCents), taxCents: num(i.taxCents), grossCents: num(i.grossCents),
+  originalNetCents: maybe(i.originalNetCents), originalTaxCents: maybe(i.originalTaxCents), exchangeRate: maybe(i.exchangeRate) })
 
 /** The project with the largest share (the first on a tie), kept in incoming_invoices.project_id. */
 const mainProject = (projects: ProjectShare[]) => [...projects].sort((a, b) => b.shareBp - a.shareBp)[0]?.projectId ?? null
@@ -121,6 +124,7 @@ export class IncomingRepository {
       values = {
         number: fields.number.slice(0, 60), issueDate: fields.issueDate, dueDate: fields.dueDate, netCents: fields.netCents,
         taxCents: fields.taxCents, grossCents: fields.grossCents, category, projects, iban: fields.iban, note: null,
+        currency: 'EUR', originalNetCents: null, originalTaxCents: null, exchangeRate: null,
       }
       if (fields.dueCents !== fields.grossCents) warnings.push(`Zu zahlen sind laut Rechnung ${(fields.dueCents / 100).toFixed(2).replace('.', ',')} € (Anzahlungen oder Rundung).`)
     }
@@ -146,9 +150,11 @@ export class IncomingRepository {
     const format = fields === null ? 'other' : fields.format
     const id = await transaction(this.pool, async (db) => {
       const result = await exec(db, `INSERT INTO incoming_invoices (supplier_id, status, number, issue_date, due_date, net_cents, tax_cents, gross_cents,
+        currency, original_net_cents, original_tax_cents, exchange_rate,
         category, project_id, iban, note, format, file_name, file_type, file_sha256, created_at, updated_at)
-        VALUES (?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [supplierId, values.number, values.issueDate, values.dueDate, values.netCents, values.taxCents, values.grossCents, values.category,
+        VALUES (?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [supplierId, values.number, values.issueDate, values.dueDate, values.netCents, values.taxCents, values.grossCents,
+        values.currency, values.originalNetCents, values.originalTaxCents, values.exchangeRate, values.category,
         mainProject(values.projects), values.iban, values.note, format, file.name.slice(0, 190), type, sha, now, now])
       await exec(db, 'INSERT INTO incoming_invoice_files (incoming_invoice_id, content, created_at) VALUES (?, ?, ?)', [result.insertId, file.data, now])
       await writeShares(db, result.insertId, values.projects)
@@ -179,8 +185,10 @@ export class IncomingRepository {
   async update(id: number, v: IncomingInput, now: string): Promise<boolean> {
     return transaction(this.pool, async (db) => {
       const result = await exec(db, `UPDATE incoming_invoices SET number = ?, issue_date = ?, due_date = ?, net_cents = ?, tax_cents = ?, gross_cents = ?,
+        currency = ?, original_net_cents = ?, original_tax_cents = ?, exchange_rate = ?,
         category = ?, project_id = ?, iban = ?, note = ?, updated_at = ? WHERE id = ? AND status <> 'discarded'`,
-      [v.number, v.issueDate, v.dueDate, v.netCents, v.taxCents, v.grossCents, v.category, mainProject(v.projects), v.iban, v.note, now, id])
+      [v.number, v.issueDate, v.dueDate, v.netCents, v.taxCents, v.grossCents, v.currency, v.originalNetCents, v.originalTaxCents, v.exchangeRate,
+        v.category, mainProject(v.projects), v.iban, v.note, now, id])
       if (result.affectedRows === 0) return false
       await writeShares(db, id, v.projects)
       return true
