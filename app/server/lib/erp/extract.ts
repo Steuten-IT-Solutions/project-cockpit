@@ -19,6 +19,8 @@ export interface ExtractedFields {
   supplierId: number | null
   /** The currency of the amounts (ISO 4217); EUR unless another one clearly dominates. */
   currency: string
+  /** 'credit' when the document calls itself a credit note or refund. */
+  kind: 'invoice' | 'credit'
 }
 
 // Signs of a currency in the text. A US invoice writes "$12.00" or "USD"; "US$" counts once.
@@ -110,7 +112,7 @@ function amountsAfter(lines: string[], labels: RegExp[], skip: RegExp | null = n
   return []
 }
 
-const NUMBER_LABELS = [/(?:rechnungs-?\s?(?:nummer|nr\.?)|rechnung\s+(?:nr\.?|nummer)|beleg-?\s?(?:nummer|nr\.?)|invoice\s+(?:no\.?|number|#))\s*[:#.]?\s*/i]
+const NUMBER_LABELS = [/(?:rechnungs-?\s?(?:nummer|nr\.?)|(?:rechnung|gutschrift)\s+(?:nr\.?|nummer)|(?:beleg|gutschrifts)-?\s?(?:nummer|nr\.?)|(?:invoice|credit\s+note)\s+(?:no\.?|number|#))\s*[:#.]?\s*/i]
 const DATE_LABELS = [/(?:rechnungsdatum|belegdatum|invoice\s+date)\s*[:.]?\s*/i, /(?<![a-zäöü])datum\s*[:.]?\s*/i]
 const DUE_LABELS = [/(?:fällig(?:\s+am|keit(?:sdatum)?)?|zahlbar\s+(?:bis|am)(?:\s+zum)?|zahlungsziel|due\s+date)\s*[:.]?\s*/i]
 const NET = /netto|zwischensumme|subtotal/i
@@ -175,5 +177,6 @@ export function extractFields(text: string, suppliers: KnownSupplier[], own: Own
     ?? suppliers.find(s => s.iban !== null && s.iban !== '' && compact.includes(s.iban.replaceAll(' ', '').toUpperCase()))
     ?? suppliers.find(s => name(s.name).length >= 4 && lower.includes(name(s.name)))
 
-  return { number, issueDate, dueDate, netCents: net, taxCents: tax, grossCents: gross, iban, vatId, supplierId: supplier?.id ?? null, currency: currencyOf(flat) }
+  return { number, issueDate, dueDate, netCents: net, taxCents: tax, grossCents: gross, iban, vatId, supplierId: supplier?.id ?? null, currency: currencyOf(flat),
+    kind: /\b(?:gutschrift|rückerstattung|erstattung|credit\s+note|refund)\b/i.test(flat) ? 'credit' : 'invoice' }
 }

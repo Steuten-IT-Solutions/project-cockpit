@@ -14,7 +14,7 @@ import { exec, num, one, rows, type Sql, transaction } from './sql'
 // same supplier invoice number cannot be entered twice, and an IBAN that differs from
 // the supplier's earlier invoices is flagged.
 
-const COLUMNS = `i.id, i.supplier_id AS supplierId, s.name AS supplierName, i.status, i.number, i.issue_date AS issueDate, i.due_date AS dueDate,
+const COLUMNS = `i.id, i.supplier_id AS supplierId, s.name AS supplierName, i.status, i.kind, i.related_incoming_id AS relatedId, i.number, i.issue_date AS issueDate, i.due_date AS dueDate,
   i.net_cents AS netCents, i.tax_cents AS taxCents, i.gross_cents AS grossCents, i.currency, i.original_net_cents AS originalNetCents,
   i.original_tax_cents AS originalTaxCents, i.exchange_rate AS exchangeRate, i.category, i.project_id AS projectId, i.iban, i.note,
   i.format, i.file_name AS fileName, i.file_type AS fileType, i.paid_on AS paidOn, i.discarded_reason AS discardedReason, i.created_at AS createdAt`
@@ -118,13 +118,14 @@ export class IncomingRepository {
     let supplierId: number
     if (fields !== null) {
       if (fields.currency !== 'EUR') throw new InvoiceError(`Die Rechnung ist in ${fields.currency}; das Cockpit rechnet nur in Euro.`)
-      if (fields.typeCode === '381') warnings.push('Das ist eine Gutschrift oder Stornorechnung. Die Beträge sind positiv erfasst; bitte prüfe die Zuordnung.')
+      if (fields.typeCode === '381') warnings.push('Das ist eine Gutschrift (Rechnungsart 381). Sie ist als Gutschrift erfasst und mindert die Ausgaben; verknüpfe sie bei Bedarf mit der ursprünglichen Rechnung.')
       if (fields.issueDate === null || fields.number === '') throw new InvoiceError('Der E-Rechnung fehlen Nummer oder Datum.')
       supplierId = await this.supplierFor(fields.supplier, fields.iban, now)
       values = {
         number: fields.number.slice(0, 60), issueDate: fields.issueDate, dueDate: fields.dueDate, netCents: fields.netCents,
         taxCents: fields.taxCents, grossCents: fields.grossCents, category, projects, iban: fields.iban, note: null,
         currency: 'EUR', originalNetCents: null, originalTaxCents: null, exchangeRate: null,
+        kind: fields.typeCode === '381' ? 'credit' : 'invoice', relatedId: null,
       }
       if (fields.dueCents !== fields.grossCents) warnings.push(`Zu zahlen sind laut Rechnung ${(fields.dueCents / 100).toFixed(2).replace('.', ',')} € (Anzahlungen oder Rundung).`)
     }
@@ -144,17 +145,18 @@ export class IncomingRepository {
       values = { ...manual.fields, category, projects }
     }
 
+    await this.checkRelated(values, null, supplierId)
     const twin = await one<{ id: number }>(this.pool, `SELECT id FROM incoming_invoices WHERE supplier_id = ? AND number = ? AND status <> 'discarded'`, [supplierId, values.number])
     if (twin !== null) throw new InvoiceError(`Die Rechnung ${values.number} dieses Lieferanten ist bereits erfasst (Eingangsrechnung Nr. ${twin.id}).`)
 
     const format = fields === null ? 'other' : fields.format
     const id = await transaction(this.pool, async (db) => {
       const result = await exec(db, `INSERT INTO incoming_invoices (supplier_id, status, number, issue_date, due_date, net_cents, tax_cents, gross_cents,
-        currency, original_net_cents, original_tax_cents, exchange_rate,
+        currency, original_net_cents, original_tax_cents, exchange_rate, kind, related_incoming_id,
         category, project_id, iban, note, format, file_name, file_type, file_sha256, created_at, updated_at)
-        VALUES (?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [supplierId, values.number, values.issueDate, values.dueDate, values.netCents, values.taxCents, values.grossCents,
-        values.currency, values.originalNetCents, values.originalTaxCents, values.exchangeRate, values.category,
+        values.currency, values.originalNetCents, values.originalTaxCents, values.exchangeRate, values.kind, values.relatedId, values.category,
         mainProject(values.projects), values.iban, values.note, format, file.name.slice(0, 190), type, sha, now, now])
       await exec(db, 'INSERT INTO incoming_invoice_files (incoming_invoice_id, content, created_at) VALUES (?, ?, ?)', [result.insertId, file.data, now])
       await writeShares(db, result.insertId, values.projects)
@@ -166,6 +168,15 @@ export class IncomingRepository {
       warnings.push(`Achtung: Die IBAN ${values.iban} weicht von früheren Rechnungen dieses Lieferanten ab. Bitte vor dem Bezahlen telefonisch bestätigen lassen (Betrugsmasche „geänderte Bankverbindung“).`)
     }
     return { id, warnings, format }
+  }
+
+  /** A credit may refer to another (not discarded) invoice of the same supplier, not to itself or another credit. */
+  private async checkRelated(v: IncomingInput, id: number | null, supplierId: number): Promise<void> {
+    if (v.relatedId === null) return
+    const related = await one<{ supplierId: number, kind: string, status: string }>(this.pool,
+      'SELECT supplier_id AS supplierId, kind, status FROM incoming_invoices WHERE id = ?', [v.relatedId])
+    if (related === null || v.relatedId === id || related.kind !== 'invoice' || related.status === 'discarded') throw new InvoiceError('Die Gutschrift kann nur zu einer erfassten Rechnung gehören.')
+    if (related.supplierId !== supplierId) throw new InvoiceError('Die Gutschrift und die Rechnung müssen vom selben Lieferanten sein.')
   }
 
   /** The supplier with this VAT id (or exactly this name); a new one otherwise. */
@@ -183,12 +194,20 @@ export class IncomingRepository {
   }
 
   async update(id: number, v: IncomingInput, now: string): Promise<boolean> {
+    const current = await this.find(id)
+    if (current === null) return false
+    await this.checkRelated(v, id, current.supplierId)
+    // An invoice that credit notes refer to cannot become a credit note itself.
+    if (v.kind === 'credit' && current.kind === 'invoice'
+      && await one(this.pool, 'SELECT id FROM incoming_invoices WHERE related_incoming_id = ? LIMIT 1', [id]) !== null) {
+      throw new InvoiceError('Zu dieser Rechnung gibt es Gutschriften; sie kann daher selbst keine Gutschrift sein.')
+    }
     return transaction(this.pool, async (db) => {
       const result = await exec(db, `UPDATE incoming_invoices SET number = ?, issue_date = ?, due_date = ?, net_cents = ?, tax_cents = ?, gross_cents = ?,
-        currency = ?, original_net_cents = ?, original_tax_cents = ?, exchange_rate = ?,
+        currency = ?, original_net_cents = ?, original_tax_cents = ?, exchange_rate = ?, kind = ?, related_incoming_id = ?,
         category = ?, project_id = ?, iban = ?, note = ?, updated_at = ? WHERE id = ? AND status <> 'discarded'`,
       [v.number, v.issueDate, v.dueDate, v.netCents, v.taxCents, v.grossCents, v.currency, v.originalNetCents, v.originalTaxCents, v.exchangeRate,
-        v.category, mainProject(v.projects), v.iban, v.note, now, id])
+        v.kind, v.relatedId, v.category, mainProject(v.projects), v.iban, v.note, now, id])
       if (result.affectedRows === 0) return false
       await writeShares(db, id, v.projects)
       return true

@@ -48,7 +48,7 @@ describe('reading incoming invoices without e-invoice data', () => {
       number: 'RE-2026/0815', issueDate: '2026-11-20', dueDate: '2026-12-04',
       netCents: 20000, taxCents: 3800, grossCents: 23800,
       // The own IBAN and VAT id (buyer) are skipped; the supplier is known by its IBAN.
-      iban: 'DE02120300000000202051', vatId: 'DE123456789', supplierId: 2, currency: 'EUR',
+      iban: 'DE02120300000000202051', vatId: 'DE123456789', supplierId: 2, currency: 'EUR', kind: 'invoice',
     })
   })
 
@@ -68,7 +68,7 @@ describe('reading incoming invoices without e-invoice data', () => {
     const text = `Rechnung vom 03.11.2026\nRechnungsnummer: siehe unten\nHetzner Online GmbH\nSumme 19,00 %\nTotal 12,34`
     expect(extractFields(text, SUPPLIERS, OWN)).toMatchObject({ number: null, issueDate: '2026-11-03', grossCents: 1234, supplierId: 1 })
     expect(extractFields('', SUPPLIERS, OWN)).toEqual({
-      number: null, issueDate: null, dueDate: null, netCents: null, taxCents: null, grossCents: null, iban: null, vatId: null, supplierId: null, currency: 'EUR',
+      number: null, issueDate: null, dueDate: null, netCents: null, taxCents: null, grossCents: null, iban: null, vatId: null, supplierId: null, currency: 'EUR', kind: 'invoice',
     })
   })
 
@@ -78,5 +78,10 @@ describe('reading incoming invoices without e-invoice data', () => {
     expect(currencyOf('Summe 12,00 € (USD-Konto: nein)')).toBe('EUR')
     expect(currencyOf('Total: £20.00')).toBe('GBP')
     expect(currencyOf('Betrag 10,00')).toBe('EUR')
+  })
+
+  it('notices credit notes', () => {
+    expect(extractFields('Gutschrift Nr. G-12\nDatum 05.11.2026\nGesamtbetrag 23,80 €', [], OWN)).toMatchObject({ number: 'G-12', kind: 'credit', grossCents: 2380 })
+    expect(extractFields('Credit note CN-7\nTotal $5.00', [], OWN)).toMatchObject({ kind: 'credit', currency: 'USD' })
   })
 })

@@ -423,4 +423,37 @@ describe('ERP', () => {
     expect((await send('PUT', `/api/erp/incoming/${id}`, base)).status).toBe(200)
     expect((await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)).invoice).toMatchObject({ netCents: 8100, currency: 'EUR', exchangeRate: null })
   })
+
+  it('records a credit note of a supplier that lowers the expenses', async () => {
+    const year = new Date().getFullYear()
+    const { invoices } = await client.json<{ invoices: { id: number, number: string, supplierName: string }[] }>('/api/erp/incoming')
+    const original = invoices.find(i => i.number === 'H-1')!
+    const other = invoices.find(i => i.number === 'INV-9')!
+    const expenses = async () => (await client.json<{ report: { projects: { name: string, expenses: number }[] } }>(`/api/erp/report?year=${year}`)).report.projects
+      .find(p => p.name === 'web')?.expenses ?? 0
+    const before = await expenses()
+    const credit = (relatedId: number, name: string) => {
+      const form = new FormData()
+      form.append('file', new Blob([Buffer.from(`%PDF-1.4\n% Credit ${relatedId}\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n`)], { type: 'application/pdf' }), name)
+      const fields = { category: 'hosting', supplierName: 'Hoster', number: 'G-1', issueDate: `${year}-03-10`, net: '20,00', tax: '3,80',
+        kind: 'credit', relatedId: String(relatedId), projects: JSON.stringify([{ projectId: '2', share: '' }]) }
+      for (const [k, v] of Object.entries(fields)) form.append(k, v)
+      return upload('/api/erp/incoming', form)
+    }
+    // An invoice of another supplier is refused.
+    expect((await credit(other.id, 'wrong.pdf')).json.statusMessage).toContain('selben Lieferanten')
+    const created = await credit(original.id, 'credit.pdf')
+    expect(created.status).toBe(200)
+    const id = created.json.id as number
+    const detail = await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)
+    expect(detail.invoice).toMatchObject({ kind: 'credit', relatedId: original.id, grossCents: 2380 })
+    expect(await expenses()).toBe(before - 2000)
+    // The original lists it, and cannot become a credit note itself.
+    const page = await client.json<{ siblings: { id: number, relatedId: number | null }[] }>(`/api/erp/incoming/${original.id}`)
+    expect(page.siblings.find(s => s.id === id)?.relatedId).toBe(original.id)
+    const base = { number: 'H-1', issueDate: `${year}-03-01`, net: '100,01', tax: '19,00', category: 'hosting', iban: '', note: '', kind: 'credit', relatedId: '' }
+    expect((await send('PUT', `/api/erp/incoming/${original.id}`, base)).json.statusMessage).toContain('Gutschriften')
+    // Marked as refunded, it counts as paid back in the export.
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: `${year}-03-12` })).status).toBe(200)
+  })
 })

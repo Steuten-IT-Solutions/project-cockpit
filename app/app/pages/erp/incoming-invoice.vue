@@ -9,7 +9,7 @@ interface Parsed {
   taxes: { category: string, rate: number, basisCents: number, taxCents: number }[]
   supplier: { name: string, vatId: string | null, street: string | null, postcode: string | null, city: string | null }
 }
-interface Page { invoice: IncomingInvoice, supplier: Supplier | null, otherIbans: string[], parsed: Parsed | null, projects: Choice[], today: string }
+interface Page { invoice: IncomingInvoice, supplier: Supplier | null, otherIbans: string[], parsed: Parsed | null, projects: Choice[], siblings: IncomingInvoice[], today: string }
 
 const route = useRoute()
 const id = computed(() => String(route.query.id ?? ''))
@@ -20,7 +20,7 @@ if (error.value?.statusCode === 404) {
 useHead({ title: computed(() => `${data.value?.invoice.supplierName ?? 'Eingangsrechnung'} · Cockpit`) })
 const { busy, run } = useAction()
 
-const form = reactive({ number: '', issueDate: '', dueDate: '', net: '', tax: '', category: 'other', iban: '', note: '', currency: 'EUR', euroGross: '' })
+const form = reactive({ number: '', issueDate: '', dueDate: '', net: '', tax: '', category: 'other', iban: '', note: '', currency: 'EUR', euroGross: '', kind: 'invoice', relatedId: 'none' })
 const sign = computed(() => form.currency === 'EUR' ? '€' : form.currency)
 const shares = ref<ShareForm[]>([])
 function fill() {
@@ -30,11 +30,20 @@ function fill() {
     // An invoice in another currency is edited in its own amounts (converted on saving).
     number: i.number, issueDate: i.issueDate, dueDate: i.dueDate ?? '', net: priceText(i.originalNetCents ?? i.netCents), tax: priceText(i.originalTaxCents ?? i.taxCents),
     category: i.category, iban: i.iban ?? '', note: i.note ?? '', currency: i.currency, euroGross: i.currency === 'EUR' ? '' : priceText(i.grossCents),
+    kind: i.kind, relatedId: i.relatedId !== null ? String(i.relatedId) : 'none',
   })
   shares.value = shareForms(i.projects)
 }
 fill()
 watch(() => data.value?.invoice, fill)
+// A credit note or refund lowers the expenses; it may refer to an invoice of the same supplier.
+const isCredit = computed(() => data.value?.invoice.kind === 'credit')
+const kindItems = [{ value: 'invoice', label: 'Rechnung' }, { value: 'credit', label: 'Gutschrift / Erstattung' }]
+const relatedItems = computed(() => [{ value: 'none', label: '– keine –' }, ...(data.value?.siblings ?? [])
+  .filter(i => i.kind === 'invoice' && i.status !== 'discarded')
+  .map(i => ({ value: String(i.id), label: `${i.number} · ${day(i.issueDate)} · ${euro(i.grossCents)}` }))])
+const related = computed(() => data.value?.siblings.find(i => i.id === data.value?.invoice.relatedId) ?? null)
+const credits = computed(() => (data.value?.siblings ?? []).filter(i => i.relatedId === data.value?.invoice.id && i.status !== 'discarded'))
 const categoryItems = Object.entries(INCOMING_CATEGORIES).map(([value, label]) => ({ value, label }))
 // The stored split in euros, as the evaluation counts it.
 const projectParts = computed(() => {
@@ -49,7 +58,7 @@ const ibanChanged = computed(() => {
 })
 
 async function save() {
-  if (await run('save', () => cockpitSend('PUT', `/api/erp/incoming/${id.value}`, { ...form, projects: sharesBody(shares.value) })) !== null) await refresh()
+  if (await run('save', () => cockpitSend('PUT', `/api/erp/incoming/${id.value}`, { ...form, relatedId: form.relatedId === 'none' ? '' : form.relatedId, projects: sharesBody(shares.value) })) !== null) await refresh()
 }
 const paidOn = ref('')
 watch(() => data.value?.today, (t) => { paidOn.value = t ?? '' }, { immediate: true })
@@ -76,7 +85,8 @@ async function discard() {
       <h1 class="text-2xl font-semibold text-highlighted">
         {{ data.invoice.supplierName }} · {{ data.invoice.number }}
       </h1>
-      <UBadge v-if="data.invoice.status === 'paid'" color="success" variant="subtle" :label="`Bezahlt am ${day(data.invoice.paidOn)}`" />
+      <UBadge v-if="isCredit" color="warning" variant="subtle" label="Gutschrift" />
+      <UBadge v-if="data.invoice.status === 'paid'" color="success" variant="subtle" :label="`${isCredit ? 'Erstattet' : 'Bezahlt'} am ${day(data.invoice.paidOn)}`" />
       <UBadge v-else-if="data.invoice.status === 'discarded'" color="neutral" variant="subtle" label="Verworfen" />
       <UBadge v-else color="info" variant="subtle" label="Offen" />
     </div>
@@ -152,7 +162,21 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
             <UFormField label="Kategorie">
               <USelect v-model="form.category" :items="categoryItems" class="w-full" :disabled="data.invoice.status === 'discarded'" />
             </UFormField>
+            <UFormField label="Art" :help="data.invoice.format !== 'other' ? 'Steht so in der E-Rechnung.' : undefined">
+              <USelect v-model="form.kind" :items="kindItems" class="w-full" :disabled="data.invoice.status === 'discarded' || data.invoice.format !== 'other'" />
+            </UFormField>
+            <UFormField v-if="form.kind === 'credit'" label="Gehört zur Rechnung">
+              <USelect v-model="form.relatedId" :items="relatedItems" class="w-full" :disabled="data.invoice.status === 'discarded'" />
+            </UFormField>
           </div>
+          <p v-if="isCredit && related" class="text-sm">
+            Gutschrift zur Rechnung <NuxtLink :to="`/erp/incoming-invoice?id=${related.id}`" class="text-primary hover:underline">{{ related.number }}</NuxtLink>
+            vom {{ day(related.issueDate) }} über {{ euro(related.grossCents) }}.
+          </p>
+          <p v-if="credits.length > 0" class="text-sm">
+            Gutschriften zu dieser Rechnung:
+            <span v-for="(c, k) in credits" :key="c.id">{{ k > 0 ? ', ' : '' }}<NuxtLink :to="`/erp/incoming-invoice?id=${c.id}`" class="text-primary hover:underline">{{ c.number }}</NuxtLink> ({{ euro(c.grossCents) }})</span>
+          </p>
           <UFormField v-if="data.invoice.format === 'other' || data.invoice.currency !== 'EUR'" label="Währung">
             <ErpCurrency v-model:currency="form.currency" v-model:euro-gross="form.euroGross" :net="form.net" :tax="form.tax" :disabled="data.invoice.status === 'discarded'" />
           </UFormField>
@@ -181,11 +205,11 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
     <UCard v-if="data.invoice.status !== 'discarded'">
       <div class="flex flex-wrap items-end gap-3">
         <template v-if="data.invoice.status === 'open'">
-          <UFormField label="Bezahlt am">
+          <UFormField :label="isCredit ? 'Erstattet am' : 'Bezahlt am'">
             <UInput v-model="paidOn" type="date" />
           </UFormField>
           <UButton icon="i-lucide-check" :loading="busy === 'paid'" @click="setPaid(paidOn)">
-            Als bezahlt markieren
+            {{ isCredit ? 'Als erstattet markieren' : 'Als bezahlt markieren' }}
           </UButton>
         </template>
         <UButton v-else color="neutral" variant="outline" :loading="busy === 'paid'" @click="setPaid('')">

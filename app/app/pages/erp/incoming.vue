@@ -15,7 +15,7 @@ const supplierItems = computed(() => [{ value: NEW, label: '+ neuer Lieferant' }
 const file = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const showManual = ref(false)
-const form = reactive({ category: 'other', supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '', currency: 'EUR', euroGross: '' })
+const form = reactive({ category: 'other', supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '', currency: 'EUR', euroGross: '', kind: 'invoice', relatedId: NONE })
 // "€", or the code of another currency the amounts are typed in.
 const sign = computed(() => form.currency === 'EUR' ? '€' : form.currency)
 // The projects the invoice is split across (components/ErpProjectShares.vue).
@@ -37,7 +37,7 @@ interface Suggestion {
   source: 'pdf' | 'ocr' | null
   problem: string | null
   fields: { number: string | null, issueDate: string | null, dueDate: string | null, netCents: number | null, taxCents: number | null,
-    iban: string | null, supplierId: number | null, currency: string } | null
+    iban: string | null, supplierId: number | null, currency: string, kind: 'invoice' | 'credit' } | null
 }
 const suggestion = ref<Suggestion | null>(null)
 async function suggest(selected: File, senderName: string | null) {
@@ -66,6 +66,7 @@ async function suggest(selected: File, senderName: string | null) {
     // Amounts in another currency stay as printed; the euro amount is entered by hand.
     currency: f.currency,
     euroGross: '',
+    kind: f.kind,
   })
 }
 const suggestionNote = computed(() => {
@@ -134,6 +135,7 @@ async function upload() {
   body.append('projects', JSON.stringify(sharesBody(shares.value)))
   for (const [key, value] of Object.entries(form)) {
     if (key === 'supplierId') body.append(key, value === NEW ? '' : value)
+    else if (key === 'relatedId') body.append(key, value === NONE ? '' : value)
     else if (showManual.value || key === 'category') body.append(key, value)
   }
   try {
@@ -147,7 +149,7 @@ async function upload() {
     if (fileInput.value) fileInput.value.value = ''
     showManual.value = false
     suggestion.value = null
-    Object.assign(form, { supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '', currency: 'EUR', euroGross: '' })
+    Object.assign(form, { supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '', currency: 'EUR', euroGross: '', kind: 'invoice', relatedId: NONE })
     shares.value = [{ projectId: NONE, share: '' }]
     await refresh()
     if (result.warnings.length === 0) await navigateTo(`/erp/incoming-invoice?id=${result.id}`)
@@ -167,9 +169,17 @@ async function upload() {
   }
 }
 
+// A credit note or refund of a supplier: it may refer to an earlier invoice of that supplier.
+const kindItems = [{ value: 'invoice', label: 'Rechnung' }, { value: 'credit', label: 'Gutschrift / Erstattung' }]
+const relatedItems = computed(() => [{ value: NONE, label: '– keine –' }, ...(data.value?.invoices ?? [])
+  .filter(i => i.kind === 'invoice' && i.status !== 'discarded' && (form.supplierId === NEW || String(i.supplierId) === form.supplierId))
+  .map(i => ({ value: String(i.id), label: `${i.supplierName} · ${i.number} · ${day(i.issueDate)} · ${euro(i.grossCents)}` }))])
+const signed = (i: IncomingInvoice) => i.kind === 'credit' ? -i.grossCents : i.grossCents
+const refundSum = computed(() => (data.value?.invoices ?? []).filter(i => i.status === 'open' && i.kind === 'credit').reduce((s, i) => s + i.grossCents, 0))
+
 const filter = ref('open')
 const list = computed(() => (data.value?.invoices ?? []).filter(i => filter.value === 'all' || i.status === filter.value))
-const openSum = computed(() => (data.value?.invoices ?? []).filter(i => i.status === 'open').reduce((s, i) => s + i.grossCents, 0))
+const openSum = computed(() => (data.value?.invoices ?? []).filter(i => i.status === 'open' && i.kind === 'invoice').reduce((s, i) => s + i.grossCents, 0))
 const STATUS: Record<string, { label: string, color: 'info' | 'success' | 'neutral' }> = {
   open: { label: 'Offen', color: 'info' }, paid: { label: 'Bezahlt', color: 'success' }, discarded: { label: 'Verworfen', color: 'neutral' },
 }
@@ -225,6 +235,7 @@ const STATUS: Record<string, { label: string, color: 'info' | 'success' | 'neutr
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p class="text-sm text-muted">
             Offen zu zahlen <strong class="text-highlighted">{{ euro(openSum) }}</strong>
+            <span v-if="refundSum > 0"> · Erstattungen offen <strong class="text-highlighted">{{ euro(refundSum) }}</strong></span>
           </p>
           <div class="flex gap-1">
             <UButton
@@ -248,8 +259,9 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
                 </p>
               </div>
               <div class="flex items-center gap-2 text-sm">
-                <UBadge :color="STATUS[i.status]!.color" variant="subtle" :label="STATUS[i.status]!.label" />
-                <strong class="w-24 text-right">{{ euro(i.grossCents) }}</strong>
+                <UBadge v-if="i.kind === 'credit'" color="neutral" variant="outline" label="Gutschrift" />
+                <UBadge :color="STATUS[i.status]!.color" variant="subtle" :label="i.kind === 'credit' && i.status === 'paid' ? 'Erstattet' : STATUS[i.status]!.label" />
+                <strong class="w-24 text-right">{{ euro(signed(i)) }}</strong>
               </div>
             </NuxtLink>
           </li>
@@ -289,8 +301,14 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
           <UAlert v-else-if="suggestionNote" :color="suggestion?.fields && !suggestion.problem ? 'info' : 'neutral'" variant="subtle" :title="suggestionNote" />
           <USwitch v-model="showManual" label="Angaben von Hand eintragen (keine E-Rechnung)" />
           <template v-if="showManual">
+            <UFormField label="Art">
+              <USelect v-model="form.kind" :items="kindItems" class="w-full" />
+            </UFormField>
             <UFormField label="Lieferant">
               <USelect v-model="form.supplierId" :items="supplierItems" class="w-full" />
+            </UFormField>
+            <UFormField v-if="form.kind === 'credit'" label="Gehört zur Rechnung" hint="optional">
+              <USelect v-model="form.relatedId" :items="relatedItems" class="w-full" />
             </UFormField>
             <UFormField v-if="form.supplierId === NEW" label="Name des neuen Lieferanten">
               <UInput v-model="form.supplierName" :maxlength="100" class="w-full" />
