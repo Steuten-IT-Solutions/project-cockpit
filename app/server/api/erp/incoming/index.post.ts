@@ -1,9 +1,11 @@
 import { idField, incomingFromBody } from '../../../lib/erp/forms'
 import { IncomingRepository, type ManualEntry } from '../../../lib/erp/incoming'
+import { MailFileRepository } from '../../../lib/erp/mailbox'
 import { INCOMING_CATEGORIES } from '#shared/lib/erp'
 
 // Upload of an incoming invoice as multipart form: the file ("file") and, for files
-// without e-invoice data, the fields typed in by hand.
+// without e-invoice data, the fields typed in by hand. "mailFileId" names the attachment
+// from the mailbox the file was taken from; it is then marked as entered.
 export default defineEventHandler(async (event) => {
   await requireUser(event)
   const erp = useErp(event)
@@ -32,6 +34,8 @@ export default defineEventHandler(async (event) => {
       : { supplierId: supplierId === 'invalid' ? null : supplierId, supplierName: (body.supplierName ?? '').trim().slice(0, 100) || null, fields }
   }
   const result = await erpAction(() => new IncomingRepository(erp.pool).upload({ name: file.filename ?? 'rechnung', data: file.data }, manual, category, projectId, erp.engine, erp.now()))
+  const mailFileId = idField(body.mailFileId)
+  if (typeof mailFileId === 'number') await new MailFileRepository(erp.pool).booked(mailFileId, result.id, erp.now())
   const read = result.format === 'other' ? 'Erfasst.' : 'E-Rechnung gelesen und erfasst.'
   return { ...result, message: read }
 })

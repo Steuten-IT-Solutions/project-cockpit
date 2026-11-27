@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MAIL_SENDERS } from '#shared/lib/erp'
-import type { CompanySettings } from '#shared/types/erp'
+import type { CompanySettings, MailboxSettings } from '#shared/types/erp'
 
 // Own company data, printed on every document and copied into each invoice when it
 // is finalized (later changes do not touch issued invoices). Also the logo and the
@@ -64,6 +64,19 @@ async function uploadLogo(event: Event) {
     await refresh()
   }
 }
+// The mailbox for incoming invoices (fetched every 15 minutes, see server/lib/erp/mailbox.ts).
+const { data: mailbox, refresh: refreshMailbox } = await useFetch<MailboxSettings>('/api/erp/mailbox')
+const mailboxForm = reactive({ host: mailbox.value?.host ?? 'mail.steuten-it-solutions.de', user: mailbox.value?.user ?? '', password: '' })
+async function saveMailbox() {
+  if (await run('mailbox', () => cockpitSend('PUT', '/api/erp/mailbox', { ...mailboxForm })) !== null) {
+    mailboxForm.password = ''
+    await refreshMailbox()
+  }
+}
+async function fetchMailbox() {
+  await run('mailbox-fetch', () => cockpitSend('POST', '/api/erp/mailbox/fetch'))
+}
+
 async function removeLogo() {
   if (await run('logo-delete', () => cockpitSend('DELETE', '/api/erp/logo')) !== null) await refresh()
 }
@@ -214,5 +227,35 @@ async function removeLogo() {
         </UButton>
       </div>
     </form>
+
+    <UCard>
+      <template #header>
+        <h2 class="font-semibold text-highlighted">
+          Postfach für Eingangsrechnungen
+        </h2>
+      </template>
+      <form class="grid gap-3 sm:grid-cols-3" @submit.prevent="saveMailbox">
+        <p class="text-xs text-muted sm:col-span-3">
+          Das Cockpit ruft dieses Postfach alle 15 Minuten ab. E-Rechnungen werden sofort erfasst, andere PDFs und Fotos landen unter Eingangsrechnungen → „Aus dem Postfach“. Die E-Mails werden danach in den Ordner „Verarbeitet“ verschoben, nie gelöscht. Benutzer leer lassen schaltet den Abruf aus.
+        </p>
+        <UFormField label="Mailserver">
+          <UInput v-model="mailboxForm.host" :maxlength="190" class="w-full" />
+        </UFormField>
+        <UFormField label="Benutzer (E-Mail-Adresse)">
+          <UInput v-model="mailboxForm.user" type="email" :maxlength="190" placeholder="eingangsrechnung@…" class="w-full" />
+        </UFormField>
+        <UFormField label="Passwort" :hint="mailbox?.hasPassword ? 'gespeichert, leer lassen zum Behalten' : undefined">
+          <UInput v-model="mailboxForm.password" type="password" autocomplete="new-password" class="w-full" />
+        </UFormField>
+        <div class="flex flex-wrap gap-2 sm:col-span-3">
+          <UButton type="submit" :loading="busy === 'mailbox'" :disabled="!data.settings">
+            Postfach speichern
+          </UButton>
+          <UButton v-if="mailbox?.user" color="neutral" variant="outline" icon="i-lucide-mail" :loading="busy === 'mailbox-fetch'" @click="fetchMailbox">
+            Jetzt abrufen
+          </UButton>
+        </div>
+      </form>
+    </UCard>
   </div>
 </template>

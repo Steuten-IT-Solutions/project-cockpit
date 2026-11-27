@@ -3,9 +3,13 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { InvoiceDetail, InvoiceSummary } from '../../shared/types/erp'
+import type { ImapFlow } from 'imapflow'
+import { createPool } from 'mysql2/promise'
+import { InvoiceEngine } from '../../server/lib/erp/engine'
+import { fetchMailbox } from '../../server/lib/erp/mailbox'
+import type { IncomingMailFile, InvoiceDetail, InvoiceSummary, MailboxSettings } from '../../shared/types/erp'
 import { type Client, loggedIn } from './client'
-import { BASE, resetDatabase, sql, startServer, stopServer } from './setup'
+import { BASE, databaseUrl, resetDatabase, sql, startServer, stopServer } from './setup'
 
 // The ERP end to end: the built server, MariaDB and the PHP e-invoice engine (bin/invoice.php).
 
@@ -167,6 +171,76 @@ describe('ERP', () => {
 
     expect((await send('POST', `/api/erp/incoming/${second.json.id as number}/discard`, { reason: 'Test' })).status).toBe(200)
     await expect(sql('DELETE FROM incoming_invoices WHERE id = ?', [second.json.id])).rejects.toThrow(/discarded, not deleted/)
+  })
+
+  it('takes incoming invoices from the mailbox', async () => {
+    expect((await send('PUT', '/api/erp/mailbox', { host: 'mail.example.org', user: 'eingang@example.org' })).json.statusMessage).toContain('Passwort')
+    expect((await send('PUT', '/api/erp/mailbox', { host: 'mail.example.org', user: 'eingang@example.org', password: 'geheim' })).status).toBe(200)
+    expect(await client.json<MailboxSettings>('/api/erp/mailbox')).toEqual({ host: 'mail.example.org', user: 'eingang@example.org', hasPassword: true })
+    expect(((await sql('SELECT imap_secret AS s FROM company_settings')) as { s: string }[])[0]!.s).not.toContain('geheim')
+
+    // Three messages: the Stornorechnung (an e-invoice) with a small signature logo, a plain
+    // PDF forwarded as attachment, and a mail without any file.
+    const { invoices } = await client.json<{ invoices: InvoiceSummary[] }>('/api/erp/invoices')
+    const credit = invoices.find(i => i.type === '381')!
+    const eInvoice = Buffer.from(await (await client.request(`/api/erp/invoices/${credit.id}/pdf`)).arrayBuffer())
+    const part = (type: string, name: string, data: Buffer, disposition = 'attachment') =>
+      `--b\r\nContent-Type: ${type}; name="${name}"\r\nContent-Disposition: ${disposition}; filename="${name}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${data.toString('base64')}\r\n`
+    const mail = (subject: string, parts: string[]) => Buffer.from(`From: Lieferant <rechnung@lieferant.example>\r\nTo: eingang@example.org\r\nSubject: ${subject}\r\n`
+      + `Message-ID: <${subject.replace(/\W/g, '')}@example>\r\nDate: Fri, 27 Nov 2026 08:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="b"\r\n\r\n`
+      + `--b\r\nContent-Type: text/plain\r\n\r\nAnbei die Rechnung.\r\n${parts.join('')}--b--\r\n`)
+    const plain = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')
+    const inner = mail('Rechnung Papier', [part('application/pdf', 'scan.pdf', plain)])
+    const messages = new Map<number, Buffer>([
+      [11, mail('Gutschrift', [part('application/pdf', 'gutschrift.pdf', eInvoice), part('image/png', 'logo.png', readFileSync(join(import.meta.dirname, '../../../tests/fixtures/logo.png')), 'inline')])],
+      [12, mail('WG: Rechnung', [part('message/rfc822', 'weitergeleitet.eml', inner)])],
+      [13, mail('Hallo', [])],
+    ])
+    const moved: [number, string][] = []
+    const created: string[] = []
+    const fake = {
+      connect: async () => {},
+      list: async () => created.map(path => ({ path })),
+      mailboxCreate: async (path: string) => { created.push(path) },
+      getMailboxLock: async () => ({ release: () => {} }),
+      search: async () => [...messages.keys()],
+      fetchOne: async (uid: string) => ({ source: messages.get(Number(uid)), size: messages.get(Number(uid))!.length }),
+      messageMove: async (uid: string, folder: string) => { moved.push([Number(uid), folder]) },
+      logout: async () => {},
+      close: () => {},
+    } as unknown as ImapFlow
+    const pool = createPool(databaseUrl)
+    try {
+      const engine = new InvoiceEngine('php', join(import.meta.dirname, '../../..'))
+      const result = await fetchMailbox({ host: 'x', user: 'y', password: 'z' }, pool, engine, '2026-11-27 08:05:00', () => fake)
+      expect(result).toEqual({ messages: 3, booked: 1, waiting: 1, ignored: 0 })
+      expect(moved).toEqual([[11, 'Verarbeitet'], [12, 'Verarbeitet'], [13, 'Ohne Rechnung']])
+      // The same file again (e.g. forwarded twice) is not taken twice.
+      moved.length = 0
+      expect(await fetchMailbox({ host: 'x', user: 'y', password: 'z' }, pool, engine, '2026-11-27 08:20:00', () => fake)).toEqual({ messages: 3, booked: 0, waiting: 0, ignored: 2 })
+    }
+    finally {
+      await pool.end()
+    }
+
+    // The e-invoice is entered; the plain PDF waits and is entered with typed-in fields.
+    const list = await client.json<{ invoices: { number: string }[], mailFiles: IncomingMailFile[] }>('/api/erp/incoming')
+    expect(list.invoices.map(i => i.number)).toContain(credit.number)
+    expect(list.mailFiles).toHaveLength(1)
+    const waiting = list.mailFiles[0]!
+    expect(waiting).toMatchObject({ fileName: 'scan.pdf', sender: 'Lieferant <rechnung@lieferant.example>', subject: 'Rechnung Papier', status: 'new' })
+    const form = new FormData()
+    form.append('file', new Blob([await (await client.request(`/api/erp/incoming/mail/${waiting.id}`)).arrayBuffer()], { type: 'application/pdf' }), 'scan.pdf')
+    for (const [k, v] of Object.entries({ mailFileId: String(waiting.id), category: 'other', supplierName: 'Lieferant', number: 'P-7', issueDate: '2026-11-20', net: '50', tax: '0' })) form.append(k, v)
+    expect((await upload('/api/erp/incoming', form)).status).toBe(200)
+    expect((await client.json<{ mailFiles: IncomingMailFile[] }>('/api/erp/incoming')).mailFiles).toHaveLength(0)
+    expect((await send('POST', `/api/erp/incoming/mail/${waiting.id}/ignore`)).status).toBe(422)
+
+    // A received XML is shown as text, never as a document the browser would run.
+    const [{ id: xmlId }] = (await sql(`INSERT INTO incoming_mail_files (file_name, file_type, sha256, content, status, created_at, updated_at)
+      VALUES ('x.xml', 'application/xml', REPEAT('a', 64), '<x/>', 'new', NOW(), NOW()) RETURNING id`)) as [{ id: number }]
+    expect((await client.request(`/api/erp/incoming/mail/${xmlId}`)).headers.get('content-type')).toBe('text/plain; charset=utf-8')
+    expect((await send('POST', `/api/erp/incoming/mail/${xmlId}/ignore`)).status).toBe(200)
   })
 
   it('turns a quote into an order and an invoice draft', async () => {

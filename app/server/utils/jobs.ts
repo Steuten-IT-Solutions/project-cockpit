@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import type { H3Event } from 'h3'
+import { Crypto, deriveAppKey } from '../lib/crypto'
 import { database, databasePool } from '../lib/db'
 import type { JobContext } from '../lib/jobs/runner'
 
@@ -15,6 +16,8 @@ export function jobContext(event?: H3Event): JobContext {
     db: database(runtime.databaseUrl),
     pool: databasePool(runtime.databaseUrl),
     migrationsDir: runtime.migrationsDir !== '' ? runtime.migrationsDir : resolve(process.cwd(), '../migrations'),
+    // For the mailbox of incoming invoices: its password is encrypted with the app key.
+    erp: runtime.appKey === '' ? undefined : { engine: erpEngine(event), crypto: new Crypto(deriveAppKey(runtime.appKey)) },
   }
 }
 

@@ -135,6 +135,15 @@ with Mustang (`.github/workflows/einvoice.yml`). The deploy therefore ships `bin
 `src/`, `vendor/` and `resources/fonts` next to `node/`; `NUXT_ERP_PHP_BINARY` and
 `NUXT_ERP_PHP_DIR` override `php` and the folder above the app.
 
+**Incoming invoices by e-mail.** With a mailbox set up under ERP → Einstellungen (IMAP on
+port 993, password encrypted with the app key), the background jobs fetch it every 15 minutes
+(`server/lib/erp/mailbox.ts`, also the button "Jetzt abrufen"). Each PDF, XML or photo
+attachment, also from messages forwarded as attachment, is kept in `incoming_mail_files`. An
+e-invoice is entered at once; any other file waits under Eingangsrechnungen → "Aus dem Postfach"
+until it is entered by hand or ignored. The same file is never taken twice (SHA-256). The
+message is moved to "Verarbeitet" (or "Ohne Rechnung"), never deleted, and stays in the mail
+archive.
+
 **Senders and logo.** Each kind of document (invoice, cancellation, reminder, quote, order
 confirmation) can have its own From address in the settings; empty falls back to the general
 sender (`senderFor()` in `shared/lib/erp.ts`). The logo may be PNG, JPEG or SVG. An SVG is

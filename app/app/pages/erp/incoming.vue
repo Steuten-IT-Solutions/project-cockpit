@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { day, euro, INCOMING_CATEGORIES } from '#shared/lib/erp'
-import type { Choice, IncomingInvoice, Supplier } from '#shared/types/erp'
+import type { Choice, IncomingInvoice, IncomingMailFile, Supplier } from '#shared/types/erp'
 
-// Incoming invoices: upload, open ones to pay, all received.
+// Incoming invoices: upload, attachments from the mailbox to enter, open ones to pay, all received.
 useHead({ title: 'Eingangsrechnungen · Cockpit' })
-const { data, refresh } = await useFetch<{ invoices: IncomingInvoice[], suppliers: Supplier[], projects: Choice[], today: string }>('/api/erp/incoming')
-const { busy } = useAction()
+const { data, refresh } = await useFetch<{ invoices: IncomingInvoice[], suppliers: Supplier[], projects: Choice[], mailFiles: IncomingMailFile[], mailbox: string | null, today: string }>('/api/erp/incoming')
+const { busy, run } = useAction()
 
 const NONE = 'none'
 const NEW = 'new'
@@ -22,7 +22,29 @@ const warnings = ref<string[]>([])
 
 function pickFile(event: Event) {
   file.value = (event.target as HTMLInputElement).files?.[0] ?? null
+  mailFile.value = null
   error.value = null
+}
+
+// An attachment from the mailbox goes into the form above: the file is loaded from the
+// server and sent back with the typed-in fields; the upload then marks it as entered.
+const mailFile = ref<IncomingMailFile | null>(null)
+async function enterMailFile(item: IncomingMailFile) {
+  const blob = await run('mail-load', () => $fetch<Blob>(`/api/erp/incoming/mail/${item.id}`, { responseType: 'blob' }))
+  if (blob === null) return
+  file.value = new File([blob], item.fileName, { type: item.fileType })
+  if (fileInput.value) fileInput.value.value = ''
+  mailFile.value = item
+  showManual.value = true
+  error.value = item.problem
+  warnings.value = []
+  document.getElementById('erfassen')?.scrollIntoView({ behavior: 'smooth' })
+}
+async function ignoreMailFile(item: IncomingMailFile) {
+  if (await run(`ignore-${item.id}`, () => cockpitSend('POST', `/api/erp/incoming/mail/${item.id}/ignore`)) !== null) await refresh()
+}
+async function fetchNow() {
+  if (await run('fetch', () => cockpitSend('POST', '/api/erp/mailbox/fetch')) !== null) await refresh()
 }
 
 async function upload() {
@@ -35,6 +57,7 @@ async function upload() {
   busy.value = 'upload'
   const body = new FormData()
   body.append('file', file.value)
+  if (mailFile.value !== null) body.append('mailFileId', String(mailFile.value.id))
   for (const [key, value] of Object.entries(form)) {
     if (key === 'projectId' || key === 'supplierId') body.append(key, value === NONE || value === NEW ? '' : value)
     else if (showManual.value || key === 'category') body.append(key, value)
@@ -46,6 +69,7 @@ async function upload() {
     useNotice().ok(result.message)
     warnings.value = result.warnings
     file.value = null
+    mailFile.value = null
     if (fileInput.value) fileInput.value.value = ''
     showManual.value = false
     Object.assign(form, { supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '' })
@@ -76,6 +100,45 @@ const STATUS: Record<string, { label: string, color: 'info' | 'success' | 'neutr
     <h1 class="text-2xl font-semibold text-highlighted">
       Eingangsrechnungen
     </h1>
+    <UCard v-if="data.mailbox || data.mailFiles.length > 0">
+      <template #header>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="font-semibold text-highlighted">
+            Aus dem Postfach
+          </h2>
+          <UButton v-if="data.mailbox" size="xs" color="neutral" variant="outline" icon="i-lucide-mail" :loading="busy === 'fetch'" @click="fetchNow">
+            Jetzt abrufen
+          </UButton>
+        </div>
+      </template>
+      <p class="mb-2 text-xs text-muted">
+        E-Mails an {{ data.mailbox ?? 'das Postfach' }} werden alle 15 Minuten abgerufen. E-Rechnungen werden sofort erfasst; andere PDFs und Fotos warten hier, bis du sie erfasst oder ignorierst.
+      </p>
+      <p v-if="data.mailFiles.length === 0" class="text-sm text-muted">
+        Nichts zu erfassen.
+      </p>
+      <ul v-else class="divide-y divide-default">
+        <li v-for="m in data.mailFiles" :key="m.id" class="flex flex-wrap items-center justify-between gap-2 py-2">
+          <div class="min-w-0 text-sm">
+            <a :href="`/api/erp/incoming/mail/${m.id}`" target="_blank" rel="noopener" class="font-medium text-primary hover:underline">{{ m.fileName }}</a>
+            <p class="truncate text-xs text-muted">
+              {{ m.sender ?? 'Unbekannter Absender' }}<span v-if="m.subject"> · {{ m.subject }}</span><span v-if="m.receivedAt"> · {{ day(m.receivedAt.slice(0, 10)) }}</span>
+            </p>
+            <p v-if="m.problem" class="text-xs text-warning">
+              {{ m.problem }}
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <UButton size="xs" icon="i-lucide-pencil" :loading="busy === 'mail-load'" @click="enterMailFile(m)">
+              Erfassen
+            </UButton>
+            <UButton size="xs" color="neutral" variant="ghost" :loading="busy === `ignore-${m.id}`" @click="ignoreMailFile(m)">
+              Ignorieren
+            </UButton>
+          </div>
+        </li>
+      </ul>
+    </UCard>
     <div class="grid gap-4 lg:grid-cols-5">
       <UCard class="lg:col-span-3">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -112,19 +175,22 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
         </ul>
       </UCard>
 
-      <UCard class="lg:col-span-2">
+      <UCard id="erfassen" class="lg:col-span-2">
         <template #header>
           <h2 class="font-semibold text-highlighted">
             Rechnung erfassen
           </h2>
         </template>
+        <p v-if="mailFile" class="mb-3 text-sm">
+          Datei aus dem Postfach: <strong>{{ mailFile.fileName }}</strong>
+        </p>
         <UAlert v-if="error" color="error" variant="subtle" :title="error" class="mb-3" role="alert" />
         <UAlert v-for="(w, i) in warnings" :key="i" color="warning" variant="subtle" :title="w" class="mb-3" />
         <form class="space-y-3" @submit.prevent="upload">
           <p class="text-xs text-muted">
             E-Rechnungen (ZUGFeRD-PDF, XRechnung im CII-Format) werden automatisch gelesen. Bei anderen PDFs oder Fotos trägst du die Angaben selbst ein.
           </p>
-          <input ref="fileInput" type="file" accept=".pdf,.xml,application/pdf,application/xml,text/xml,image/png,image/jpeg" class="block w-full text-sm" aria-label="Datei" @change="pickFile">
+          <input v-show="!mailFile" ref="fileInput" type="file" accept=".pdf,.xml,application/pdf,application/xml,text/xml,image/png,image/jpeg" class="block w-full text-sm" aria-label="Datei" @change="pickFile">
           <div class="grid grid-cols-2 gap-3">
             <UFormField label="Kategorie">
               <USelect v-model="form.category" :items="categoryItems" class="w-full" />
