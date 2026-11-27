@@ -47,9 +47,9 @@ export async function exportArchive(pool: Pool, invoices: InvoiceRepository, fro
   entries.push({ name: 'zahlungseingaenge.csv', date, content: csv(['Rechnung', 'Datum', 'Betrag', 'Notiz'], payments.map(p => [p.number, day(p.paidOn), csvAmount(num(p.amount)), p.note])) })
 
   const incoming = await rows<{ id: number, supplier: string, vatId: string | null, number: string, issueDate: string, dueDate: string | null, net: number, tax: number,
-    gross: number, kind: string, related: string | null, currency: string, originalNet: number | null, originalTax: number | null, rate: unknown, category: string, status: string, paidOn: string | null, reason: string | null, fileName: string, sha: string, format: string }>(pool,
+    gross: number, kind: string, related: string | null, currency: string, originalNet: number | null, originalTax: number | null, rate: unknown, category: string, status: string, paidOn: string | null, paidCents: number | null, reason: string | null, fileName: string, sha: string, format: string }>(pool,
   `SELECT i.id, s.name AS supplier, s.vat_id AS vatId, i.number, i.issue_date AS issueDate, i.due_date AS dueDate, i.net_cents AS net, i.tax_cents AS tax,
-    i.gross_cents AS gross, i.kind, r.number AS related, i.currency, i.original_net_cents AS originalNet, i.original_tax_cents AS originalTax, i.exchange_rate AS rate, i.category, i.status, i.paid_on AS paidOn, i.discarded_reason AS reason, i.file_name AS fileName,
+    i.gross_cents AS gross, i.kind, r.number AS related, i.currency, i.original_net_cents AS originalNet, i.original_tax_cents AS originalTax, i.exchange_rate AS rate, i.category, i.status, i.paid_on AS paidOn, i.paid_cents AS paidCents, i.discarded_reason AS reason, i.file_name AS fileName,
     i.file_sha256 AS sha, i.format FROM incoming_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN incoming_invoices r ON r.id = i.related_incoming_id
     WHERE i.issue_date BETWEEN ? AND ? ORDER BY i.issue_date, i.id`, [from, to])
   // "Projekt A (60 %), Projekt B (40 %)"; a single project without its 100 %.
@@ -71,11 +71,13 @@ export async function exportArchive(pool: Pool, invoices: InvoiceRepository, fro
   entries.push({
     name: 'eingangsrechnungen.csv', date,
     // Credits of suppliers with negative amounts, so that the columns add up.
-    content: csv(['Nr.', 'Art', 'Bezieht sich auf', 'Lieferant', 'USt-IdNr.', 'Rechnungsnummer', 'Rechnungsdatum', 'Fällig', 'Netto', 'USt', 'Brutto', 'Währung der Rechnung', 'Brutto in Währung', 'Kurs (Währung je 1 EUR)', 'Kategorie', 'Projekt', 'Status', 'Bezahlt/erstattet am', 'Verworfen weil', 'E-Rechnung', 'Datei', 'SHA-256'],
+    content: csv(['Nr.', 'Art', 'Bezieht sich auf', 'Lieferant', 'USt-IdNr.', 'Rechnungsnummer', 'Rechnungsdatum', 'Fällig', 'Netto', 'USt', 'Brutto', 'Währung der Rechnung', 'Brutto in Währung', 'Kurs (Währung je 1 EUR)', 'Kategorie', 'Projekt', 'Status', 'Bezahlt/erstattet am', 'Tatsächlich bezahlt/erstattet', 'Differenz zur Rechnung', 'Verworfen weil', 'E-Rechnung', 'Datei', 'SHA-256'],
       incoming.map(i => [i.id, i.kind === 'credit' ? 'Gutschrift' : 'Rechnung', i.related, i.supplier, i.vatId, i.number, day(i.issueDate), i.dueDate ? day(i.dueDate) : null,
         ...[i.net, i.tax, i.gross].map(v => csvAmount((i.kind === 'credit' ? -1 : 1) * num(v))), i.currency,
         i.currency === 'EUR' ? null : csvAmount((i.kind === 'credit' ? -1 : 1) * (num(i.originalNet) + num(i.originalTax))), i.rate === null ? null : String(Number(i.rate)).replace('.', ','),
         INCOMING_CATEGORIES[i.category] ?? i.category, projectNames.get(i.id)?.join(', ') ?? null, { open: 'offen', paid: i.kind === 'credit' ? 'erstattet' : 'bezahlt', discarded: 'verworfen' }[i.status] ?? i.status, i.paidOn ? day(i.paidOn) : null,
+        i.paidCents === null ? null : csvAmount((i.kind === 'credit' ? -1 : 1) * num(i.paidCents)),
+        i.paidCents === null ? null : csvAmount((i.kind === 'credit' ? -1 : 1) * (num(i.paidCents) - num(i.gross))),
         i.reason, i.format === 'other' ? 'nein' : 'ja', incomingNames.get(i.id) ?? '', i.sha])),
   })
 
@@ -110,7 +112,7 @@ export interface YearReport {
   customers: { name: string, net: number }[]
   projects: { name: string, revenue: number, expenses: number }[]
   categories: { category: string, gross: number }[]
-  totals: { invoicedNet: number, invoicedTax: number, received: number, expensesPaid: number, expensesInvoiced: number, openReceivables: number, openPayables: number }
+  totals: { invoicedNet: number, invoicedTax: number, received: number, expensesPaid: number, expensesInvoiced: number, paymentDifferences: number, openReceivables: number, openPayables: number }
   smallBusiness: { previousYearReceived: number, currentYearReceived: number, limits: typeof SMALL_BUSINESS_LIMITS }
 }
 
@@ -131,7 +133,11 @@ export async function yearReport(pool: Pool, year: number): Promise<YearReport> 
   await byMonth(`SELECT MONTH(i.issue_date) AS m, SUM(${signed} * i.net_cents) AS s FROM invoices i WHERE i.status = 'final' AND i.issue_date BETWEEN ? AND ? GROUP BY m`, 'invoiced')
   await byMonth('SELECT MONTH(paid_on) AS m, SUM(amount_cents) AS s FROM invoice_payments WHERE paid_on BETWEEN ? AND ? GROUP BY m', 'received')
   // Credit notes and refunds of suppliers (kind = 'credit') count against the expenses.
-  await byMonth(`SELECT MONTH(paid_on) AS m, SUM(${credit} * gross_cents) AS s FROM incoming_invoices WHERE status = 'paid' AND paid_on BETWEEN ? AND ? GROUP BY m`, 'expensesPaid')
+  // Paid expenses count what left the account: the debited amount where it differed from the invoice.
+  await byMonth(`SELECT MONTH(paid_on) AS m, SUM(${credit} * COALESCE(paid_cents, gross_cents)) AS s FROM incoming_invoices WHERE status = 'paid' AND paid_on BETWEEN ? AND ? GROUP BY m`, 'expensesPaid')
+  // Of that, bank fees and exchange differences: debited minus invoiced.
+  const [differences] = await rows<{ s: unknown }>(pool, `SELECT SUM(${credit} * (paid_cents - gross_cents)) AS s FROM incoming_invoices
+    WHERE status = 'paid' AND paid_cents IS NOT NULL AND paid_on BETWEEN ? AND ?`, [from, to])
   await byMonth(`SELECT MONTH(issue_date) AS m, SUM(${credit} * gross_cents) AS s FROM incoming_invoices WHERE status <> 'discarded' AND issue_date BETWEEN ? AND ? GROUP BY m`, 'expensesInvoiced')
 
   const customers = (await rows<{ name: string, net: unknown }>(pool, `SELECT c.name, SUM(${signed} * i.net_cents) AS net FROM invoices i JOIN customers c ON c.id = i.customer_id
@@ -184,6 +190,7 @@ export async function yearReport(pool: Pool, year: number): Promise<YearReport> 
     totals: {
       invoicedNet: num(sums?.net), invoicedTax: num(sums?.tax), received: months.reduce((s, m) => s + m.received, 0),
       expensesPaid: months.reduce((s, m) => s + m.expensesPaid, 0), expensesInvoiced: months.reduce((s, m) => s + m.expensesInvoiced, 0),
+      paymentDifferences: num(differences?.s),
       openReceivables: num(open?.s), openPayables: num(payables?.s),
     },
     smallBusiness: { previousYearReceived: await received(year - 1), currentYearReceived: await received(year), limits: SMALL_BUSINESS_LIMITS },
