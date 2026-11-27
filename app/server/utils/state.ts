@@ -13,7 +13,7 @@ export async function sessionState(event: H3Event): Promise<SessionState> {
   return {
     user: user === null ? null : { id: user.id, username: user.username },
     pending: (await pendingUser(event)) !== null,
-    csrf: session.data.csrf,
+    csrf: session.csrf,
     timezone: cockpitConfig(event).timezone,
   }
 }

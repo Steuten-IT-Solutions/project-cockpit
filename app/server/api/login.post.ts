@@ -10,21 +10,25 @@ export default defineEventHandler(async (event) => {
   const { users, throttle, log } = useCockpit(event)
   const session = requireSession(event)
 
-  if (await throttle.isBlocked(username, ip)) {
-    await log.record('login_throttled', null, ip)
-    throw createError({ statusCode: 429, statusMessage: 'Zu viele Fehlversuche. Bitte warte 15 Minuten.' })
-  }
+  // One attempt at a time, so parallel requests cannot slip past the failure count.
+  const user = await loginQueue.run(async () => {
+    if (await throttle.isBlocked(username, ip)) {
+      await log.record('login_throttled', null, ip)
+      throw createError({ statusCode: 429, statusMessage: 'Zu viele Fehlversuche. Bitte warte 15 Minuten.' })
+    }
 
-  const user = username === '' ? null : await users.findByUsername(username)
-  // Verify against a dummy hash for unknown users so the timing does not reveal them.
-  const hash = user?.passwordHash ?? await dummyHash()
-  const valid = (await verifyPassword(hash, password)) && user !== null
+    const found = username === '' ? null : await users.findByUsername(username)
+    // Verify against a dummy hash for unknown users so the timing does not reveal them.
+    const hash = found?.passwordHash ?? await dummyHash()
+    const valid = await verifyPassword(hash, password)
 
-  if (!valid) {
-    await throttle.recordFailure(username, ip)
-    await log.record('login_failed', user?.id ?? null, ip)
-    throw createError({ statusCode: 401, statusMessage: 'Benutzername oder Passwort ist falsch.' })
-  }
+    if (!valid || found === null) {
+      await throttle.recordFailure(username, ip)
+      await log.record('login_failed', found?.id ?? null, ip)
+      throw createError({ statusCode: 401, statusMessage: 'Benutzername oder Passwort ist falsch.' })
+    }
+    return found
+  })
 
   if (needsRehash(user.passwordHash)) {
     await users.updatePasswordHash(user.id, await hashPassword(password))

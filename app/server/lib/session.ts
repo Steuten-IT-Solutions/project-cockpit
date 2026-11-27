@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
-import { eq, lt } from 'drizzle-orm'
+import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import type { Database } from './db'
 import { webSessions } from '../database/schema'
 import { utc, utcSeconds } from './time'
@@ -22,23 +22,49 @@ export interface SessionOptions {
 }
 
 /**
+ * Idle timeout of a session nobody is logged in with (also during login or setup). Such sessions exist
+ * for every visitor of the login page, bots included; a short life keeps the table small.
+ */
+export const ANONYMOUS_IDLE_SECONDS = 30 * 60
+
+/**
  * Server-side session, stored in web_sessions. The cookie holds a random token;
  * the table holds only its SHA-256, so logging out or expiring really ends it.
+ *
+ * A new session is stored only once it is needed: when its CSRF token is handed to a page
+ * or something is saved in it. Requests without a cookie that need neither (a bot asking
+ * for /api/... or a missing file) leave no row behind and get no cookie.
  */
 export class Session {
   private dirty = false
+  /** The CSRF token was read for an answer, so the session must outlive this request. */
+  private needed = false
 
   private constructor(
     private readonly db: Database,
+    private readonly options: SessionOptions,
     private tokenValue: string,
     public userId: number | null,
     public data: SessionData,
     private createdAt: string,
+    /** Whether the row exists in web_sessions. */
+    private stored: boolean,
   ) {}
 
   /** The token for the cookie. Changes on regenerate(). */
   get token(): string {
     return this.tokenValue
+  }
+
+  /** Whether the visitor must get (or keep) the cookie: false for a new session that was never needed. */
+  get isStored(): boolean {
+    return this.stored
+  }
+
+  /** The CSRF token for the page. Reading it keeps the session, so the next POST can check it. */
+  get csrf(): string {
+    this.needed = true
+    return this.data.csrf
   }
 
   /**
@@ -52,28 +78,20 @@ export class Session {
       const row = rows[0]
       if (row !== undefined) {
         const now = Math.floor(Date.now() / 1000)
-        const expired = now - utcSeconds(row.seenAt) > options.idleTimeout
+        const data = parse(row.data)
+        const idle = row.userId === null ? anonymousIdle(options) : options.idleTimeout
+        const expired = now - utcSeconds(row.seenAt) > idle
           || now - utcSeconds(row.createdAt) > options.absoluteTimeout
         if (!expired) {
           if (touch) {
             await db.update(webSessions).set({ seenAt: utc() }).where(eq(webSessions.id, row.id))
           }
-          return new Session(db, token, row.userId, parse(row.data), row.createdAt)
+          return new Session(db, options, token, row.userId, data, row.createdAt, true)
         }
         await db.delete(webSessions).where(eq(webSessions.id, row.id))
       }
     }
-    return Session.start(db, options)
-  }
-
-  private static async start(db: Database, options: SessionOptions): Promise<Session> {
-    // Remove sessions nobody has used for longer than the idle timeout.
-    await db.delete(webSessions).where(lt(webSessions.seenAt, utc(-options.idleTimeout)))
-    const session = new Session(db, newToken(), null, { csrf: randomBytes(32).toString('hex') }, utc())
-    await db.insert(webSessions).values({
-      id: digest(session.token), userId: null, data: JSON.stringify(session.data), createdAt: session.createdAt, seenAt: session.createdAt,
-    })
-    return session
+    return new Session(db, options, newToken(), null, { csrf: randomBytes(32).toString('hex') }, utc(), false)
   }
 
   /** New token, same data, fresh absolute timeout. Call whenever the login state changes. */
@@ -81,6 +99,10 @@ export class Session {
     const old = digest(this.tokenValue)
     this.tokenValue = newToken()
     this.createdAt = utc()
+    if (!this.stored) {
+      await this.insert()
+      return
+    }
     await this.db.update(webSessions)
       .set({ id: digest(this.tokenValue), userId: this.userId, data: JSON.stringify(this.data), createdAt: this.createdAt, seenAt: this.createdAt })
       .where(eq(webSessions.id, old))
@@ -88,7 +110,12 @@ export class Session {
   }
 
   async destroy(): Promise<void> {
-    await this.db.delete(webSessions).where(eq(webSessions.id, digest(this.tokenValue)))
+    if (this.stored) {
+      await this.db.delete(webSessions).where(eq(webSessions.id, digest(this.tokenValue)))
+    }
+    this.stored = false
+    this.needed = false
+    this.dirty = false
   }
 
   update(change: (data: SessionData) => void): void {
@@ -118,6 +145,12 @@ export class Session {
   }
 
   async save(): Promise<void> {
+    if (!this.stored) {
+      if (this.dirty || this.needed) {
+        await this.insert()
+      }
+      return
+    }
     if (this.dirty) {
       await this.db.update(webSessions)
         .set({ userId: this.userId, data: JSON.stringify(this.data) })
@@ -125,6 +158,24 @@ export class Session {
       this.dirty = false
     }
   }
+
+  /** Writes a new session's row; first removes the sessions whose idle timeout has passed. */
+  private async insert(): Promise<void> {
+    await this.db.delete(webSessions).where(or(
+      lt(webSessions.seenAt, utc(-this.options.idleTimeout)),
+      and(isNull(webSessions.userId), lt(webSessions.seenAt, utc(-anonymousIdle(this.options)))),
+    ))
+    await this.db.insert(webSessions).values({
+      id: digest(this.tokenValue), userId: this.userId, data: JSON.stringify(this.data), createdAt: this.createdAt, seenAt: this.createdAt,
+    })
+    this.stored = true
+    this.dirty = false
+  }
+}
+
+/** Not logged in (a visitor of the login page, a bot, or a login or setup under way). */
+function anonymousIdle(options: SessionOptions): number {
+  return Math.min(options.idleTimeout, ANONYMOUS_IDLE_SECONDS)
 }
 
 function newToken(): string {

@@ -75,7 +75,11 @@ in case the document root is ever pointed at the project root by mistake.
 MariaDB, firewall (22, 80, 443), key-only SSH (only if a key is installed), automatic security
 updates, fail2ban, a cron job every 15 minutes in `/etc/cron.d/cockpit` and a nightly database
 dump to `/var/backups/cockpit/` (one file per weekday), so a file backup of the server holds a
-consistent copy of the database. It is safe to run again.
+consistent copy of the database. It is safe to run again. Its last part, also available alone as
+`cockpit-setup harden` for servers set up earlier, hides Apache's version, turns off folder
+listings, adds fail2ban jails for the mail archive's password prompt and for repeat offenders,
+and lets needrestart restart services after library updates. The Node cockpit's systemd unit
+mounts the application folder read-only (step `node`), so a hole in the app cannot change its code.
 
 Every run also installs `/usr/local/sbin/cockpit-setup`: `cockpit-setup <step> …` loads the
 current `bin/server-setup.sh` from `main` on GitHub and runs it, so it never has to be copied by

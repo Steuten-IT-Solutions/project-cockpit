@@ -15,29 +15,33 @@ export default defineEventHandler(async (event) => {
   const ip = clientIp(event)
   const { crypto, users, throttle, log } = useCockpit(event)
 
-  if (await throttle.isBlocked(user.username, ip)) {
-    await log.record('login_throttled', user.id, ip)
-    throw createError({ statusCode: 429, statusMessage: 'Zu viele Fehlversuche. Bitte warte 15 Minuten.' })
-  }
-
   const body = await readBody<Record<string, unknown>>(event)
   const input = typeof body?.code === 'string' ? body.code.trim() : ''
-  let ok = false
-  let usedRecovery = false
+  // One attempt at a time, so parallel requests cannot slip past the failure count.
+  const usedRecovery = await loginQueue.run(async () => {
+    if (await throttle.isBlocked(user.username, ip)) {
+      await log.record('login_throttled', user.id, ip)
+      throw createError({ statusCode: 429, statusMessage: 'Zu viele Fehlversuche. Bitte warte 15 Minuten.' })
+    }
 
-  if (/^\d{3}\s?\d{3}$/.test(input)) {
-    const step = verify(crypto.decrypt(user.totpSecretEnc), input, Math.floor(Date.now() / 1000), user.totpLastStep)
-    ok = step !== null && await users.claimTotpStep(user.id, step)
-  }
-  else if (input !== '') {
-    ok = usedRecovery = await users.useRecoveryCode(user.id, crypto.hash('recovery', normaliseRecoveryCode(input)))
-  }
+    let ok = false
+    let used = false
 
-  if (!ok) {
-    await throttle.recordFailure(user.username, ip)
-    await log.record('code_failed', user.id, ip)
-    throw createError({ statusCode: 401, statusMessage: 'Der Code ist ungültig oder wurde schon verwendet.' })
-  }
+    if (/^\d{3}\s?\d{3}$/.test(input)) {
+      const step = verify(crypto.decrypt(user.totpSecretEnc), input, Math.floor(Date.now() / 1000), user.totpLastStep)
+      ok = step !== null && await users.claimTotpStep(user.id, step)
+    }
+    else if (input !== '') {
+      ok = used = await users.useRecoveryCode(user.id, crypto.hash('recovery', normaliseRecoveryCode(input)))
+    }
+
+    if (!ok) {
+      await throttle.recordFailure(user.username, ip)
+      await log.record('code_failed', user.id, ip)
+      throw createError({ statusCode: 401, statusMessage: 'Der Code ist ungültig oder wurde schon verwendet.' })
+    }
+    return used
+  })
 
   await throttle.clearAccount(user.username)
   session.update((data) => {

@@ -31,6 +31,10 @@
 #   bin/server-setup.sh rollback back to the PHP cockpit (keeps the Node build for later)
 #   bin/server-setup.sh ocr      text recognition for incoming invoices without e-invoice data:
 #                                poppler-utils (text of PDFs) and Tesseract with German
+#   bin/server-setup.sh harden   extra hardening: Apache shows no version and no folder listings,
+#                                fail2ban also guards the mail archive's password prompt and bans
+#                                repeat offenders for a week, needrestart restarts services after
+#                                library updates; part of "base", run once on existing servers
 #   bin/server-setup.sh website  the company website (website/) on WEB_HOST and WEB_APEX, redirects
 #                                for WEB_REDIRECTS; HTTPS
 #                                as soon as both names point here (run again after the DNS change)
@@ -191,8 +195,7 @@ EOF
         vhost "$STATUS_HOST" "$APP/receiver" > /etc/apache2/sites-available/cockpit-status.conf
         a2ensite -q cockpit cockpit-status > /dev/null
     fi
-    apache2ctl configtest
-    systemctl reload apache2
+    harden
 
     # Database and user; the password is generated once and kept for config.php.
     local secret="/root/cockpit-database.txt"
@@ -233,6 +236,59 @@ Done. Next steps (README.md, "Own server"):
      values from $secret, then: chown $USER_NAME: $APP/config/* && chmod 600 $APP/config/*
   4. After the DNS switch: bin/server-setup.sh certs
 EOF
+}
+
+# Hardening beyond the defaults, for new servers (called by "base") and existing ones.
+harden() {
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get install -y -q needrestart > /dev/null
+
+    # Apache: no version in headers and error pages, no TRACE, and no folder listings anywhere
+    # under /var/www (the mail host's ACME folder showed an empty listing on port 80).
+    cat > /etc/apache2/conf-available/cockpit-hardening.conf <<'EOF'
+# Written by server-setup.sh (step "harden").
+ServerTokens Prod
+ServerSignature Off
+TraceEnable Off
+<Directory /var/www/>
+    Options -Indexes
+</Directory>
+EOF
+    a2enconf -q cockpit-hardening > /dev/null
+    apache2ctl configtest
+    systemctl reload apache2
+
+    # fail2ban: the basic auth in front of the mail archive (piler) logs failed logins to
+    # Apache's error logs; three wrong passwords within 10 minutes ban the address for 10 minutes,
+    # and "recidive" bans an address for a week that was banned five times within a day.
+    local jails=/etc/fail2ban/jail.d/cockpit-hardening.local
+    cat > "$jails" <<'EOF'
+# Written by server-setup.sh (step "harden").
+[apache-auth]
+enabled = true
+backend = auto
+maxretry = 3
+EOF
+    # recidive reads fail2ban's own log file; only where fail2ban writes one.
+    if [ -f /var/log/fail2ban.log ]; then
+        printf '\n[recidive]\nenabled = true\nbackend = auto\n' >> "$jails"
+    fi
+    # A jail fail2ban cannot start would stop all of them, SSH included: then go back.
+    if ! systemctl restart fail2ban || ! fail2ban-client ping > /dev/null 2>&1; then
+        rm -f "$jails"
+        systemctl restart fail2ban
+        echo "server-setup: fail2ban refused the extra jails; left as before. See: journalctl -u fail2ban" >&2
+    fi
+
+    # Security updates of libraries (e.g. OpenSSL) reach running programs only after a
+    # restart: needrestart does that after every unattended upgrade, without asking.
+    install -d -m 755 /etc/needrestart/conf.d
+    cat > /etc/needrestart/conf.d/cockpit.conf <<'EOF'
+# Written by server-setup.sh (step "harden").
+$nrconf{restart} = 'a';
+EOF
+
+    echo "Hardening applied. fail2ban jails: $(fail2ban-client status | sed -n 's/.*Jail list:[[:space:]]*//p')"
 }
 
 # Apache virtual host for one host name; .htaccess files of the build apply (AllowOverride All).
@@ -289,6 +345,7 @@ EOF
     ServerName $MAIL_HOST
     DocumentRoot /var/www/mail
     <Directory /var/www/mail>
+        Options -Indexes
         AllowOverride None
         Require all granted
     </Directory>
@@ -1145,6 +1202,10 @@ PrivateTmp=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
+# The cockpit only reads its own files; deployments come over SSH, not through it. Read-only,
+# a hole in the app (or in a library) cannot change the code that runs after a restart.
+# Temporary files (OCR, the PHP engine's logo) go to the private /tmp.
+ReadOnlyPaths=$APP
 
 [Install]
 WantedBy=multi-user.target
@@ -1752,5 +1813,6 @@ case "${1:-}" in
     rollback) rollback ;;
     ocr) ocr ;;
     website) website ;;
-    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback|ocr|website" ;;
+    harden) harden ;;
+    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback|ocr|website|harden" ;;
 esac
