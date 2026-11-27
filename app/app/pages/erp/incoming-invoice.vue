@@ -63,8 +63,17 @@ async function save() {
 }
 const paidOn = ref('')
 watch(() => data.value?.today, (t) => { paidOn.value = t ?? '' }, { immediate: true })
+// The amount actually debited, when the bank took a little more or less (fees, exchange).
+const paidAmount = ref('')
+const paidDifference = computed(() => {
+  const i = data.value?.invoice
+  return i?.paidCents != null ? i.paidCents - i.grossCents : 0
+})
 async function setPaid(date: string) {
-  if (await run('paid', () => cockpitPost(`/api/erp/incoming/${id.value}/paid`, { paidOn: date })) !== null) await refresh()
+  if (await run('paid', () => cockpitPost(`/api/erp/incoming/${id.value}/paid`, { paidOn: date, paidAmount: date === '' ? '' : paidAmount.value })) !== null) {
+    paidAmount.value = ''
+    await refresh()
+  }
 }
 const discardReason = ref('')
 const confirmDiscard = ref(false)
@@ -226,11 +235,18 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
           <UFormField :label="isCredit ? 'Erstattet am' : 'Bezahlt am'">
             <UInput v-model="paidOn" type="date" />
           </UFormField>
+          <UFormField :label="isCredit ? 'Gutgeschrieben (€)' : 'Abgebucht (€)'" hint="nur wenn abweichend">
+            <UInput v-model="paidAmount" inputmode="decimal" :placeholder="priceText(data.invoice.grossCents)" class="w-36" />
+          </UFormField>
           <UButton icon="i-lucide-check" :loading="busy === 'paid'" @click="setPaid(paidOn)">
             {{ isCredit ? 'Als erstattet markieren' : 'Als bezahlt markieren' }}
           </UButton>
         </template>
-        <UButton v-else color="neutral" variant="outline" :loading="busy === 'paid'" @click="setPaid('')">
+        <p v-else-if="paidDifference !== 0" class="text-sm">
+          {{ isCredit ? 'Gutgeschrieben' : 'Abgebucht' }} {{ euro(data.invoice.paidCents!) }},
+          Abweichung zur Rechnung {{ euro(paidDifference) }} (z. B. Bankgebühr oder Kursdifferenz).
+        </p>
+        <UButton v-if="data.invoice.status !== 'open'" color="neutral" variant="outline" :loading="busy === 'paid'" @click="setPaid('')">
           Wieder auf offen setzen
         </UButton>
         <UButton v-if="!confirmDiscard" color="error" variant="ghost" @click="confirmDiscard = true">

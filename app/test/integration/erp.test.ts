@@ -469,4 +469,25 @@ describe('ERP', () => {
     // Marked as refunded, it counts as paid back in the export.
     expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: `${year}-03-12` })).status).toBe(200)
   })
+
+  it('records a debit that differs from the invoice without changing it', async () => {
+    const year = new Date().getFullYear()
+    const form = new FormData()
+    form.append('file', new Blob([Buffer.from('%PDF-1.4\n% Abbuchung\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')], { type: 'application/pdf' }), 'ai.pdf')
+    for (const [k, v] of Object.entries({ category: 'software', supplierName: 'KI-Dienst', number: 'AI-1', issueDate: `${year}-02-01`, net: '20,00', tax: '3,80' })) form.append(k, v)
+    const id = (await upload('/api/erp/incoming', form)).json.id as number
+    const totals = async () => (await client.json<{ report: { totals: { expensesPaid: number, paymentDifferences: number } } }>(`/api/erp/report?year=${year}`)).report.totals
+    const before = await totals()
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: `${year}-02-03`, paidAmount: 'zwanzig' })).status).toBe(422)
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: `${year}-02-03`, paidAmount: '24,22' })).status).toBe(200)
+    const { invoice } = await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)
+    expect(invoice).toMatchObject({ grossCents: 2380, taxCents: 380, paidCents: 2422, status: 'paid' })
+    const after = await totals()
+    expect(after.expensesPaid - before.expensesPaid).toBe(2422)
+    expect(after.paymentDifferences - before.paymentDifferences).toBe(42)
+    // The same amount as the invoice is no difference; opening again clears it.
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: '' })).status).toBe(200)
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: `${year}-02-03`, paidAmount: '23,80' })).status).toBe(200)
+    expect((await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)).invoice).toMatchObject({ paidCents: null })
+  })
 })

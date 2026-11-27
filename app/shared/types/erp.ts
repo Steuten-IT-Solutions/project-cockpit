@@ -175,6 +175,8 @@ export interface IncomingInvoice {
   fileName: string
   fileType: string
   paidOn: string | null
+  /** The euros actually debited, when they differ from the gross amount (bank fees, exchange differences). */
+  paidCents: number | null
   discardedReason: string | null
   createdAt: string
 }

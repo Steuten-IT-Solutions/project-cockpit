@@ -17,7 +17,7 @@ import { exec, num, one, rows, type Sql, transaction } from './sql'
 const COLUMNS = `i.id, i.supplier_id AS supplierId, s.name AS supplierName, i.status, i.kind, i.related_incoming_id AS relatedId, i.number, i.issue_date AS issueDate, i.due_date AS dueDate,
   i.net_cents AS netCents, i.tax_cents AS taxCents, i.gross_cents AS grossCents, i.currency, i.original_net_cents AS originalNetCents,
   i.original_tax_cents AS originalTaxCents, i.exchange_rate AS exchangeRate, i.category, i.project_id AS projectId, i.iban, i.note,
-  i.format, i.file_name AS fileName, i.file_type AS fileType, i.paid_on AS paidOn, i.discarded_reason AS discardedReason, i.created_at AS createdAt`
+  i.format, i.file_name AS fileName, i.file_type AS fileType, i.paid_on AS paidOn, i.paid_cents AS paidCents, i.discarded_reason AS discardedReason, i.created_at AS createdAt`
 
 const SUPPLIER_COLUMNS = 'id, name, vat_id AS vatId, tax_number AS taxNumber, iban, email, street, postcode, city, country, note'
 
@@ -26,7 +26,7 @@ export interface ManualEntry { supplierId: number | null, supplierName: string |
 
 const maybe = (v: unknown) => v === null || v === undefined ? null : Number(v)
 const amounts = (i: IncomingInvoice): IncomingInvoice => ({ ...i, netCents: num(i.netCents), taxCents: num(i.taxCents), grossCents: num(i.grossCents),
-  originalNetCents: maybe(i.originalNetCents), originalTaxCents: maybe(i.originalTaxCents), exchangeRate: maybe(i.exchangeRate) })
+  originalNetCents: maybe(i.originalNetCents), originalTaxCents: maybe(i.originalTaxCents), exchangeRate: maybe(i.exchangeRate), paidCents: maybe(i.paidCents) })
 
 /** The project with the largest share (the first on a tie), kept in incoming_invoices.project_id. */
 const mainProject = (projects: ProjectShare[]) => [...projects].sort((a, b) => b.shareBp - a.shareBp)[0]?.projectId ?? null
@@ -214,9 +214,11 @@ export class IncomingRepository {
     })
   }
 
-  async setPaid(id: number, paidOn: string | null, now: string): Promise<boolean> {
-    const result = await exec(this.pool, `UPDATE incoming_invoices SET status = ?, paid_on = ?, updated_at = ? WHERE id = ? AND status <> 'discarded'`,
-      [paidOn === null ? 'open' : 'paid', paidOn, now, id])
+  /** Paid on a date (null: open again); paidCents only when the debit differed from the gross amount. */
+  async setPaid(id: number, paidOn: string | null, now: string, paidCents: number | null = null): Promise<boolean> {
+    const result = await exec(this.pool, `UPDATE incoming_invoices SET status = ?, paid_on = ?, paid_cents = IF(? IS NULL OR ? = gross_cents, NULL, ?), updated_at = ?
+      WHERE id = ? AND status <> 'discarded'`,
+    [paidOn === null ? 'open' : 'paid', paidOn, ...Array(3).fill(paidOn === null ? null : paidCents), now, id])
     return result.affectedRows > 0
   }
 
