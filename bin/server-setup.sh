@@ -635,19 +635,30 @@ EOF
 
     cat > /usr/local/sbin/cockpit-backup <<'EOF'
 #!/bin/bash
-# Written by server-setup.sh backup. Quiet on success; cron mails any output to root.
+# Written by server-setup.sh backup. Runs every hour; quiet on success, cron mails any output
+# to root. restic only uploads what changed since the last snapshot, so each run is incremental.
 set -euo pipefail
+# One run at a time: an hourly run that finds the previous one still busy skips itself.
+exec 9> /run/lock/cockpit-backup.lock
+flock -n 9 || exit 0
 set -a
 . /root/restic.env
 set +a
 log="$(mktemp)"
-trap 'rm -f "$log"' EXIT
+dump=/var/backups/cockpit/cockpit-hourly.sql.gz
+trap 'rm -f "$log" "$dump.tmp"' EXIT
+# Pruning and the weekly check only in the night run (03:15 UTC, after the 02:30 dump).
+nightly=""
+[ "$(date -u +%H)" != 03 ] || nightly=1
 # Chained with &&: inside "if !" a failing command would not stop a plain list (set -e is off).
 if ! {
-    restic backup --quiet --exclude-caches --exclude /root/.cache \
+    mariadb-dump --single-transaction --routines cockpit | gzip --rsyncable > "$dump.tmp" \
+    && mv "$dump.tmp" "$dump" \
+    && restic backup --quiet --exclude-caches --exclude /root/.cache \
         /var/vmail /srv/cockpit/app/config /var/backups/cockpit /etc /root /var/lib/rspamd/dkim \
-    && restic forget --quiet --prune --keep-daily 7 --keep-weekly 5 --keep-monthly 12 \
-    && { [ "$(date +%u)" != 7 ] || restic check --quiet; }
+    && { [ -z "$nightly" ] || restic forget --quiet --prune \
+        --keep-hourly 48 --keep-daily 7 --keep-weekly 5 --keep-monthly 12; } \
+    && { [ -z "$nightly" ] || [ "$(date -u +%u)" != 7 ] || restic check --quiet; }
 } > "$log" 2>&1; then
     echo "Backup FAILED on $(hostname) at $(date -u +%FT%TZ):"
     cat "$log"
@@ -655,9 +666,9 @@ if ! {
 fi
 EOF
     chmod 700 /usr/local/sbin/cockpit-backup
-    # After the database dump at 02:30.
+    # Every hour; the 03:15 run comes after the nightly database dump at 02:30 and also prunes.
     cat > /etc/cron.d/cockpit-backup <<'EOF'
-15 3 * * * root /usr/local/sbin/cockpit-backup
+15 * * * * root /usr/local/sbin/cockpit-backup
 EOF
 
     echo "server-setup: first backup run (can take a while) ..."
@@ -665,7 +676,7 @@ EOF
     restic snapshots --compact
     cat <<EOF
 
-Backup is set up: every night at 03:15 to $host (restic, encrypted).
+Backup is set up: every hour at :15 to $host (restic, encrypted, incremental).
   1. Store the repository password in your password manager (never in chat or Git):
      cat /root/restic-password
      Without it the backup cannot be restored.
@@ -756,9 +767,10 @@ EOF
     # piler runs its own searchd (pilersearch.service) with its own configuration.
     systemctl disable --now manticore > /dev/null 2>&1 || true
 
-    # Build tools, libraries, attachment text extractors, PHP modules of the web interface.
+    # Build tools, libraries, attachment text extractors, PHP modules of the web interface;
+    # sysstat provides mpstat for the CPU load on piler's status page.
     apt-get install -y -q gcc make libc6-dev git libssl-dev libtre-dev libzip-dev libmariadb-dev \
-        libcurl4-openssl-dev zlib1g-dev catdoc unrtf poppler-utils tnef python3 python3-mysqldb \
+        libcurl4-openssl-dev zlib1g-dev catdoc unrtf poppler-utils tnef python3 python3-mysqldb sysstat \
         "php$PHP-cli" "php$PHP-fpm" "php$PHP-mysql" "php$PHP-gd" "php$PHP-ldap" "php$PHP-zip" \
         "php$PHP-curl" "php$PHP-xml" "php$PHP-mbstring" apache2-utils
 
