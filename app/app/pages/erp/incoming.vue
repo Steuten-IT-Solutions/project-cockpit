@@ -4,7 +4,7 @@ import type { Choice, IncomingInvoice, IncomingMailFile, Supplier } from '#share
 
 // Incoming invoices: upload, attachments from the mailbox to enter, open ones to pay, all received.
 useHead({ title: 'Eingangsrechnungen · Cockpit' })
-const { data, refresh } = await useFetch<{ invoices: IncomingInvoice[], suppliers: Supplier[], projects: Choice[], mailFiles: IncomingMailFile[], mailbox: string | null, today: string }>('/api/erp/incoming')
+const { data, refresh } = await useFetch<{ invoices: IncomingInvoice[], suppliers: Supplier[], projects: Choice[], mailFiles: IncomingMailFile[], ignoredMailFiles: IncomingMailFile[], mailbox: string | null, today: string }>('/api/erp/incoming')
 const { busy, run } = useAction()
 
 const NONE = 'none'
@@ -117,6 +117,10 @@ const fileUrl = computed(() => mailFile.value !== null ? `/api/erp/incoming/mail
 async function ignoreMailFile(item: IncomingMailFile) {
   if (await run(`ignore-${item.id}`, () => cockpitSend('POST', `/api/erp/incoming/mail/${item.id}/ignore`)) !== null) await refresh()
 }
+const showIgnored = ref(false)
+async function restoreMailFile(item: IncomingMailFile) {
+  if (await run(`restore-${item.id}`, () => cockpitSend('POST', `/api/erp/incoming/mail/${item.id}/restore`)) !== null) await refresh()
+}
 async function fetchNow() {
   if (await run('fetch', () => cockpitSend('POST', '/api/erp/mailbox/fetch')) !== null) await refresh()
 }
@@ -158,8 +162,9 @@ async function upload() {
     error.value = errorMessage(e)
     // A file without e-invoice data needs the fields typed in.
     if (error.value.includes('keine E-Rechnung')) showManual.value = true
-    // Already in the books: the mailbox file was set aside, so the list changes.
-    if (error.value.includes('bereits erfasst')) {
+    // The very same file is in the books: the mailbox file counts as entered, so the list changes.
+    // Any other refusal (e.g. a number already used) keeps the file here to correct and retry.
+    if (error.value.includes('Diese Datei wurde bereits erfasst')) {
       mailFile.value = null
       await refresh()
     }
@@ -203,7 +208,7 @@ const STATUS: Record<string, { label: string, color: 'info' | 'success' | 'neutr
     <h1 class="text-2xl font-semibold text-highlighted">
       Eingangsrechnungen
     </h1>
-    <UCard v-if="data.mailbox || data.mailFiles.length > 0">
+    <UCard v-if="data.mailbox || data.mailFiles.length > 0 || data.ignoredMailFiles.length > 0">
       <template #header>
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h2 class="font-semibold text-highlighted">
@@ -241,6 +246,24 @@ const STATUS: Record<string, { label: string, color: 'info' | 'success' | 'neutr
           </div>
         </li>
       </ul>
+      <div v-if="data.ignoredMailFiles.length > 0" class="mt-3 border-t border-default pt-2">
+        <UButton size="xs" color="neutral" variant="link" :icon="showIgnored ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="px-0" @click="showIgnored = !showIgnored">
+          Ignorierte Dateien ({{ data.ignoredMailFiles.length }})
+        </UButton>
+        <ul v-if="showIgnored" class="divide-y divide-default">
+          <li v-for="m in data.ignoredMailFiles" :key="m.id" class="flex flex-wrap items-center justify-between gap-2 py-2">
+            <div class="min-w-0 text-sm">
+              <a :href="`/api/erp/incoming/mail/${m.id}`" target="_blank" rel="noopener" class="text-primary hover:underline">{{ m.fileName }}</a>
+              <p class="truncate text-xs text-muted">
+                {{ m.sender ?? 'Unbekannter Absender' }}<span v-if="m.subject"> · {{ m.subject }}</span><span v-if="m.problem"> · {{ m.problem }}</span>
+              </p>
+            </div>
+            <UButton size="xs" color="neutral" variant="outline" icon="i-lucide-undo-2" :loading="busy === `restore-${m.id}`" @click="restoreMailFile(m)">
+              Wiederherstellen
+            </UButton>
+          </li>
+        </ul>
+      </div>
     </UCard>
     <div class="grid gap-4 lg:grid-cols-5">
       <UCard class="lg:col-span-3">

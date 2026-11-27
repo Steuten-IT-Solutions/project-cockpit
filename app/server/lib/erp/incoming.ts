@@ -146,7 +146,7 @@ export class IncomingRepository {
     }
 
     await this.checkRelated(values, null, supplierId)
-    const twin = await one<{ id: number }>(this.pool, `SELECT id FROM incoming_invoices WHERE supplier_id = ? AND number = ? AND status <> 'discarded'`, [supplierId, values.number])
+    const twin = await one<{ id: number }>(this.pool, `SELECT id FROM incoming_invoices WHERE supplier_id = ? AND number = ? AND kind = ? AND status <> 'discarded'`, [supplierId, values.number, values.kind])
     if (twin !== null) throw new InvoiceError(`Die ${values.kind === 'credit' ? 'Gutschrift' : 'Rechnung'} ${values.number} dieses Lieferanten ist bereits erfasst (Eingangsrechnung Nr. ${twin.id}).`)
 
     const format = fields === null ? 'other' : fields.format

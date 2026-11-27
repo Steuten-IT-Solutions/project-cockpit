@@ -92,6 +92,17 @@ export class MailFileRepository {
     return one(this.pool, 'SELECT content, file_name AS name, file_type AS type FROM incoming_mail_files WHERE id = ?', [id])
   }
 
+  /** The most recently set aside files (ignored by hand or skipped on fetching), newest first. */
+  async ignored(limit = 30): Promise<IncomingMailFile[]> {
+    return rows<IncomingMailFile>(this.pool, `SELECT ${COLUMNS} FROM incoming_mail_files WHERE status = 'ignored' ORDER BY updated_at DESC, id DESC LIMIT ?`, [limit])
+  }
+
+  /** Puts an ignored file back on the list to be entered. */
+  async restore(id: number, now: string): Promise<boolean> {
+    const result = await exec(this.pool, `UPDATE incoming_mail_files SET status = 'new', problem = NULL, updated_at = ? WHERE id = ? AND status = 'ignored'`, [now, id])
+    return result.affectedRows > 0
+  }
+
   async ignore(id: number, now: string, reason = 'Von Hand ignoriert.'): Promise<boolean> {
     const result = await exec(this.pool, `UPDATE incoming_mail_files SET status = 'ignored', problem = ?, updated_at = ? WHERE id = ? AND status = 'new'`, [reason.slice(0, 500), now, id])
     return result.affectedRows > 0
