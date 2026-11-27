@@ -6,7 +6,7 @@ import type { CatalogItem, InvoiceDetail } from '#shared/types/erp'
 // a finalized invoice shows its files, can be sent, cancelled, marked as paid and
 // reminded. /erp/invoice?id=new starts a new draft.
 interface EditorData {
-  customers: { id: number, name: string, email: string | null, projectId: number | null }[]
+  customers: { id: number, name: string, email: string | null, projectId: number | null, contactName: string | null }[]
   projects: { id: number, name: string }[]
   catalog: CatalogItem[]
   smallBusiness: boolean
@@ -46,6 +46,8 @@ function fill() {
 fill()
 watch(() => data.value?.invoice?.id, fill)
 
+// The customer's contact person, printed below its name in the address.
+const contactName = computed(() => data.value?.customers.find(c => String(c.id) === form.customerId)?.contactName ?? null)
 const customerItems = computed(() => (data.value?.customers ?? []).map(c => ({ value: String(c.id), label: c.name })))
 const projectItems = computed(() => [{ value: NONE, label: '– kein Projekt –' }, ...(data.value?.projects ?? []).map(p => ({ value: String(p.id), label: p.name }))])
 // Choosing a customer suggests the project linked to it.
@@ -216,7 +218,7 @@ v-if="invoice && invoice.timeEntryIds.length > 0" color="info" variant="subtle" 
         <UAlert v-if="formError" color="error" variant="subtle" :title="formError" class="mb-4" role="alert" />
         <form class="space-y-4" @submit.prevent="save">
           <div class="grid gap-3 md:grid-cols-2">
-            <UFormField label="Kunde" required>
+            <UFormField label="Kunde" required :help="form.customerId === '' ? undefined : contactName ? `Ansprechpartner: ${contactName}` : 'Kein Ansprechpartner hinterlegt (beim Kunden eintragen).'">
               <USelect v-model="form.customerId" :items="customerItems" placeholder="Kunde wählen" class="w-full" />
             </UFormField>
             <UFormField label="Projekt" hint="optional">

@@ -58,6 +58,12 @@ final class InvoicingTest extends TestCase
         self::assertSame('123/456/78901', $xpath->evaluate('string(//ram:SellerTradeParty/ram:ID)'));
     }
 
+    public function testNamesTheBuyersContactPerson(): void
+    {
+        $xpath = self::xpath(ZugferdXml::xml(Samples::all()['kleinunternehmer']));
+        self::assertSame('Erika Beispiel', $xpath->evaluate('string(//ram:BuyerTradeParty/ram:DefinedTradeContact/ram:PersonName)'));
+    }
+
     public function testUsesTheEn16931Profile(): void
     {
         $xpath = self::xpath(ZugferdXml::xml(Samples::all()['kleinunternehmer']));

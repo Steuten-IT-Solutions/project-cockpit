@@ -96,7 +96,7 @@ export async function editorData(event: H3Event) {
   const { master } = useErp(event)
   const [customers, projects, catalog, settings] = await Promise.all([master.customers(false), master.projects(), master.catalog(false), master.settings()])
   return {
-    customers: customers.map(c => ({ id: c.id, name: c.name, email: c.email, projectId: c.projectId })),
+    customers: customers.map(c => ({ id: c.id, name: c.name, email: c.email, projectId: c.projectId, contactName: c.contactName })),
     projects,
     catalog,
     smallBusiness: settings?.smallBusiness ?? true,

@@ -6,7 +6,7 @@ import type { CatalogItem, Choice, SalesDocument } from '#shared/types/erp'
 // record the customer's answer and turn it into an order or an invoice.
 interface Page {
   document?: SalesDocument
-  customers: (Choice & { email: string | null, projectId: number | null })[]
+  customers: (Choice & { email: string | null, projectId: number | null, contactName: string | null })[]
   projects: Choice[]
   catalog: CatalogItem[]
   smallBusiness: boolean
@@ -39,6 +39,8 @@ function fill() {
 }
 fill()
 watch(() => data.value?.document?.id, fill)
+// The customer's contact person, printed below its name in the address.
+const contactName = computed(() => data.value?.customers.find(c => String(c.id) === form.customerId)?.contactName ?? null)
 const customerItems = computed(() => (data.value?.customers ?? []).map(c => ({ value: String(c.id), label: c.name })))
 const projectItems = computed(() => [{ value: NONE, label: '– kein Projekt –' }, ...(data.value?.projects ?? []).map(p => ({ value: String(p.id), label: p.name }))])
 const formError = ref<string | null>(null)
@@ -125,7 +127,7 @@ const statusLabel = computed(() => (kind.value === 'quote' ? QUOTE_STATES : ORDE
       <UAlert v-if="formError" color="error" variant="subtle" :title="formError" class="mb-4" role="alert" />
       <form class="space-y-4" @submit.prevent="save">
         <div class="grid gap-3 md:grid-cols-3">
-          <UFormField label="Kunde" required>
+          <UFormField label="Kunde" required :help="form.customerId === '' ? undefined : contactName ? `Ansprechpartner: ${contactName}` : 'Kein Ansprechpartner hinterlegt (beim Kunden eintragen).'">
             <USelect v-model="form.customerId" :items="customerItems" placeholder="Kunde wählen" class="w-full" />
           </UFormField>
           <UFormField label="Projekt" hint="optional">
