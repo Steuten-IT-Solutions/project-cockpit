@@ -1546,13 +1546,21 @@ EOF
 }
 
 # True if every A and AAAA record of the name is an address of this server (and there is an A).
+# Asks the domain's own name server, not the local resolver: that one may still hold the old
+# records from an earlier run for as long as their TTL (often an hour). Prints what it found.
 points_here() {
-    local name="$1" v4 v6 record
-    v4="$(dig +short A "$name" | grep -E '^[0-9.]+$' || true)"
-    v6="$(dig +short AAAA "$name" | grep ':' || true)"
-    [ -n "$v4" ] || return 1
-    for record in $v4; do [ "$record" = "$(ip_of 4)" ] || return 1; done
-    for record in $v6; do [ "$record" = "$(ip_of 6)" ] || return 1; done
+    local name="$1" ns v4 v6 record mine4 mine6 ok=0
+    ns="$(dig +short NS "$WEB_APEX" | head -n 1)"
+    ask() { if [ -n "$ns" ]; then dig +short "$1" "$2" "@$ns"; else dig +short "$1" "$2"; fi; }
+    v4="$(ask A "$name" | grep -E '^[0-9.]+$' || true)"
+    v6="$(ask AAAA "$name" | grep ':' || true)"
+    mine4="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1)"
+    mine6="$(ip -6 -o addr show scope global | awk '{print $4}' | cut -d/ -f1)"
+    echo "DNS ${ns:-(local resolver)}: $name A ${v4//$'\n'/ } AAAA ${v6//$'\n'/ }" | tr -s ' '
+    [ -n "$v4" ] || ok=1
+    for record in $v4; do grep -qxF "$record" <<< "$mine4" || ok=1; done
+    for record in $v6; do grep -qxF "$record" <<< "$mine6" || ok=1; done
+    return "$ok"
 }
 
 website() {
@@ -1578,6 +1586,9 @@ website() {
 }
 EOF
     a2enmod -q headers rewrite ssl proxy proxy_http > /dev/null
+    # A global name keeps Apache from warning (AH00558) that it cannot determine one.
+    echo "ServerName $COCKPIT_HOST" > /etc/apache2/conf-available/cockpit-servername.conf
+    a2enconf -q cockpit-servername > /dev/null
 
     local tls="no"
     [ -f "/etc/letsencrypt/live/$WEB_HOST/fullchain.pem" ] && tls="yes"
@@ -1587,7 +1598,10 @@ EOF
     systemctl reload apache2
 
     if [ "$tls" = "no" ]; then
-        if points_here "$WEB_HOST" && points_here "$WEB_APEX"; then
+        local www_ok=0 apex_ok=0
+        points_here "$WEB_HOST" || www_ok=1
+        points_here "$WEB_APEX" || apex_ok=1
+        if [ "$www_ok" = 0 ] && [ "$apex_ok" = 0 ]; then
             echo "Both names point to this server; requesting the certificate ..."
             # The apache plugin answers the challenge itself; the deploy hook loads renewed certificates.
             certbot certonly --apache --non-interactive --agree-tos --register-unsafely-without-email \
