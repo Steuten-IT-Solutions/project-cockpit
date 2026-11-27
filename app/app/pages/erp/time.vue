@@ -140,7 +140,7 @@ const hours = (list: TimeEntry[]) => quantity(list.filter(e => e.unit === 'HUR')
           <UFormField v-if="!data.smallBusiness" label="USt. (%)">
             <UInput v-model.number="form.vatRate" type="number" class="w-full" />
           </UFormField>
-          <UFormField v-if="catalogItems.length > 0" label="Aus dem Katalog">
+          <UFormField v-if="catalogItems.length > 0" label="Artikel übernehmen">
             <USelect v-model="pick" :items="catalogItems" placeholder="…" class="w-full" />
           </UFormField>
         </div>

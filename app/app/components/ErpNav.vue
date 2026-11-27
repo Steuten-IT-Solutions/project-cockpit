@@ -8,7 +8,7 @@ const LINKS = [
   { to: '/erp/subscriptions', label: 'Wiederkehrend' },
   { to: '/erp/incoming', label: 'Eingangsrechnungen' },
   { to: '/erp/customers', label: 'Kunden' },
-  { to: '/erp/catalog', label: 'Katalog' },
+  { to: '/erp/articles', label: 'Artikel' },
   { to: '/erp/reports', label: 'Auswertung' },
   { to: '/erp/settings', label: 'Einstellungen' },
 ]

@@ -102,6 +102,8 @@ export default defineNuxtConfig({
 
   routeRules: {
     '/**': { headers: { 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store' } },
+    // "Katalog" is called "Artikel" since #49; old bookmarks still work.
+    '/erp/catalog': { redirect: '/erp/articles' },
     // Bug reports carry a screenshot of up to 2 MB as base64 (the receiver checks its own limits).
     '/_receiver/**': { security: { requestSizeLimiter: { maxRequestSizeInBytes: 3_100_000, maxUploadFileRequestInBytes: 3_100_000 } } },
   },

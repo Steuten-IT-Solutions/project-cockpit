@@ -55,7 +55,8 @@ final class JsonDocument
 
     /**
      * PDF options for the mode: quotes and order confirmations get their own heading,
-     * dates and closing text; drafts a watermark.
+     * dates and closing text; drafts a watermark. A draft is mode "draft" (an invoice) or
+     * any mode with "draft": true (a quote or order confirmation not issued yet).
      *
      * @param array<mixed> $data
      * @return array{logo?: array{data: string, type: string}, title?: string, meta?: array<string, string>, closing?: string, watermark?: string}
@@ -72,7 +73,7 @@ final class JsonDocument
             $options['logo'] = ['data' => $bytes, 'type' => self::string($logo, 'type')];
         }
         $mode = self::mode($data);
-        if ($mode === 'draft') {
+        if ($mode === 'draft' || ($data['draft'] ?? null) === true) {
             $options['watermark'] = 'ENTWURF';
         }
         if ($mode === 'quote') {

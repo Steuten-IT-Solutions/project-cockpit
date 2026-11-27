@@ -22,6 +22,8 @@ export interface PartyDocument {
 
 export interface RenderDocument {
   mode: 'invoice' | 'draft' | 'quote' | 'order'
+  /** A quote or order confirmation not issued yet: printed with the ENTWURF watermark. */
+  draft?: boolean
   number: string
   type?: '380' | '381'
   issueDate: string
