@@ -31,7 +31,8 @@
 #   bin/server-setup.sh rollback back to the PHP cockpit (keeps the Node build for later)
 #   bin/server-setup.sh ocr      text recognition for incoming invoices without e-invoice data:
 #                                poppler-utils (text of PDFs) and Tesseract with German
-#   bin/server-setup.sh website  the company website (website/) on WEB_HOST and WEB_APEX; HTTPS
+#   bin/server-setup.sh website  the company website (website/) on WEB_HOST and WEB_APEX, redirects
+#                                for WEB_REDIRECTS; HTTPS
 #                                as soon as both names point here (run again after the DNS change)
 #
 # On the server, "cockpit-setup <step>" loads the current version from GitHub (main) and runs it.
@@ -52,7 +53,12 @@ MAIL_HOST="${MAIL_HOST:-mail.steuten-it-solutions.de}"
 # Company website (step "website"): www serves it, the apex redirects there.
 WEB_HOST="${WEB_HOST:-www.steuten-it-solutions.de}"
 WEB_APEX="${WEB_APEX:-steuten-it-solutions.de}"
+# Further domains whose website (and www) redirects to WEB_HOST (step "website").
+WEB_REDIRECTS="${WEB_REDIRECTS:-steuten-it-solutions.com steuten-it-solutions.info steuten-it-solutions.online steuten-it-solutions.org}"
 MAIL_DOMAIN="${MAIL_DOMAIN:-steuten-it-solutions.de}"
+# Domains that receive mail for the same mailboxes and forwardings (box@other -> box@MAIL_DOMAIN,
+# no catch-all). Receive only: nobody sends as these, so their SPF is "-all" (step "mail").
+MAIL_ALIAS_DOMAINS="${MAIL_ALIAS_DOMAINS:-$WEB_REDIRECTS}"
 # Mailboxes (local parts) and forwardings (alias:mailbox). A forwarding's target may send as
 # the alias; every mailbox sends as itself. Running "mail" again applies changes to these lists.
 MAILBOXES="christian.steuten info rechnung eingangsrechnung dmarc"
@@ -315,14 +321,18 @@ EOF
     local vmail_uid
     vmail_uid="$(id -u vmail)"
 
-    local box alias target
+    local box alias target domain
     {
         echo "# Written by server-setup.sh mail; edit MAILBOXES there."
         for box in $MAILBOXES; do echo "$box@$MAIL_DOMAIN OK"; done
     } > /etc/postfix/vmailbox
     {
-        echo "# Written by server-setup.sh mail; edit FORWARDS there."
+        echo "# Written by server-setup.sh mail; edit FORWARDS and MAIL_ALIAS_DOMAINS there."
         for alias in $FORWARDS; do echo "${alias%%:*}@$MAIL_DOMAIN ${alias#*:}@$MAIL_DOMAIN"; done
+        for domain in $MAIL_ALIAS_DOMAINS; do
+            for box in $MAILBOXES; do echo "$box@$domain $box@$MAIL_DOMAIN"; done
+            for alias in $FORWARDS; do echo "${alias%%:*}@$domain ${alias#*:}@$MAIL_DOMAIN"; done
+        done
     } > /etc/postfix/virtual
     {
         echo "# Written by server-setup.sh mail: which login may send as which address."
@@ -355,6 +365,7 @@ EOF
         'inet_protocols = all' \
         'smtp_address_preference = ipv4' \
         "virtual_mailbox_domains = $MAIL_DOMAIN" \
+        "virtual_alias_domains = $MAIL_ALIAS_DOMAINS" \
         'virtual_mailbox_maps = texthash:/etc/postfix/vmailbox' \
         'virtual_alias_maps = texthash:/etc/postfix/virtual' \
         'virtual_transport = lmtp:unix:private/dovecot-lmtp' \
@@ -556,6 +567,10 @@ Mail server is running. Next steps (README.md, "Mail server"):
      TXT  _dmarc            v=DMARC1; p=none; rua=mailto:dmarc@$MAIL_DOMAIN
      SPF (TXT @): add  ip4:$(ip_of 4) ip6:$(ip_of 6)  to the existing record
   3. Test sending and receiving, then point the MX record to $MAIL_HOST.
+  4. Receive-only domains ($MAIL_ALIAS_DOMAINS), each:
+     MX   @        10 $MAIL_HOST
+     TXT  @        v=spf1 -all
+     TXT  _dmarc   v=DMARC1; p=reject;
 EOF
 }
 
@@ -1569,11 +1584,12 @@ EOF
 }
 
 # True if every A and AAAA record of the name is an address of this server (and there is an A).
-# Asks the domain's own name server, not the local resolver: that one may still hold the old
-# records from an earlier run for as long as their TTL (often an hour). Prints what it found.
+# Asks the name server of the zone (default WEB_APEX), not the local resolver: that one may still
+# hold the old records from an earlier run for as long as their TTL (often an hour). Prints what
+# it found.
 points_here() {
-    local name="$1" ns v4 v6 record mine4 mine6 ok=0
-    ns="$(dig +short NS "$WEB_APEX" | head -n 1)"
+    local name="$1" zone="${2:-$WEB_APEX}" ns v4 v6 record mine4 mine6 ok=0
+    ns="$(dig +short NS "$zone" | head -n 1)"
     ask() { if [ -n "$ns" ]; then dig +short "$1" "$2" "@$ns"; else dig +short "$1" "$2"; fi; }
     v4="$(ask A "$name" | grep -E '^[0-9.]+$' || true)"
     v6="$(ask AAAA "$name" | grep ':' || true)"
@@ -1584,6 +1600,71 @@ points_here() {
     for record in $v4; do grep -qxF "$record" <<< "$mine4" || ok=1; done
     for record in $v6; do grep -qxF "$record" <<< "$mine6" || ok=1; done
     return "$ok"
+}
+
+# Apache sites for WEB_REDIRECTS: every request to a domain or its www goes to the website, on
+# HTTPS once the domain has a certificate (named after the domain).
+redirect_sites() {
+    local domain cert options=""
+    [ -f /etc/letsencrypt/options-ssl-apache.conf ] && options="Include /etc/letsencrypt/options-ssl-apache.conf"
+    echo "# Written by server-setup.sh website. Further domains that redirect to https://$WEB_HOST/."
+    for domain in $WEB_REDIRECTS; do
+        cert="/etc/letsencrypt/live/$domain"
+        cat <<EOF
+
+<VirtualHost *:80>
+    ServerName $domain
+    ServerAlias www.$domain
+    RewriteEngine on
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://$WEB_HOST%{REQUEST_URI} [END,NE,R=permanent]
+    ErrorLog /var/log/website/error.log
+    CustomLog /var/log/website/access.log combined
+</VirtualHost>
+EOF
+        [ -f "$cert/fullchain.pem" ] || continue
+        cat <<EOF
+
+<VirtualHost *:443>
+    ServerName $domain
+    ServerAlias www.$domain
+    SSLEngine on
+    SSLCertificateFile $cert/fullchain.pem
+    SSLCertificateKeyFile $cert/privkey.pem
+    $options
+    RewriteEngine on
+    RewriteRule ^ https://$WEB_HOST%{REQUEST_URI} [END,NE,R=permanent]
+    ErrorLog /var/log/website/error.log
+    CustomLog /var/log/website/access.log combined
+</VirtualHost>
+EOF
+    done
+}
+
+# Redirect sites for WEB_REDIRECTS; a certificate for each domain whose names point here.
+website_redirects() {
+    local domain missing=""
+    redirect_sites > /etc/apache2/sites-available/cockpit-redirects.conf
+    a2ensite -q cockpit-redirects > /dev/null
+    apache2ctl configtest
+    systemctl reload apache2
+    for domain in $WEB_REDIRECTS; do
+        [ ! -f "/etc/letsencrypt/live/$domain/fullchain.pem" ] || continue
+        if points_here "$domain" "$domain" && points_here "www.$domain" "$domain"; then
+            certbot certonly --apache --non-interactive --agree-tos --register-unsafely-without-email \
+                --cert-name "$domain" -d "$domain" -d "www.$domain" \
+                --deploy-hook "systemctl reload apache2"
+        else
+            missing="$missing $domain"
+        fi
+    done
+    redirect_sites > /etc/apache2/sites-available/cockpit-redirects.conf
+    apache2ctl configtest
+    systemctl reload apache2
+    if [ -n "$missing" ]; then
+        echo "Redirects without HTTPS yet (A/AAAA of the domain and its www not on this server):$missing"
+        echo "Set the DNS records, then run \"cockpit-setup website\" again."
+    fi
 }
 
 website() {
@@ -1653,6 +1734,7 @@ EOF
     csp="$(curl -s -D - -o /dev/null --max-time 10 --resolve "$WEB_HOST:$port:127.0.0.1" "$scheme://$WEB_HOST/" | grep -ci '^content-security-policy:' || true)"
     [ "$code" = "200" ] && [ "$csp" -ge 1 ] || die "check failed: $scheme://$WEB_HOST/ answered $code, CSP header: $csp"
     echo "Done: $scheme://$WEB_HOST/ is served from $APP/website."
+    website_redirects
 }
 
 case "${1:-}" in
