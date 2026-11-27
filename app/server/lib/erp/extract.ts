@@ -68,9 +68,20 @@ function amounts(line: string): number[] {
   return [...line.matchAll(AMOUNT)].map(m => amountCents(m[0])).filter((v): v is number => v !== null && v >= 0)
 }
 
-/** "27.11.2026", "27.11.26", "2026-11-27" or "27. November 2026" as ISO date; null if none or invalid. */
+// Month names in German and English, full and abbreviated, with their number.
+const MONTHS: Record<string, number> = Object.fromEntries([
+  ['januar', 'january', 'jan', 'jän'], ['februar', 'february', 'feb'], ['märz', 'march', 'mar', 'mär'], ['april', 'apr'], ['mai', 'may'],
+  ['juni', 'june', 'jun'], ['juli', 'july', 'jul'], ['august', 'aug'], ['september', 'sep', 'sept'], ['oktober', 'october', 'okt', 'oct'],
+  ['november', 'nov'], ['dezember', 'december', 'dez', 'dec'],
+].flatMap((names, i) => names.map(n => [n, i + 1])))
+// Longest names first, so "sept" is not read as "sep" followed by "t".
+const MONTH = `(${Object.keys(MONTHS).sort((a, b) => b.length - a.length).join('|')})\\.?`
+
+/**
+ * "27.11.2026", "27.11.26", "2026-11-27", "27. November 2026", "27 Nov 2026" or "November 27, 2026"
+ * (English style, as on Stripe invoices) as ISO date; null if none or invalid.
+ */
 export function dateIso(text: string): string | null {
-  const months = ['januar', 'februar', 'märz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember']
   let y: number, mo: number, d: number
   let m = /(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4}|\d{2})(?!\d)/.exec(text)
   if (m !== null) {
@@ -79,8 +90,11 @@ export function dateIso(text: string): string | null {
   else if ((m = /(\d{4})-(\d{2})-(\d{2})/.exec(text)) !== null) {
     y = Number(m[1]); mo = Number(m[2]); d = Number(m[3])
   }
-  else if ((m = new RegExp(`(\\d{1,2})\\.?\\s+(${months.join('|')})\\s+(\\d{4})`, 'i').exec(text)) !== null) {
-    d = Number(m[1]); mo = months.indexOf(m[2]!.toLowerCase()) + 1; y = Number(m[3])
+  else if ((m = new RegExp(`(?<!\\d)(\\d{1,2})\\.?\\s+${MONTH}\\s+(\\d{4})`, 'i').exec(text)) !== null) {
+    d = Number(m[1]); mo = MONTHS[m[2]!.toLowerCase()]!; y = Number(m[3])
+  }
+  else if ((m = new RegExp(`(?<![a-zäöü])${MONTH}\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})`, 'i').exec(text)) !== null) {
+    d = Number(m[2]); mo = MONTHS[m[1]!.toLowerCase()]!; y = Number(m[3])
   }
   else {
     return null
@@ -113,8 +127,10 @@ function amountsAfter(lines: string[], labels: RegExp[], skip: RegExp | null = n
 }
 
 const NUMBER_LABELS = [/(?:rechnungs-?\s?(?:nummer|nr\.?)|(?:rechnung|gutschrift)\s+(?:nr\.?|nummer)|(?:beleg|gutschrifts)-?\s?(?:nummer|nr\.?)|(?:invoice|credit\s+note)\s+(?:no\.?|number|#))\s*[:#.]?\s*/i]
-const DATE_LABELS = [/(?:rechnungsdatum|belegdatum|invoice\s+date)\s*[:.]?\s*/i, /(?<![a-zäöü])datum\s*[:.]?\s*/i]
-const DUE_LABELS = [/(?:fällig(?:\s+am|keit(?:sdatum)?)?|zahlbar\s+(?:bis|am)(?:\s+zum)?|zahlungsziel|due\s+date)\s*[:.]?\s*/i]
+const DATE_LABELS = [/(?:rechnungsdatum|belegdatum|ausstellungsdatum|invoice\s+date|date\s+of\s+issue|issue\s+date|date\s+issued|issued\s+on)\s*[:.]?\s*/i,
+  /(?<![a-zäöü])(?:datum|date)(?!\s+(?:due|of\s+(?:service|supply|delivery)|paid))\s*[:.]?\s*/i]
+const DUE_LABELS = [/(?:fällig(?:\s+am|keit(?:sdatum)?)?|zahlbar\s+(?:bis|am)(?:\s+zum)?|zahlungsziel|due\s+date|date\s+due|payment\s+due|due\s+(?:on|by))\s*[:.]?\s*/i,
+  /\bdue\s+/i]
 const NET = /netto|zwischensumme|subtotal/i
 const TAX = /umsatzsteuer|mehrwertsteuer|mwst|\bust\b(?!-?id)|\bvat\b(?!\s*(?:id|no|reg))/i
 const GROSS_LABELS = [/gesamtbetrag|rechnungsbetrag|endbetrag|zahlbetrag|zu\s+zahlen|gesamtsumme|total\s+amount|amount\s+due/i, /brutto|gesamt|summe|total/i]

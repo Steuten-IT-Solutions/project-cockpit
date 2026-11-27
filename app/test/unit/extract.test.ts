@@ -41,6 +41,13 @@ describe('reading incoming invoices without e-invoice data', () => {
     expect(dateIso('2026-11-20')).toBe('2026-11-20')
     expect(dateIso('3. Dezember 2026')).toBe('2026-12-03')
     expect(dateIso('31.02.2026')).toBeNull()
+    expect(dateIso('November 27, 2026')).toBe('2026-11-27')
+    expect(dateIso('Sept 3rd, 2026')).toBe('2026-09-03')
+    expect(dateIso('Dec 1 2026')).toBe('2026-12-01')
+    expect(dateIso('27 Nov 2026')).toBe('2026-11-27')
+    expect(dateIso('4. März 2026')).toBe('2026-03-04')
+    expect(dateIso('February 30, 2026')).toBeNull()
+    expect(dateIso('Augsburg 12 2026')).toBeNull()
   })
 
   it('fills the fields of a typical invoice', () => {
@@ -83,5 +90,30 @@ describe('reading incoming invoices without e-invoice data', () => {
   it('notices credit notes', () => {
     expect(extractFields('Gutschrift Nr. G-12\nDatum 05.11.2026\nGesamtbetrag 23,80 €', [], OWN)).toMatchObject({ number: 'G-12', kind: 'credit', grossCents: 2380 })
     expect(extractFields('Credit note CN-7\nTotal $5.00', [], OWN)).toMatchObject({ kind: 'credit', currency: 'USD' })
+  })
+
+  it('reads English labels and dates as on a Stripe invoice', () => {
+    const stripe = `Invoice
+Invoice number      ABCD1234-0007
+Date of issue       November 3, 2026
+Date due            November 17, 2026
+
+Anthropic, PBC                         Bill to
+548 Market Street                      Steuten IT Solutions
+
+$118.00 USD due November 17, 2026
+
+Description                 Qty     Unit price      Amount
+Claude Max                  1       $100.00         $100.00
+Subtotal                                            $100.00
+Tax (18%)                                            $18.00
+Total                                               $118.00
+Amount due                                          $118.00 USD`
+    expect(extractFields(stripe, [], OWN)).toMatchObject({
+      number: 'ABCD1234-0007', issueDate: '2026-11-03', dueDate: '2026-11-17', netCents: 10000, taxCents: 1800, grossCents: 11800, currency: 'USD',
+    })
+    // The due date also when only the sentence says it, and not the date of service for the invoice date.
+    expect(extractFields('Date of service: 01 Oct 2026\nIssue date: 02 Oct 2026\n$5.00 due Oct 16, 2026', [], OWN))
+      .toMatchObject({ issueDate: '2026-10-02', dueDate: '2026-10-16' })
   })
 })
