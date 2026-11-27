@@ -102,6 +102,47 @@ export function percentText(bp: number): string {
   return fraction === '' ? String(Math.floor(bp / 100)) : `${Math.floor(bp / 100)},${fraction}`
 }
 
+/**
+ * Splits an amount by shares in basis points, so that the parts add up to the amount
+ * exactly: each part is rounded down, and the cents left over go to the parts with the
+ * largest remainders (first ones first on a tie).
+ */
+export function splitCents(totalCents: number, sharesBp: number[]): number[] {
+  const sum = sharesBp.reduce((a, b) => a + b, 0)
+  if (sum === 0) return sharesBp.map(() => 0)
+  const exact = sharesBp.map(bp => totalCents * bp / sum)
+  const parts = exact.map(Math.floor)
+  let left = totalCents - parts.reduce((a, b) => a + b, 0)
+  const order = exact.map((v, i) => ({ i, r: v - Math.floor(v) })).sort((a, b) => b.r - a.r || a.i - b.i)
+  for (const { i } of order) {
+    if (left <= 0) break
+    parts[i]! += 1
+    left -= 1
+  }
+  return parts
+}
+
+/** One row of the project split in a form: a project id (or "none") and a share in percent. */
+export interface ShareForm { projectId: string, share: string }
+
+/** The form rows for stored shares; one empty row for none. */
+export function shareForms(projects: { projectId: number, shareBp: number }[]): ShareForm[] {
+  if (projects.length === 0) return [{ projectId: 'none', share: '' }]
+  return projects.map(p => ({ projectId: String(p.projectId), share: projects.length === 1 ? '' : percentText(p.shareBp) }))
+}
+
+/** The rows as sent to the server: rows without a project are left out. */
+export function sharesBody(rows: ShareForm[]): { projectId: string, share: string }[] {
+  return rows.filter(r => r.projectId !== 'none' && r.projectId !== '').map(r => ({ projectId: r.projectId, share: r.share }))
+}
+
+/** Equal shares in basis points that add up to 100 %, e.g. 3 → 3334, 3333, 3333. */
+export function equalShares(count: number): number[] {
+  if (count <= 0) return []
+  const base = Math.floor(10000 / count)
+  return Array.from({ length: count }, (_, i) => base + (i < 10000 - base * count ? 1 : 0))
+}
+
 /** "1", "1,5", "0,25" from thousandths (like InvoicePdf::quantity()). */
 export function quantity(milli: number): string {
   const whole = Math.floor(milli / 1000).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')

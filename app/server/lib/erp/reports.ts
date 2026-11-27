@@ -1,5 +1,5 @@
 import type { Pool } from 'mysql2/promise'
-import { csvAmount, csvRow, day, INCOMING_CATEGORIES } from '#shared/lib/erp'
+import { csvAmount, csvRow, day, INCOMING_CATEGORIES, percentText, splitCents } from '#shared/lib/erp'
 import type { InvoiceRepository } from './invoices'
 import { num, rows } from './sql'
 import { zip, type ZipEntry } from './zip'
@@ -47,11 +47,19 @@ export async function exportArchive(pool: Pool, invoices: InvoiceRepository, fro
   entries.push({ name: 'zahlungseingaenge.csv', date, content: csv(['Rechnung', 'Datum', 'Betrag', 'Notiz'], payments.map(p => [p.number, day(p.paidOn), csvAmount(num(p.amount)), p.note])) })
 
   const incoming = await rows<{ id: number, supplier: string, vatId: string | null, number: string, issueDate: string, dueDate: string | null, net: number, tax: number,
-    gross: number, category: string, project: string | null, status: string, paidOn: string | null, reason: string | null, fileName: string, sha: string, format: string }>(pool,
+    gross: number, category: string, status: string, paidOn: string | null, reason: string | null, fileName: string, sha: string, format: string }>(pool,
   `SELECT i.id, s.name AS supplier, s.vat_id AS vatId, i.number, i.issue_date AS issueDate, i.due_date AS dueDate, i.net_cents AS net, i.tax_cents AS tax,
-    i.gross_cents AS gross, i.category, p.name AS project, i.status, i.paid_on AS paidOn, i.discarded_reason AS reason, i.file_name AS fileName,
-    i.file_sha256 AS sha, i.format FROM incoming_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN projects p ON p.id = i.project_id
+    i.gross_cents AS gross, i.category, i.status, i.paid_on AS paidOn, i.discarded_reason AS reason, i.file_name AS fileName,
+    i.file_sha256 AS sha, i.format FROM incoming_invoices i JOIN suppliers s ON s.id = i.supplier_id
     WHERE i.issue_date BETWEEN ? AND ? ORDER BY i.issue_date, i.id`, [from, to])
+  // "Projekt A (60 %), Projekt B (40 %)"; a single project without its 100 %.
+  const projectNames = new Map<number, string[]>()
+  for (const r of await rows<{ id: number, name: string, bp: unknown }>(pool, `SELECT a.incoming_invoice_id AS id, p.name, a.share_bp AS bp FROM incoming_invoice_projects a
+    JOIN projects p ON p.id = a.project_id JOIN incoming_invoices i ON i.id = a.incoming_invoice_id WHERE i.issue_date BETWEEN ? AND ?
+    ORDER BY a.share_bp DESC, p.name`, [from, to])) {
+    const bp = num(r.bp)
+    projectNames.set(r.id, [...(projectNames.get(r.id) ?? []), bp === 10000 ? r.name : `${r.name} (${percentText(bp)} %)`])
+  }
   const incomingNames = new Map<number, string>()
   for (const inv of incoming) {
     const file = await rows<{ content: Buffer }>(pool, 'SELECT content FROM incoming_invoice_files WHERE incoming_invoice_id = ?', [inv.id])
@@ -64,7 +72,7 @@ export async function exportArchive(pool: Pool, invoices: InvoiceRepository, fro
     name: 'eingangsrechnungen.csv', date,
     content: csv(['Nr.', 'Lieferant', 'USt-IdNr.', 'Rechnungsnummer', 'Rechnungsdatum', 'Fällig', 'Netto', 'USt', 'Brutto', 'Kategorie', 'Projekt', 'Status', 'Bezahlt am', 'Verworfen weil', 'E-Rechnung', 'Datei', 'SHA-256'],
       incoming.map(i => [i.id, i.supplier, i.vatId, i.number, day(i.issueDate), i.dueDate ? day(i.dueDate) : null, csvAmount(num(i.net)), csvAmount(num(i.tax)), csvAmount(num(i.gross)),
-        INCOMING_CATEGORIES[i.category] ?? i.category, i.project, { open: 'offen', paid: 'bezahlt', discarded: 'verworfen' }[i.status] ?? i.status, i.paidOn ? day(i.paidOn) : null,
+        INCOMING_CATEGORIES[i.category] ?? i.category, projectNames.get(i.id)?.join(', ') ?? null, { open: 'offen', paid: 'bezahlt', discarded: 'verworfen' }[i.status] ?? i.status, i.paidOn ? day(i.paidOn) : null,
         i.reason, i.format === 'other' ? 'nein' : 'ja', incomingNames.get(i.id) ?? '', i.sha])),
   })
 
@@ -129,10 +137,22 @@ export async function yearReport(pool: Pool, year: number): Promise<YearReport> 
     WHERE i.status = 'final' AND i.issue_date BETWEEN ? AND ? GROUP BY p.name`, [from, to])) {
     projectMap.set(r.name ?? 'ohne Projekt', { revenue: num(r.s), expenses: 0 })
   }
-  for (const r of await rows<{ name: string | null, s: unknown }>(pool, `SELECT p.name, SUM(i.net_cents) AS s FROM incoming_invoices i LEFT JOIN projects p ON p.id = i.project_id
-    WHERE i.status <> 'discarded' AND i.issue_date BETWEEN ? AND ? GROUP BY p.name`, [from, to])) {
-    const key = r.name ?? 'ohne Projekt'
-    projectMap.set(key, { revenue: projectMap.get(key)?.revenue ?? 0, expenses: num(r.s) })
+  // An incoming invoice split across projects counts for each with its share of the net
+  // amount; the parts of one invoice add up to its net exactly (splitCents).
+  const shares = new Map<number, { net: number, parts: { name: string | null, bp: number }[] }>()
+  for (const r of await rows<{ id: number, net: unknown, name: string | null, bp: unknown }>(pool, `SELECT i.id, i.net_cents AS net, p.name, a.share_bp AS bp
+    FROM incoming_invoices i LEFT JOIN incoming_invoice_projects a ON a.incoming_invoice_id = i.id LEFT JOIN projects p ON p.id = a.project_id
+    WHERE i.status <> 'discarded' AND i.issue_date BETWEEN ? AND ? ORDER BY i.id, a.share_bp DESC, a.project_id`, [from, to])) {
+    const entry = shares.get(r.id) ?? { net: num(r.net), parts: [] }
+    entry.parts.push({ name: r.name, bp: r.bp === null ? 10000 : num(r.bp) })
+    shares.set(r.id, entry)
+  }
+  for (const { net, parts } of shares.values()) {
+    splitCents(net, parts.map(p => p.bp)).forEach((cents, k) => {
+      const key = parts[k]!.name ?? 'ohne Projekt'
+      const known = projectMap.get(key) ?? { revenue: 0, expenses: 0 }
+      projectMap.set(key, { revenue: known.revenue, expenses: known.expenses + cents })
+    })
   }
   const projects = [...projectMap.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.revenue - a.revenue)
 

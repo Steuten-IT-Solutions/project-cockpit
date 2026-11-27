@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { day, euro, INCOMING_CATEGORIES, priceText } from '#shared/lib/erp'
+import { day, euro, INCOMING_CATEGORIES, priceText, type ShareForm, sharesBody } from '#shared/lib/erp'
 import type { Choice, IncomingInvoice, IncomingMailFile, Supplier } from '#shared/types/erp'
 
 // Incoming invoices: upload, attachments from the mailbox to enter, open ones to pay, all received.
@@ -10,13 +10,14 @@ const { busy, run } = useAction()
 const NONE = 'none'
 const NEW = 'new'
 const categoryItems = Object.entries(INCOMING_CATEGORIES).map(([value, label]) => ({ value, label }))
-const projectItems = computed(() => [{ value: NONE, label: '– kein Projekt –' }, ...(data.value?.projects ?? []).map(p => ({ value: String(p.id), label: p.name }))])
 const supplierItems = computed(() => [{ value: NEW, label: '+ neuer Lieferant' }, ...(data.value?.suppliers ?? []).map(s => ({ value: String(s.id), label: s.name }))])
 
 const file = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const showManual = ref(false)
-const form = reactive({ category: 'other', projectId: NONE, supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '' })
+const form = reactive({ category: 'other', supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '' })
+// The projects the invoice is split across (components/ErpProjectShares.vue).
+const shares = ref<ShareForm[]>([{ projectId: NONE, share: '' }])
 const error = ref<string | null>(null)
 const warnings = ref<string[]>([])
 
@@ -125,8 +126,9 @@ async function upload() {
   const body = new FormData()
   body.append('file', file.value)
   if (mailFile.value !== null) body.append('mailFileId', String(mailFile.value.id))
+  body.append('projects', JSON.stringify(sharesBody(shares.value)))
   for (const [key, value] of Object.entries(form)) {
-    if (key === 'projectId' || key === 'supplierId') body.append(key, value === NONE || value === NEW ? '' : value)
+    if (key === 'supplierId') body.append(key, value === NEW ? '' : value)
     else if (showManual.value || key === 'category') body.append(key, value)
   }
   try {
@@ -141,6 +143,7 @@ async function upload() {
     showManual.value = false
     suggestion.value = null
     Object.assign(form, { supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '' })
+    shares.value = [{ projectId: NONE, share: '' }]
     await refresh()
     if (result.warnings.length === 0) await navigateTo(`/erp/incoming-invoice?id=${result.id}`)
   }
@@ -269,14 +272,12 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
             E-Rechnungen (ZUGFeRD-PDF, XRechnung im CII-Format) werden automatisch gelesen. Bei anderen PDFs und Fotos liest das Cockpit den Text und schlägt die Angaben vor.
           </p>
           <input v-show="!mailFile" ref="fileInput" type="file" accept=".pdf,.xml,application/pdf,application/xml,text/xml,image/png,image/jpeg" class="block w-full text-sm" aria-label="Datei" @change="pickFile">
-          <div class="grid grid-cols-2 gap-3">
-            <UFormField label="Kategorie">
-              <USelect v-model="form.category" :items="categoryItems" class="w-full" />
-            </UFormField>
-            <UFormField label="Projekt">
-              <USelect v-model="form.projectId" :items="projectItems" class="w-full" />
-            </UFormField>
-          </div>
+          <UFormField label="Kategorie">
+            <USelect v-model="form.category" :items="categoryItems" class="w-full" />
+          </UFormField>
+          <UFormField label="Projekt">
+            <ErpProjectShares v-model="shares" :projects="data.projects" />
+          </UFormField>
           <p v-if="busy === 'suggest'" class="text-xs text-muted">
             Datei wird gelesen …
           </p>

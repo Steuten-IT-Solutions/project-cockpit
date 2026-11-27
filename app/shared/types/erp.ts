@@ -140,6 +140,9 @@ export interface MailboxSettings {
   hasPassword: boolean
 }
 
+/** A project's share of an incoming invoice, in basis points (10000 = 100 %). */
+export interface ProjectShare { projectId: number, shareBp: number }
+
 export interface IncomingInvoice {
   id: number
   supplierId: number
@@ -152,7 +155,10 @@ export interface IncomingInvoice {
   taxCents: number
   grossCents: number
   category: string
+  /** The project with the largest share; see `projects` for all of them. */
   projectId: number | null
+  /** The projects the net amount is split across; empty if none. */
+  projects: ProjectShare[]
   iban: string | null
   note: string | null
   format: string

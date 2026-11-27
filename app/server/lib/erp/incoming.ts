@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto'
 import type { Pool } from 'mysql2/promise'
-import type { IncomingInvoice, Supplier } from '#shared/types/erp'
+import type { IncomingInvoice, ProjectShare, Supplier } from '#shared/types/erp'
 import { EngineInputError, type IncomingFields, type InvoiceEngine } from './engine'
 import { incomingType } from './files'
 import type { IncomingInput, SupplierInput } from './forms'
 import { InvoiceError } from './invoices'
-import { exec, num, one, rows, transaction } from './sql'
+import { exec, num, one, rows, type Sql, transaction } from './sql'
 
 // Incoming invoices (module 3). The received file is stored once and never changed. For
 // an e-invoice (ZUGFeRD PDF or CII XML) the fields are read from its XML, which is what
@@ -25,17 +25,41 @@ export interface ManualEntry { supplierId: number | null, supplierName: string |
 
 const amounts = (i: IncomingInvoice): IncomingInvoice => ({ ...i, netCents: num(i.netCents), taxCents: num(i.taxCents), grossCents: num(i.grossCents) })
 
+/** The project with the largest share (the first on a tie), kept in incoming_invoices.project_id. */
+const mainProject = (projects: ProjectShare[]) => [...projects].sort((a, b) => b.shareBp - a.shareBp)[0]?.projectId ?? null
+
+/** Replaces the project shares of an invoice. */
+async function writeShares(db: Sql, id: number, projects: ProjectShare[]): Promise<void> {
+  await exec(db, 'DELETE FROM incoming_invoice_projects WHERE incoming_invoice_id = ?', [id])
+  for (const p of projects) {
+    await exec(db, 'INSERT INTO incoming_invoice_projects (incoming_invoice_id, project_id, share_bp) VALUES (?, ?, ?)', [id, p.projectId, p.shareBp])
+  }
+}
+
 export class IncomingRepository {
   constructor(private readonly pool: Pool) {}
 
   async list(): Promise<IncomingInvoice[]> {
-    return (await rows<IncomingInvoice>(this.pool, `SELECT ${COLUMNS} FROM incoming_invoices i JOIN suppliers s ON s.id = i.supplier_id
-      ORDER BY i.status = 'open' DESC, i.issue_date DESC, i.id DESC`)).map(amounts)
+    const list = await rows<IncomingInvoice>(this.pool, `SELECT ${COLUMNS} FROM incoming_invoices i JOIN suppliers s ON s.id = i.supplier_id
+      ORDER BY i.status = 'open' DESC, i.issue_date DESC, i.id DESC`)
+    return this.withShares(list, 'SELECT incoming_invoice_id AS id, project_id AS projectId, share_bp AS shareBp FROM incoming_invoice_projects', [])
   }
 
   async find(id: number): Promise<IncomingInvoice | null> {
     const row = await one<IncomingInvoice>(this.pool, `SELECT ${COLUMNS} FROM incoming_invoices i JOIN suppliers s ON s.id = i.supplier_id WHERE i.id = ?`, [id])
-    return row === null ? null : amounts(row)
+    if (row === null) return null
+    return (await this.withShares([row], `SELECT incoming_invoice_id AS id, project_id AS projectId, share_bp AS shareBp FROM incoming_invoice_projects
+      WHERE incoming_invoice_id = ?`, [id]))[0]!
+  }
+
+  /** Adds the project shares (largest first) to the invoices. */
+  private async withShares(list: IncomingInvoice[], sql: string, params: unknown[]): Promise<IncomingInvoice[]> {
+    const byInvoice = new Map<number, ProjectShare[]>()
+    for (const r of await rows<{ id: number, projectId: unknown, shareBp: unknown }>(this.pool, sql, params)) {
+      byInvoice.set(r.id, [...(byInvoice.get(r.id) ?? []), { projectId: num(r.projectId), shareBp: num(r.shareBp) }])
+    }
+    return list.map(i => ({ ...amounts(i), projectId: i.projectId === null ? null : num(i.projectId),
+      projects: (byInvoice.get(i.id) ?? []).sort((a, b) => b.shareBp - a.shareBp || a.projectId - b.projectId) }))
   }
 
   /** The IBANs the supplier's other invoices asked for, to spot a changed account. */
@@ -68,7 +92,7 @@ export class IncomingRepository {
    * Stores an uploaded invoice. An e-invoice fills itself; otherwise `manual` must be
    * given. Returns the new id and warnings for the user.
    */
-  async upload(file: { name: string, data: Buffer }, manual: ManualEntry | string | null, category: string, projectId: number | null,
+  async upload(file: { name: string, data: Buffer }, manual: ManualEntry | string | null, category: string, projects: ProjectShare[],
     engine: InvoiceEngine, now: string): Promise<{ id: number, warnings: string[], format: string }> {
     const type = incomingType(file.data)
     if (type === null) throw new InvoiceError('Erlaubt sind E-Rechnungen (XML), PDF-Dateien und Fotos (PNG, JPEG).')
@@ -96,7 +120,7 @@ export class IncomingRepository {
       supplierId = await this.supplierFor(fields.supplier, fields.iban, now)
       values = {
         number: fields.number.slice(0, 60), issueDate: fields.issueDate, dueDate: fields.dueDate, netCents: fields.netCents,
-        taxCents: fields.taxCents, grossCents: fields.grossCents, category, projectId, iban: fields.iban, note: null,
+        taxCents: fields.taxCents, grossCents: fields.grossCents, category, projects, iban: fields.iban, note: null,
       }
       if (fields.dueCents !== fields.grossCents) warnings.push(`Zu zahlen sind laut Rechnung ${(fields.dueCents / 100).toFixed(2).replace('.', ',')} € (Anzahlungen oder Rundung).`)
     }
@@ -113,7 +137,7 @@ export class IncomingRepository {
       else {
         throw new InvoiceError('Bitte einen Lieferanten wählen oder den Namen eines neuen eintragen.')
       }
-      values = { ...manual.fields, category, projectId }
+      values = { ...manual.fields, category, projects }
     }
 
     const twin = await one<{ id: number }>(this.pool, `SELECT id FROM incoming_invoices WHERE supplier_id = ? AND number = ? AND status <> 'discarded'`, [supplierId, values.number])
@@ -125,8 +149,9 @@ export class IncomingRepository {
         category, project_id, iban, note, format, file_name, file_type, file_sha256, created_at, updated_at)
         VALUES (?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [supplierId, values.number, values.issueDate, values.dueDate, values.netCents, values.taxCents, values.grossCents, values.category,
-        values.projectId, values.iban, values.note, format, file.name.slice(0, 190), type, sha, now, now])
+        mainProject(values.projects), values.iban, values.note, format, file.name.slice(0, 190), type, sha, now, now])
       await exec(db, 'INSERT INTO incoming_invoice_files (incoming_invoice_id, content, created_at) VALUES (?, ?, ?)', [result.insertId, file.data, now])
+      await writeShares(db, result.insertId, values.projects)
       return result.insertId
     })
     const created = await this.find(id)
@@ -152,10 +177,14 @@ export class IncomingRepository {
   }
 
   async update(id: number, v: IncomingInput, now: string): Promise<boolean> {
-    const result = await exec(this.pool, `UPDATE incoming_invoices SET number = ?, issue_date = ?, due_date = ?, net_cents = ?, tax_cents = ?, gross_cents = ?,
-      category = ?, project_id = ?, iban = ?, note = ?, updated_at = ? WHERE id = ? AND status <> 'discarded'`,
-    [v.number, v.issueDate, v.dueDate, v.netCents, v.taxCents, v.grossCents, v.category, v.projectId, v.iban, v.note, now, id])
-    return result.affectedRows > 0
+    return transaction(this.pool, async (db) => {
+      const result = await exec(db, `UPDATE incoming_invoices SET number = ?, issue_date = ?, due_date = ?, net_cents = ?, tax_cents = ?, gross_cents = ?,
+        category = ?, project_id = ?, iban = ?, note = ?, updated_at = ? WHERE id = ? AND status <> 'discarded'`,
+      [v.number, v.issueDate, v.dueDate, v.netCents, v.taxCents, v.grossCents, v.category, mainProject(v.projects), v.iban, v.note, now, id])
+      if (result.affectedRows === 0) return false
+      await writeShares(db, id, v.projects)
+      return true
+    })
   }
 
   async setPaid(id: number, paidOn: string | null, now: string): Promise<boolean> {
