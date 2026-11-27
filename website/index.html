@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Steuten IT Solutions</title>
-  <meta name="description" content="{{OFFEN: Ein Satz, was Steuten IT Solutions macht (für Suchmaschinen)}}">
+  <meta name="description" content="Steuten IT Solutions aus Meerbusch entwickelt Webseiten und Apps und berät zu Software und Hardware.">
   <link rel="stylesheet" href="/assets/site.css">
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
 </head>
@@ -19,6 +19,7 @@
       </a>
       <nav aria-label="Hauptnavigation">
         <a href="#leistungen">Leistungen</a>
+        <a href="#projekte">Projekte</a>
         <a href="#kontakt">Kontakt</a>
       </nav>
     </div>
@@ -27,9 +28,9 @@
   <main>
     <section class="hero">
       <div class="wrap">
-        <p class="eyebrow">{{OFFEN: kurze Überzeile, z. B. Ort oder Schwerpunkt}}</p>
-        <h1>{{OFFEN: Hauptaussage in einem Satz}}</h1>
-        <p class="lead">{{OFFEN: zwei bis drei Sätze, was das Unternehmen macht und für wen}}</p>
+        <p class="eyebrow">IT-Dienstleistungen aus Meerbusch</p>
+        <h1>Webseiten, Apps und IT-Beratung aus einer Hand</h1>
+        <p class="lead">Steuten IT Solutions entwickelt Webseiten und Apps und berät Sie bei Fragen rund um Software und Hardware. Sie haben einen festen Ansprechpartner, der Ihr Projekt von der ersten Idee bis zum Betrieb begleitet.</p>
         <a class="button" href="#kontakt">Kontakt aufnehmen</a>
       </div>
     </section>
@@ -39,42 +40,92 @@
         <h2>Leistungen</h2>
         <div class="cards">
           <article class="card">
-            <h3>{{OFFEN: Leistung 1}}</h3>
-            <p>{{OFFEN: Beschreibung}}</p>
+            <h3>Webseiten</h3>
+            <p>Moderne, schnelle Webseiten, die auf dem Smartphone genauso gut funktionieren wie am Computer.</p>
           </article>
           <article class="card">
-            <h3>{{OFFEN: Leistung 2}}</h3>
-            <p>{{OFFEN: Beschreibung}}</p>
+            <h3>Apps</h3>
+            <p>Web-Apps und Apps für Vereine, Unternehmen und eigene Ideen, von der Planung bis zum laufenden Betrieb.</p>
           </article>
           <article class="card">
-            <h3>{{OFFEN: Leistung 3}}</h3>
-            <p>{{OFFEN: Beschreibung}}</p>
+            <h3>Beratung zu Soft- und Hardware</h3>
+            <p>Unabhängige Beratung bei der Auswahl, Einrichtung und dem Einsatz von Software und Hardware.</p>
           </article>
         </div>
       </div>
     </section>
 
-    <section id="ueber" class="section section-alt">
-      <div class="wrap narrow">
-        <h2>Über uns</h2>
-        <p>{{OFFEN: Absatz über das Unternehmen}}</p>
+    <section id="projekte" class="section section-alt">
+      <div class="wrap">
+        <h2>Projekte</h2>
+        <p class="section-lead">Eine Auswahl von Webseiten und Apps, die wir entwickelt haben und betreiben.</p>
+        <div class="cards projects">
+          <a class="card card-link" href="https://toolbox-hub.app">
+            <h3>ToolBox Hub</h3>
+            <p>Kostenlose Online-Werkzeuge für Entwickler, Designer und alle anderen, die direkt im Browser laufen.</p>
+            <span class="card-url">toolbox-hub.app</span>
+          </a>
+          <a class="card card-link" href="https://my-garden-planner.app">
+            <h3>Garden Planner</h3>
+            <p>Beete und Blumenkästen planen, gute Nachbarpflanzen finden, Aussaat und Gießen im Blick behalten.</p>
+            <span class="card-url">my-garden-planner.app</span>
+          </a>
+          <a class="card card-link" href="https://partyplaylist.app">
+            <h3>PartyPlaylist</h3>
+            <p>Gäste schlagen Songs vor und stimmen ab, für die perfekte Playlist auf jeder Feier.</p>
+            <span class="card-url">partyplaylist.app</span>
+          </a>
+          <a class="card card-link" href="https://marinekompanie-lank.de/app">
+            <h3>App der Marinekompanie Lank</h3>
+            <p>Die App für die Mitglieder der Marinekompanie Lank.</p>
+            <span class="card-url">marinekompanie-lank.de/app</span>
+          </a>
+          <a class="card card-link" href="https://bruderschaft-lanklatum-app.de/">
+            <h3>App der St. Sebastianus Schützenbruderschaft Lank-Latum</h3>
+            <p>Die App der St. Sebastianus Schützenbruderschaft von 1475 Lank-Latum e.V.</p>
+            <span class="card-url">bruderschaft-lanklatum-app.de</span>
+          </a>
+        </div>
       </div>
     </section>
 
-    <section id="kontakt" class="section">
+    <section id="ueber" class="section">
+      <div class="wrap narrow">
+        <h2>Über uns</h2>
+        <p>Steuten IT Solutions wurde 2026 von Christian Steuten in Meerbusch gegründet. Wir entwickeln Webseiten und Apps und beraten zu Software und Hardware, mit kurzen Wegen und einem festen Ansprechpartner für Ihr Projekt.</p>
+      </div>
+    </section>
+
+    <section id="kontakt" class="section section-alt">
       <div class="wrap narrow">
         <h2>Kontakt</h2>
-        <p>Schreiben Sie uns, wir melden uns zeitnah bei Ihnen.</p>
-        <p class="contact">
-          <a class="button" href="mailto:info@steuten-it-solutions.de">info@steuten-it-solutions.de</a>
-        </p>
+        <p>Schreiben Sie uns, wir melden uns zeitnah bei Ihnen. Oder direkt per E-Mail an <a href="mailto:info@steuten-it-solutions.de">info@steuten-it-solutions.de</a>.</p>
+        <form class="contact-form" action="/kontakt/senden" method="post">
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" autocomplete="name" maxlength="100" required>
+
+          <label for="email">E-Mail-Adresse</label>
+          <input id="email" name="email" type="email" autocomplete="email" maxlength="200" required>
+
+          <label for="message">Nachricht</label>
+          <textarea id="message" name="message" rows="6" minlength="10" maxlength="5000" required></textarea>
+
+          <!-- Left empty by people; bots that fill in every field are recognised by it. -->
+          <div class="hp" aria-hidden="true">
+            <label for="website">Bitte leer lassen</label>
+            <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+          </div>
+
+          <p class="form-note">Ihre Angaben werden nur zur Beantwortung Ihrer Anfrage per E-Mail an uns übermittelt. Mehr dazu in der <a href="/datenschutz/#kontaktformular">Datenschutzerklärung</a>.</p>
+          <button class="button" type="submit">Nachricht senden</button>
+        </form>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
     <div class="wrap footer-row">
-      <span>© Steuten IT Solutions</span>
+      <span>© 2026 Steuten IT Solutions</span>
       <nav aria-label="Rechtliches">
         <a href="/impressum/">Impressum</a>
         <a href="/datenschutz/">Datenschutz</a>

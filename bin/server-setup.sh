@@ -1446,7 +1446,8 @@ php_crypt() {
 
 # Company website on WEB_HOST (www) and WEB_APEX: static files from $APP/website (website/ in
 # the repository, deployed with every merge). No PHP, no .htaccess, a CSP that allows only files
-# from this host. The apex redirects to www. Access logs go to /var/log/website and are deleted
+# from this host. Only the contact form's POST goes to the Node cockpit (needs step "node"
+# and the cutover; until then the form shows its error page). The apex redirects to www. Access logs go to /var/log/website and are deleted
 # after at most 7 days (the privacy notice on the site says so). Without a certificate the site
 # answers on port 80 only; once both names point to this server, the step gets one from Let's
 # Encrypt (renewed by certbot's timer) and switches to HTTPS. Run again after the DNS change.
@@ -1467,7 +1468,23 @@ website_site() {
         Require all denied
     </FilesMatch>
     ErrorDocument 404 /404.html
-    Header always set Content-Security-Policy "default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    # The contact form is the only dynamic part: POST /kontakt/senden goes to the Node cockpit
+    # (app/server/routes/_website), which mails it to info@ and redirects to a static page.
+    # Other methods are refused, so nothing else of the cockpit is reachable through www.
+    ProxyRequests Off
+    ProxyPreserveHost On
+    ProxyTimeout 30
+    <Location "/kontakt/senden">
+        <LimitExcept POST>
+            Require all denied
+        </LimitExcept>
+        LimitRequestBody 32768
+        ProxyPass "http://127.0.0.1:$APP_PORT/_website/kontakt"
+    </Location>
+    # Node not running: the form's error page instead of Apache's.
+    ErrorDocument 502 /kontakt/fehler/index.html
+    ErrorDocument 503 /kontakt/fehler/index.html
+    Header always set Content-Security-Policy "default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     Header always set X-Content-Type-Options "nosniff"
     Header always set Referrer-Policy "no-referrer"
     Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
@@ -1560,7 +1577,7 @@ website() {
     endscript
 }
 EOF
-    a2enmod -q headers rewrite ssl > /dev/null
+    a2enmod -q headers rewrite ssl proxy proxy_http > /dev/null
 
     local tls="no"
     [ -f "/etc/letsencrypt/live/$WEB_HOST/fullchain.pem" ] && tls="yes"

@@ -114,19 +114,27 @@ the new Nuxt cockpit; see `app/README.md`, "Deployment" and "Cutover checklist".
 ## Company website
 
 `website/` is the company website for `www.steuten-it-solutions.de` (the apex redirects to www):
-plain HTML and one stylesheet, no scripts, no cookies, nothing loaded from other hosts. Pages are
+plain HTML and one stylesheet, no scripts, no cookies, nothing loaded from other hosts, plus a
+contact form (see below). Pages are
 folders with an `index.html` (`/impressum/`, `/datenschutz/`); `404.html` is the error page.
 The brand colours are the two variables at the top of `website/assets/site.css`.
 
 - **Check:** `bin/check-website.sh` (CI job `website`) fails on open placeholders
-  (`{{OFFEN: …}}`), inline scripts or styles, resources from other hosts and broken internal
-  links, so an unfinished page cannot be deployed.
+  (`{{OFFEN: …}}`), inline scripts or styles, resources loaded from other hosts (links to
+  other sites are fine) and broken internal links, so an unfinished page cannot be deployed.
 - **Deployment:** part of every build (`/srv/cockpit/app/website`).
 - **Server:** `cockpit-setup website` writes the Apache site `cockpit-website` (no PHP, strict
   CSP, HSTS) and logs to `/var/log/website/`, deleted after at most 7 days, as the privacy
   notice states. Until both `www.` and the apex point to the server (A and, if present, AAAA)
   it serves HTTP only; after the DNS change run it again and it gets a Let's Encrypt
   certificate and switches to HTTPS.
+- **Contact form:** the only dynamic part. Apache forwards `POST /kontakt/senden` (nothing else)
+  to the Node cockpit, `app/server/routes/_website/kontakt.post.ts`, which answers only for the
+  www host name, mails the message from `noreply@` to `info@` through sendmail (Reply-To: the
+  visitor) and redirects to `/kontakt/danke/` or `/kontakt/fehler/`. Spam protection without
+  third parties: a honeypot field, a limit on links, 5 messages per IP and 30 in total per hour
+  (in memory only). Settings `NUXT_WEBSITE_HOST`, `NUXT_WEBSITE_CONTACT_TO`,
+  `NUXT_WEBSITE_CONTACT_FROM` (defaults in `app/nuxt.config.ts`).
 - **Legal texts:** the Impressum (§ 5 DDG) and the privacy notice describe the real setup. When
   the site gets a contact form, analytics, external fonts or embedded media, update
   `website/datenschutz/index.html` in the same pull request.

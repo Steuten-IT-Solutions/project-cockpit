@@ -10,8 +10,10 @@ export default defineEventHandler(async (event) => {
   // Static build files need no session. /__nuxt_error does: Nuxt renders the error page
   // through it with the visitor's cookies, and the page must still know who is logged in.
   // The receiver of the status subdomain (server/routes/_receiver) has no sessions: the
-  // company apps sign their reports instead.
-  if (path.startsWith('/_nuxt/') || path === '/favicon.ico' || path === '/_receiver' || path.startsWith('/_receiver/')) {
+  // company apps sign their reports instead. Neither has the contact form of the company
+  // website (server/routes/_website): it is a public form on another host name.
+  if (path.startsWith('/_nuxt/') || path === '/favicon.ico' || path === '/_receiver' || path.startsWith('/_receiver/')
+    || path.startsWith('/_website/')) {
     return
   }
 

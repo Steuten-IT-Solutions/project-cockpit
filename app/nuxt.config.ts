@@ -52,6 +52,13 @@ export default defineNuxtConfig({
     // Host name of the status subdomain (e.g. status.steuten-it-solutions.de). When set, the
     // receiver (server/routes/_receiver) answers only requests for that host.
     receiverHost: '',
+    // The contact form of the company website (server/routes/_website). It answers only for
+    // this host name; the message goes from contactFrom to contactTo through sendmail.
+    website: {
+      host: 'www.steuten-it-solutions.de',
+      contactTo: 'info@steuten-it-solutions.de',
+      contactFrom: 'Webseite Steuten IT Solutions <noreply@steuten-it-solutions.de>',
+    },
   },
 
   // Close to the PHP cockpit's policy (src/Security/Headers.php), with two

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks the static company website in website/ before it is deployed (CI, job "website"):
 #   - no open placeholder ("{{OFFEN: ...}}") is left, so an unfinished text never goes live
-#   - no inline script or style and no file from another host: the site's CSP forbids them
+#   - no inline script or style and nothing loaded from another host: the site's CSP forbids them
 #   - every internal link and asset points to a file that exists
 set -euo pipefail
 cd "$(dirname "$0")/../website"
@@ -14,8 +14,9 @@ fi
 if grep -rniE '<script|<style|[[:space:]]style=|[[:space:]]on[a-z]+=' --include='*.html' . ; then
     err "inline script or style found (see above)"
 fi
-if grep -rnoE '(src|href)="(https?:)?//[^"]*"' --include='*.html' . | grep -v 'mailto:' ; then
-    err "resource or link to another host found (see above); only files from this host are allowed"
+# Links to other sites are fine (the visitor leaves the page); loading anything from them is not.
+if grep -rnoE '(src|srcset)="(https?:)?//[^"]*"|<link[^>]*href="(https?:)?//[^"]*"' --include='*.html' . ; then
+    err "resource from another host found (see above); only files from this host may be loaded"
 fi
 
 # Internal links: every src, srcset or href="/..." must name an existing file ("/x/" means x/index.html).
