@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { day, euro, INCOMING_CATEGORIES, priceText, type ShareForm, sharesBody } from '#shared/lib/erp'
 import type { Choice, IncomingInvoice, IncomingMailFile, Supplier } from '#shared/types/erp'
-import { emptyFilter, type IncomingFilter, isFiltered, matchesIncoming } from '#shared/lib/incomingFilter'
+import { emptyFilter, FILTER_CHOICES, type IncomingFilter, isFiltered, matchesIncoming } from '#shared/lib/incomingFilter'
 
 // Incoming invoices: upload, attachments from the mailbox to enter, open ones to pay, all received.
 useHead({ title: 'Eingangsrechnungen · Cockpit' })
@@ -192,8 +192,10 @@ const signed = (i: IncomingInvoice) => i.kind === 'credit' ? -i.grossCents : i.g
 const refundSum = computed(() => (data.value?.invoices ?? []).filter(i => i.status === 'open' && i.kind === 'credit').reduce((s, i) => s + i.grossCents, 0))
 
 // Search and filters (shared/lib/incomingFilter.ts); status and kind as buttons, the rest below.
-const search = reactive<IncomingFilter>(emptyFilter())
-const showFilters = ref(false)
+// Kept in the address, so going back from an invoice shows the list as it was.
+const search = useListState<IncomingFilter>(emptyFilter(), FILTER_CHOICES)
+const showFilters = ref(search.supplierId !== '' || search.category !== '' || search.projectId !== '' || search.from !== '' || search.to !== '')
+const { last, rowId, open: remember } = useLastOpened('incoming')
 const list = computed(() => (data.value?.invoices ?? []).filter(i => matchesIncoming(i, search)))
 function resetFilters() {
   Object.assign(search, { ...emptyFilter(), status: search.status, kind: search.kind })
@@ -334,8 +336,11 @@ v-for="f in [['all', 'Alle Arten'], ['invoice', 'Rechnungen'], ['credit', 'Gutsc
           {{ isFiltered(search) ? 'Keine Treffer.' : 'Keine Rechnungen.' }}
         </p>
         <ul v-else class="divide-y divide-default">
-          <li v-for="i in list" :key="i.id">
-            <NuxtLink :to="`/erp/incoming-invoice?id=${i.id}`" class="flex flex-wrap items-center justify-between gap-2 py-2 hover:bg-elevated/50">
+          <li v-for="i in list" :id="rowId(i.id)" :key="i.id">
+            <NuxtLink
+              :to="`/erp/incoming-invoice?id=${i.id}`" class="flex flex-wrap items-center justify-between gap-2 py-2 hover:bg-elevated/50"
+              :class="last === i.id ? 'bg-primary/10 ring-1 ring-primary/40 rounded-md px-2 -mx-2' : ''" @click="remember(i.id)"
+            >
               <div class="text-sm">
                 <strong>{{ i.supplierName }}</strong> <span class="text-muted">{{ i.number }}</span>
                 <p class="text-xs text-muted">
