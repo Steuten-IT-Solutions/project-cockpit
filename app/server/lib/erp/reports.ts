@@ -1,5 +1,5 @@
 import type { Pool } from 'mysql2/promise'
-import { csvAmount, csvRow, day, INCOMING_CATEGORIES, percentText, rateText, splitCents } from '#shared/lib/erp'
+import { csvAmount, csvRow, day, INCOMING_CATEGORIES, percentText, splitCents } from '#shared/lib/erp'
 import type { InvoiceRepository } from './invoices'
 import { num, rows } from './sql'
 import { zip, type ZipEntry } from './zip'
@@ -70,9 +70,9 @@ export async function exportArchive(pool: Pool, invoices: InvoiceRepository, fro
   }
   entries.push({
     name: 'eingangsrechnungen.csv', date,
-    content: csv(['Nr.', 'Lieferant', 'USt-IdNr.', 'Rechnungsnummer', 'Rechnungsdatum', 'Fällig', 'Netto', 'USt', 'Brutto', 'Währung der Rechnung', 'Brutto in Währung', 'Kurs (je 1 EUR)', 'Kategorie', 'Projekt', 'Status', 'Bezahlt am', 'Verworfen weil', 'E-Rechnung', 'Datei', 'SHA-256'],
+    content: csv(['Nr.', 'Lieferant', 'USt-IdNr.', 'Rechnungsnummer', 'Rechnungsdatum', 'Fällig', 'Netto', 'USt', 'Brutto', 'Währung der Rechnung', 'Brutto in Währung', 'Kurs (Währung je 1 EUR)', 'Kategorie', 'Projekt', 'Status', 'Bezahlt am', 'Verworfen weil', 'E-Rechnung', 'Datei', 'SHA-256'],
       incoming.map(i => [i.id, i.supplier, i.vatId, i.number, day(i.issueDate), i.dueDate ? day(i.dueDate) : null, csvAmount(num(i.net)), csvAmount(num(i.tax)), csvAmount(num(i.gross)), i.currency,
-        i.currency === 'EUR' ? null : csvAmount(num(i.originalNet) + num(i.originalTax)), i.rate === null ? null : rateText(Number(i.rate)),
+        i.currency === 'EUR' ? null : csvAmount(num(i.originalNet) + num(i.originalTax)), i.rate === null ? null : String(Number(i.rate)).replace('.', ','),
         INCOMING_CATEGORIES[i.category] ?? i.category, projectNames.get(i.id)?.join(', ') ?? null, { open: 'offen', paid: 'bezahlt', discarded: 'verworfen' }[i.status] ?? i.status, i.paidOn ? day(i.paidOn) : null,
         i.reason, i.format === 'other' ? 'nein' : 'ja', incomingNames.get(i.id) ?? '', i.sha])),
   })

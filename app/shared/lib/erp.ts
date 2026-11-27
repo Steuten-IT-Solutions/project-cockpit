@@ -125,22 +125,15 @@ export function splitCents(totalCents: number, sharesBp: number[]): number[] {
 /** Currencies of incoming invoices; amounts in another one are converted to euros. */
 export const CURRENCIES: Record<string, string> = { EUR: 'Euro (€)', USD: 'US-Dollar ($)', GBP: 'Britisches Pfund (£)', CHF: 'Schweizer Franken (CHF)' }
 
-/** An exchange rate as typed ("1,0989" or "1.0989"): units of the currency per 1 euro; null if invalid. */
-export function parseRate(input: string): number | null {
-  const m = /^(\d{1,6})(?:[.,](\d{1,6}))?$/.exec(input.trim())
-  if (m === null) return null
-  const rate = Number(`${m[1]}.${m[2] ?? '0'}`)
-  return rate > 0 ? rate : null
-}
-
-/** "1,0989" for 1.0989. */
-export function rateText(rate: number): string {
-  return String(Number(rate.toFixed(6))).replace('.', ',')
-}
-
-/** An amount in another currency in euro cents at `rate` units per euro, rounded to the cent. */
-export function toEuroCents(cents: number, rate: number): number {
-  return Math.round(cents / rate)
+/**
+ * The euro amounts of an invoice in another currency: the euro total (e.g. as debited
+ * from the bank account) is split into net and tax in the proportion of the invoice's own
+ * net and tax, so that both add up to the total exactly.
+ */
+export function euroParts(euroGrossCents: number, originalNetCents: number, originalTaxCents: number): { netCents: number, taxCents: number } {
+  const total = originalNetCents + originalTaxCents
+  const netCents = total === 0 ? euroGrossCents : Math.round(euroGrossCents * originalNetCents / total)
+  return { netCents, taxCents: euroGrossCents - netCents }
 }
 
 /** One row of the project split in a form: a project id (or "none") and a share in percent. */

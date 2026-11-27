@@ -409,19 +409,18 @@ describe('ERP', () => {
     expect(of(after, 'app')).toBe(of(before, 'app') - 6001)
   })
 
-  it('converts an incoming invoice in US dollars to euros', async () => {
+  it('records an incoming invoice in US dollars with the euros paid', async () => {
     const form = new FormData()
     form.append('file', new Blob([Buffer.from('%PDF-1.4\n% USD\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')], { type: 'application/pdf' }), 'usd.pdf')
-    for (const [k, v] of Object.entries({ category: 'software', supplierName: 'US Inc.', number: 'INV-9', issueDate: '2026-11-03', net: '100,00', tax: '0', currency: 'USD', rate: '1,25' })) form.append(k, v)
+    for (const [k, v] of Object.entries({ category: 'software', supplierName: 'US Inc.', number: 'INV-9', issueDate: '2026-11-03', net: '100,00', tax: '0', currency: 'USD', euroGross: '80,00' })) form.append(k, v)
     const created = await upload('/api/erp/incoming', form)
     expect(created.status).toBe(200)
     const id = created.json.id as number
     const { invoice } = await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)
     expect(invoice).toMatchObject({ netCents: 8000, grossCents: 8000, currency: 'USD', originalNetCents: 10000, originalTaxCents: 0, exchangeRate: 1.25 })
     // Back to euros: the originals go.
-    const base = { number: 'INV-9', issueDate: '2026-11-03', net: '81,00', tax: '0', category: 'software', iban: '', note: '', currency: 'EUR', rate: '' }
+    const base = { number: 'INV-9', issueDate: '2026-11-03', net: '81,00', tax: '0', category: 'software', iban: '', note: '', currency: 'EUR', euroGross: '' }
     expect((await send('PUT', `/api/erp/incoming/${id}`, base)).status).toBe(200)
     expect((await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)).invoice).toMatchObject({ netCents: 8100, currency: 'EUR', exchangeRate: null })
-    expect((await send('GET', '/api/erp/exchange-rate?currency=EUR&date=2026-11-03')).status).toBe(422)
   })
 })

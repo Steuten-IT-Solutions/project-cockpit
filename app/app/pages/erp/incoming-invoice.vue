@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { day, euro, ibanText, INCOMING_CATEGORIES, priceText, rateText, type ShareForm, shareForms, sharesBody, splitCents, UNITS } from '#shared/lib/erp'
+import { day, euro, ibanText, INCOMING_CATEGORIES, priceText, type ShareForm, shareForms, sharesBody, splitCents, UNITS } from '#shared/lib/erp'
 import type { Choice, IncomingInvoice, Supplier } from '#shared/types/erp'
 
 // One incoming invoice: what the e-invoice says, the stored file, payment and corrections.
@@ -20,7 +20,7 @@ if (error.value?.statusCode === 404) {
 useHead({ title: computed(() => `${data.value?.invoice.supplierName ?? 'Eingangsrechnung'} · Cockpit`) })
 const { busy, run } = useAction()
 
-const form = reactive({ number: '', issueDate: '', dueDate: '', net: '', tax: '', category: 'other', iban: '', note: '', currency: 'EUR', rate: '' })
+const form = reactive({ number: '', issueDate: '', dueDate: '', net: '', tax: '', category: 'other', iban: '', note: '', currency: 'EUR', euroGross: '' })
 const sign = computed(() => form.currency === 'EUR' ? '€' : form.currency)
 const shares = ref<ShareForm[]>([])
 function fill() {
@@ -29,7 +29,7 @@ function fill() {
   Object.assign(form, {
     // An invoice in another currency is edited in its own amounts (converted on saving).
     number: i.number, issueDate: i.issueDate, dueDate: i.dueDate ?? '', net: priceText(i.originalNetCents ?? i.netCents), tax: priceText(i.originalTaxCents ?? i.taxCents),
-    category: i.category, iban: i.iban ?? '', note: i.note ?? '', currency: i.currency, rate: i.exchangeRate !== null ? rateText(i.exchangeRate) : '',
+    category: i.category, iban: i.iban ?? '', note: i.note ?? '', currency: i.currency, euroGross: i.currency === 'EUR' ? '' : priceText(i.grossCents),
   })
   shares.value = shareForms(i.projects)
 }
@@ -154,7 +154,7 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
             </UFormField>
           </div>
           <UFormField v-if="data.invoice.format === 'other' || data.invoice.currency !== 'EUR'" label="Währung">
-            <ErpCurrency v-model:currency="form.currency" v-model:rate="form.rate" :issue-date="form.issueDate" :net="form.net" :tax="form.tax" :disabled="data.invoice.status === 'discarded'" />
+            <ErpCurrency v-model:currency="form.currency" v-model:euro-gross="form.euroGross" :net="form.net" :tax="form.tax" :disabled="data.invoice.status === 'discarded'" />
           </UFormField>
           <UFormField label="Projekt">
             <ErpProjectShares v-model="shares" :projects="data.projects" :disabled="data.invoice.status === 'discarded'" />
@@ -167,8 +167,8 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
           </UFormField>
           <p class="text-sm">
             Brutto <strong>{{ euro(data.invoice.grossCents) }}</strong>
-            <span v-if="data.invoice.currency !== 'EUR' && data.invoice.exchangeRate !== null" class="text-muted">
-              ({{ priceText((data.invoice.originalNetCents ?? 0) + (data.invoice.originalTaxCents ?? 0)) }} {{ data.invoice.currency }} zu 1 € = {{ rateText(data.invoice.exchangeRate) }} {{ data.invoice.currency }})
+            <span v-if="data.invoice.currency !== 'EUR'" class="text-muted">
+              (Rechnung über {{ priceText((data.invoice.originalNetCents ?? 0) + (data.invoice.originalTaxCents ?? 0)) }} {{ data.invoice.currency }})
             </span>
           </p>
           <UButton v-if="data.invoice.status !== 'discarded'" type="submit" :loading="busy === 'save'">
