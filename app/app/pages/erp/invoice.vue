@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { day, euro, INVOICE_STATES, type LineForm, lineToForm, quantity, REMINDER_LEVELS, UNITS } from '#shared/lib/erp'
+import { day, euro, INVOICE_STATES, type LineForm, lineToForm, openAmount, percentText, quantity, REMINDER_LEVELS, UNITS } from '#shared/lib/erp'
 import type { CatalogItem, InvoiceDetail } from '#shared/types/erp'
 
 // One invoice. A draft is edited here (customer, dates, positions) and finalized;
@@ -120,6 +120,27 @@ async function send() {
 
 const confirmCancel = ref(false)
 const cancelReason = ref('')
+// Rechnungskorrektur: the invoice's positions as a starting point; the user removes what
+// stays and lowers quantities or prices to the amount to credit.
+const correcting = ref(false)
+const correctionLines = ref<LineForm[]>([])
+const correctionReason = ref('')
+function startCorrection() {
+  correctionLines.value = (invoice.value?.lines ?? []).map(lineToForm)
+  correctionReason.value = ''
+  correcting.value = true
+}
+async function correct() {
+  const result = await run('correct', () => cockpitPost<{ id: number, message: string }>(`/api/erp/invoices/${id.value}/correct`,
+    { lines: correctionLines.value, reason: correctionReason.value }))
+  if (result !== null) {
+    correcting.value = false
+    await navigateTo(`/erp/invoice?id=${result.id}`)
+  }
+}
+const title = computed(() => invoice.value?.type !== '381' ? 'Rechnung' : invoice.value.correction ? 'Rechnungskorrektur' : 'Stornorechnung')
+const open = computed(() => (invoice.value === null ? 0 : openAmount(invoice.value)))
+
 async function cancel() {
   const result = await run('cancel', () => cockpitPost<{ id: number, message: string }>(`/api/erp/invoices/${id.value}/cancel`, { reason: cancelReason.value }))
   confirmCancel.value = false
@@ -157,7 +178,7 @@ async function sendReminder() {
 
 const EVENTS: Record<string, string> = {
   'created': 'Angelegt', 'finalized': 'Festgeschrieben', 'sent': 'Gesendet an', 'payment': 'Zahlung', 'payment-deleted': 'Zahlung gelöscht',
-  'reminded': 'Gemahnt', 'cancelled': 'Storniert',
+  'reminded': 'Gemahnt', 'cancelled': 'Storniert', 'corrected': 'Rechnungskorrektur',
 }
 const state = computed(() => INVOICE_STATES[invoice.value?.state ?? 'draft']!)
 </script>
@@ -250,7 +271,7 @@ v-if="invoice && invoice.timeEntryIds.length > 0" color="info" variant="subtle" 
     <template v-else>
       <div class="flex flex-wrap items-center gap-3">
         <h1 class="text-2xl font-semibold text-highlighted">
-          {{ invoice.type === '381' ? 'Stornorechnung' : 'Rechnung' }} {{ invoice.number }}
+          {{ title }} {{ invoice.number }}
         </h1>
         <UBadge :color="state.tone" variant="subtle" :label="state.label" />
         <UBadge v-if="invoice.reminderLevel > 0" color="warning" variant="subtle" :label="REMINDER_LEVELS[invoice.reminderLevel]" />
@@ -284,9 +305,24 @@ v-if="invoice && invoice.timeEntryIds.length > 0" color="info" variant="subtle" 
             </div>
             <div v-if="invoice.precedingNumber">
               <dt class="text-muted">
-                Storniert
+                {{ invoice.correction ? 'Korrektur zu' : 'Storniert' }}
               </dt>
-              <dd>{{ invoice.precedingNumber }}</dd>
+              <dd>
+                <NuxtLink v-if="invoice.related[0]" :to="`/erp/invoice?id=${invoice.related[0].id}`" class="hover:underline">
+                  {{ invoice.precedingNumber }}
+                </NuxtLink>
+                <span v-else>{{ invoice.precedingNumber }}</span>
+              </dd>
+            </div>
+            <div v-for="r in invoice.type === '380' ? invoice.related.filter(r => r.correction) : []" :key="r.id">
+              <dt class="text-muted">
+                Rechnungskorrektur
+              </dt>
+              <dd>
+                <NuxtLink :to="`/erp/invoice?id=${r.id}`" class="hover:underline">
+                  {{ r.number }}
+                </NuxtLink> · {{ euro(-r.grossCents) }}
+              </dd>
             </div>
             <div v-if="invoice.cancelledBy">
               <dt class="text-muted">
@@ -303,7 +339,7 @@ v-if="invoice && invoice.timeEntryIds.length > 0" color="info" variant="subtle" 
                   {{ l.description }}
                 </p>
                 <p class="text-xs text-muted">
-                  {{ quantity(l.quantityMilli) }} {{ UNITS[l.unit] }} × {{ euro(l.unitPriceCents) }}<span v-if="!data.smallBusiness"> · {{ l.vatRate }} %</span>
+                  {{ quantity(l.quantityMilli) }} {{ UNITS[l.unit] }} × {{ euro(l.unitPriceCents) }}<span v-if="!data.smallBusiness"> · {{ l.vatRate }} %</span><span v-if="l.discountBp > 0"> · {{ percentText(l.discountBp) }} % Rabatt</span>
                 </p>
               </div>
             </li>
@@ -374,7 +410,10 @@ v-if="invoice && invoice.timeEntryIds.length > 0" color="info" variant="subtle" 
             </h2>
           </template>
           <p class="text-sm">
-            Bezahlt {{ euro(invoice.paidCents) }} von {{ euro(invoice.grossCents) }}<span v-if="invoice.paidCents < invoice.grossCents">, offen <strong>{{ euro(invoice.grossCents - invoice.paidCents) }}</strong></span>.
+            Bezahlt {{ euro(invoice.paidCents) }} von {{ euro(invoice.grossCents) }}<span v-if="invoice.creditedCents > 0">, gutgeschrieben {{ euro(invoice.creditedCents) }}</span><span v-if="open > 0">, offen <strong>{{ euro(open) }}</strong></span>.
+            <span v-if="invoice.paidCents + invoice.creditedCents > invoice.grossCents" class="text-warning">
+              Der Kunde hat {{ euro(invoice.paidCents + invoice.creditedCents - invoice.grossCents) }} zu viel bezahlt; bitte erstatte den Betrag.
+            </span>
           </p>
           <ul v-if="invoice.payments.length > 0" class="mt-2 divide-y divide-default text-sm">
             <li v-for="p in invoice.payments" :key="p.id" class="flex items-center justify-between gap-2 py-1">
@@ -382,7 +421,7 @@ v-if="invoice && invoice.timeEntryIds.length > 0" color="info" variant="subtle" 
               <UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-trash-2" :aria-label="`Zahlung vom ${day(p.paidOn)} löschen`" :loading="busy === `payment-${p.id}`" @click="deletePayment(p.id)" />
             </li>
           </ul>
-          <form v-if="invoice.paidCents < invoice.grossCents" class="mt-3 grid grid-cols-2 gap-2" @submit.prevent="addPayment">
+          <form v-if="open > 0" class="mt-3 grid grid-cols-2 gap-2" @submit.prevent="addPayment">
             <UFormField label="Eingang am">
               <UInput v-model="payment.paidOn" type="date" class="w-full" />
             </UFormField>
@@ -434,7 +473,35 @@ v-if="invoice && invoice.timeEntryIds.length > 0" color="info" variant="subtle" 
         </UCard>
       </div>
 
-      <UCard v-if="invoice.type === '380' && invoice.cancelledBy === null">
+      <UCard v-if="invoice.type === '380' && invoice.cancelledBy === null && invoice.creditedCents < invoice.grossCents">
+        <template #header>
+          <h2 class="font-semibold text-highlighted">
+            Rechnungskorrektur
+          </h2>
+        </template>
+        <p class="text-sm text-muted">
+          Schreibt einen Teil der Rechnung gut, z. B. eine Position, die nicht geleistet wurde, oder einen nachträglichen Preisnachlass. Entferne die Positionen, die bleiben, und setze Menge oder Preis auf das, was gutgeschrieben wird. Die Rechnung bleibt gültig, ihr offener Betrag sinkt.
+        </p>
+        <UButton v-if="!correcting" class="mt-3" color="neutral" variant="outline" icon="i-lucide-undo-2" @click="startCorrection">
+          Rechnungskorrektur …
+        </UButton>
+        <form v-else class="mt-3 space-y-3" @submit.prevent="correct">
+          <ErpLines v-model="correctionLines" :catalog="[]" :small-business="data.smallBusiness" />
+          <UFormField label="Grund" hint="optional, steht auf der Rechnungskorrektur">
+            <UInput v-model="correctionReason" :maxlength="300" class="w-full" />
+          </UFormField>
+          <div class="flex gap-2">
+            <UButton type="submit" :loading="busy === 'correct'">
+              Rechnungskorrektur erstellen
+            </UButton>
+            <UButton color="neutral" variant="ghost" @click="correcting = false">
+              Abbrechen
+            </UButton>
+          </div>
+        </form>
+      </UCard>
+
+      <UCard v-if="invoice.type === '380' && invoice.cancelledBy === null && invoice.creditedCents === 0">
         <template #header>
           <h2 class="font-semibold text-highlighted">
             Stornieren

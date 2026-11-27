@@ -21,7 +21,7 @@ export function entryLine(e: Pick<TimeEntry, 'workDate' | 'description' | 'quant
   const [first = '', ...rest] = e.description.split('\n')
   const name = [...first].length > 150 ? `${[...first].slice(0, 149).join('')}…` : first
   const description = [`Leistung am ${day(e.workDate)}`, ...rest].join('\n')
-  return { name, description: [...description].slice(0, 500).join(''), quantityMilli: e.quantityMilli, unit: e.unit, unitPriceCents: e.unitPriceCents, vatRate: e.vatRate }
+  return { name, description: [...description].slice(0, 500).join(''), quantityMilli: e.quantityMilli, unit: e.unit, unitPriceCents: e.unitPriceCents, vatRate: e.vatRate, discountBp: 0 }
 }
 
 export class TimeRepository {

@@ -2,7 +2,7 @@ import { InvoiceRepository } from '../../lib/erp/invoices'
 import { IncomingRepository } from '../../lib/erp/incoming'
 import { SubscriptionRepository } from '../../lib/erp/subscriptions'
 import { TimeRepository } from '../../lib/erp/timeEntries'
-import { addDays } from '#shared/lib/erp'
+import { addDays, openAmount } from '#shared/lib/erp'
 
 // The ERP's start page: what needs attention.
 export default defineEventHandler(async (event) => {
@@ -20,12 +20,12 @@ export default defineEventHandler(async (event) => {
   return {
     hasSettings: settings !== null,
     drafts: invoices.filter(i => i.state === 'draft').length,
-    unpaid: { count: unpaid.length, cents: unpaid.reduce((s, i) => s + i.grossCents - i.paidCents, 0) },
-    overdue: { count: overdue.length, cents: overdue.reduce((s, i) => s + i.grossCents - i.paidCents, 0) },
+    unpaid: { count: unpaid.length, cents: unpaid.reduce((s, i) => s + openAmount(i), 0) },
+    overdue: { count: overdue.length, cents: overdue.reduce((s, i) => s + openAmount(i), 0) },
     incoming: { count: openIncoming.length, cents: openIncoming.reduce((s, i) => s + i.grossCents, 0), dueSoon: openIncoming.filter(i => i.dueDate !== null && i.dueDate <= addDays(today, 7)).length },
     subscriptions: subscriptions.filter(s => s.active).map(s => ({ id: s.id, name: s.name, customerName: s.customerName, nextDate: s.nextDate })).slice(0, 5),
     time: { count: openTime.length, hoursMilli: openTime.filter(t => t.unit === 'HUR').reduce((s, t) => s + t.quantityMilli, 0) },
-    overdueList: overdue.slice(0, 10).map(i => ({ id: i.id, number: i.number, customerName: i.customerName, dueDate: i.dueDate, openCents: i.grossCents - i.paidCents, reminderLevel: i.reminderLevel })),
+    overdueList: overdue.slice(0, 10).map(i => ({ id: i.id, number: i.number, customerName: i.customerName, dueDate: i.dueDate, openCents: openAmount(i), reminderLevel: i.reminderLevel })),
     today,
   }
 })

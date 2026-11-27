@@ -303,4 +303,35 @@ describe('ERP', () => {
     expect(report.totals).toMatchObject({ invoicedNet: 13500, received: 13500 })
     expect(existsSync(mails)).toBe(true)
   })
+
+  it('gives line discounts and credits part of an invoice', async () => {
+    // 4 h at 90 € with 12,5 % off: 360 € − 45 € = 315 €.
+    const draft = await send('POST', '/api/erp/invoices', { customerId, deliveryDate: '2026-11-25', lines: [{ ...LINE, quantity: '4', discount: '12,5' }] })
+    expect((await send('POST', '/api/erp/invoices', { customerId, deliveryDate: '2026-11-25', lines: [{ ...LINE, discount: '120' }] })).json.statusMessage).toContain('Rabatt')
+    const id = draft.json.id as number
+    await send('POST', `/api/erp/invoices/${id}/finalize`)
+    let { invoice } = await client.json<{ invoice: InvoiceDetail }>(`/api/erp/invoices/${id}`)
+    expect(invoice).toMatchObject({ grossCents: 31500, lines: [{ discountBp: 1250 }] })
+    const xml = await (await client.request(`/api/erp/invoices/${id}/xml`)).text()
+    expect(xml).toContain('<ram:CalculationPercent>12.50</ram:CalculationPercent>')
+    expect(xml).toContain('<ram:LineTotalAmount>315.00</ram:LineTotalAmount>')
+
+    // Credit one of the four hours (78,75 € after the discount), then try to credit too much.
+    const correction = await send('POST', `/api/erp/invoices/${id}/correct`, { lines: [{ ...LINE, quantity: '1', discount: '12,5' }], reason: 'eine Stunde zu viel' })
+    expect(correction.json.message).toMatch(/^Rechnungskorrektur R-/)
+    expect((await send('POST', `/api/erp/invoices/${id}/correct`, { lines: [{ ...LINE, quantity: '4' }] })).json.statusMessage).toContain('höher als')
+    expect((await send('POST', `/api/erp/invoices/${id}/cancel`, {})).json.statusMessage).toContain('Rechnungskorrektur')
+    ;({ invoice } = await client.json<{ invoice: InvoiceDetail }>(`/api/erp/invoices/${id}`))
+    expect(invoice).toMatchObject({ state: 'open', creditedCents: 7875, cancelledBy: null, related: [{ correction: true, grossCents: 7875 }] })
+    const credit = await client.json<{ invoice: InvoiceDetail }>(`/api/erp/invoices/${correction.json.id as number}`)
+    expect(credit.invoice).toMatchObject({ type: '381', state: 'correction', correction: true, precedingNumber: invoice.number })
+    const creditXml = await (await client.request(`/api/erp/invoices/${correction.json.id as number}/xml`)).text()
+    expect(creditXml).toContain('<ram:TypeCode>381</ram:TypeCode>')
+    expect(creditXml).toContain(`<ram:IssuerAssignedID>${invoice.number}</ram:IssuerAssignedID>`)
+    // Paying the rest settles the invoice.
+    await send('POST', `/api/erp/invoices/${id}/payments`, { paidOn: new Date().toISOString().slice(0, 10), amount: '236,25' })
+    ;({ invoice } = await client.json<{ invoice: InvoiceDetail }>(`/api/erp/invoices/${id}`))
+    expect(invoice.state).toBe('paid')
+    expect((await client.json<{ problems: string[] }>('/api/erp/invoices/verify')).problems).toEqual([])
+  })
 })

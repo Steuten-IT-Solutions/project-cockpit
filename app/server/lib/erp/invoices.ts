@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { Pool, PoolConnection } from 'mysql2/promise'
-import { addDays, documentNumber, invoiceState, type Line, SMALL_BUSINESS_NOTE, totals } from '#shared/lib/erp'
+import { addDays, documentNumber, euro, invoiceState, type Line, SMALL_BUSINESS_NOTE, totals } from '#shared/lib/erp'
 import type { CompanySettings, InvoiceDetail, InvoiceEvent, InvoiceSummary, Payment, Reminder } from '#shared/types/erp'
 import { EngineInputError, type InvoiceEngine, type PartyDocument, type RenderDocument } from './engine'
 import { MasterData } from './masterData'
@@ -10,7 +10,9 @@ import { exec, LINE_COLUMNS, num, one, rows, type Sql, transaction } from './sql
 // next number, freezes seller and buyer, renders the ZUGFeRD PDF and the XML once and
 // stores them; from then on the database refuses any change (triggers in 0013). The
 // stored files are what was issued, so a download always returns the same bytes.
-// Mistakes are corrected with a cancellation (Stornorechnung, type 381).
+// Mistakes are corrected with a cancellation (Stornorechnung, type 381) of the whole
+// invoice, or with a Rechnungskorrektur (also 381, partial = 1) that credits only some
+// positions or amounts: the invoice stays valid and its open amount shrinks by it.
 
 /** A message for the user (422), e.g. missing company data. */
 export class InvoiceError extends Error {}
@@ -33,18 +35,21 @@ const SUMMARY = `SELECT i.id, i.type, i.status, i.number, i.customer_id AS custo
   (SELECT COALESCE(SUM(p.amount_cents), 0) FROM invoice_payments p WHERE p.invoice_id = i.id) AS paidCents,
   (SELECT COALESCE(MAX(r.level), 0) FROM invoice_reminders r WHERE r.invoice_id = i.id) AS reminderLevel,
   (SELECT MAX(e.created_at) FROM invoice_events e WHERE e.invoice_id = i.id AND e.event = 'sent') AS sentAt,
-  pre.number AS precedingNumber,
-  (SELECT s.number FROM invoices s WHERE s.preceding_invoice_id = i.id AND s.type = '381' AND s.status = 'final' ORDER BY s.id LIMIT 1) AS cancelledBy
+  pre.number AS precedingNumber, i.partial AS correction,
+  (SELECT s.number FROM invoices s WHERE s.preceding_invoice_id = i.id AND s.type = '381' AND s.partial = 0 AND s.status = 'final' ORDER BY s.id LIMIT 1) AS cancelledBy,
+  (SELECT COALESCE(SUM(s.gross_cents), 0) FROM invoices s WHERE s.preceding_invoice_id = i.id AND s.type = '381' AND s.partial = 1 AND s.status = 'final') AS creditedCents
   FROM invoices i JOIN customers c ON c.id = i.customer_id LEFT JOIN invoices pre ON pre.id = i.preceding_invoice_id`
 
-type SummaryRow = Omit<InvoiceSummary, 'state'> & { paymentDays: number, note: string | null, hash: string | null, customerEmail: string | null }
+type SummaryRow = Omit<InvoiceSummary, 'state' | 'correction'> & { correction: number | boolean, paymentDays: number, note: string | null, hash: string | null, customerEmail: string | null }
 
-function summary(row: SummaryRow, today: string): SummaryRow & { state: InvoiceSummary['state'] } {
+function summary(row: SummaryRow, today: string): Omit<SummaryRow, 'correction'> & { correction: boolean, state: InvoiceSummary['state'] } {
   const paidCents = num(row.paidCents)
   const reminderLevel = num(row.reminderLevel)
+  const creditedCents = num(row.creditedCents)
+  const correction = Number(row.correction) === 1
   return {
-    ...row, paidCents, reminderLevel, netCents: num(row.netCents), taxCents: num(row.taxCents), grossCents: num(row.grossCents),
-    state: invoiceState({ ...row, paidCents, cancelled: row.cancelledBy !== null }, today),
+    ...row, paidCents, creditedCents, correction, reminderLevel, netCents: num(row.netCents), taxCents: num(row.taxCents), grossCents: num(row.grossCents),
+    state: invoiceState({ ...row, paidCents, creditedCents, correction, cancelled: row.cancelledBy !== null }, today),
   }
 }
 
@@ -66,6 +71,25 @@ export function finalizeProblem(lines: Line[], settings: CompanySettings | null,
   return null
 }
 
+/**
+ * Checks the positions of a Rechnungskorrektur against the invoice: only its VAT rates
+ * (the correction reduces the tax of exactly those rates, § 17 UStG), a positive amount,
+ * and together with earlier corrections at most the invoice's gross amount.
+ */
+export function correctionProblem(invoiceLines: Line[], lines: Line[], remainingGross: number, smallBusiness: boolean): string | null {
+  if (lines.length === 0) return 'Bitte wähle mindestens eine Position aus.'
+  if (smallBusiness && lines.some(l => l.vatRate !== 0)) return 'Als Kleinunternehmer darfst du keine Umsatzsteuer ausweisen (§ 19 UStG).'
+  const rates = new Set(invoiceLines.map(l => l.vatRate))
+  const foreign = lines.find(l => !rates.has(l.vatRate))
+  if (foreign !== undefined) return `„${foreign.name}“: Die Rechnung hat keine Position mit ${foreign.vatRate} % Umsatzsteuer.`
+  const gross = totals(lines).gross
+  if (gross <= 0) return 'Die Rechnungskorrektur muss einen Betrag größer als 0 haben.'
+  if (gross > remainingGross) {
+    return `Die Korrektur (${euro(gross)}) ist höher als der noch nicht gutgeschriebene Betrag der Rechnung (${euro(remainingGross)}).`
+  }
+  return null
+}
+
 export class InvoiceRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -77,17 +101,21 @@ export class InvoiceRepository {
   async find(id: number, today: string): Promise<InvoiceDetail | null> {
     const row = await one<SummaryRow>(this.pool, `${SUMMARY} WHERE i.id = ?`, [id])
     if (row === null) return null
-    const [lines, events, payments, reminders, entries] = await Promise.all([
+    const [lines, events, payments, reminders, entries, related] = await Promise.all([
       this.lines(id),
       rows<InvoiceEvent>(this.pool, 'SELECT event, detail, created_at AS createdAt FROM invoice_events WHERE invoice_id = ? ORDER BY id', [id]),
       rows<Payment>(this.pool, 'SELECT id, paid_on AS paidOn, amount_cents AS amountCents, note FROM invoice_payments WHERE invoice_id = ? ORDER BY paid_on, id', [id]),
       rows<Reminder>(this.pool, 'SELECT id, level, sent_on AS sentOn, new_due_date AS newDueDate, recipient FROM invoice_reminders WHERE invoice_id = ? ORDER BY level, id', [id]),
       rows<{ id: number }>(this.pool, 'SELECT id FROM time_entries WHERE invoice_id = ? ORDER BY work_date, id', [id]),
+      rows<{ id: number, number: string, issueDate: string, grossCents: number, correction: number }>(this.pool,
+        `SELECT id, number, issue_date AS issueDate, gross_cents AS grossCents, partial AS correction FROM invoices
+        WHERE status = 'final' AND (preceding_invoice_id = ? OR id = (SELECT preceding_invoice_id FROM invoices WHERE id = ?)) ORDER BY chain_no`, [id, id]),
     ])
     return {
       ...summary(row, today), lines, events, reminders,
       payments: payments.map(p => ({ ...p, amountCents: num(p.amountCents) })),
       timeEntryIds: entries.map(e => e.id),
+      related: related.map(r => ({ ...r, grossCents: num(r.grossCents), correction: Number(r.correction) === 1 })),
     }
   }
 
@@ -136,8 +164,8 @@ export class InvoiceRepository {
 
   private async writeLines(db: Sql, invoiceId: number, lines: Line[]): Promise<void> {
     for (const [i, l] of lines.entries()) {
-      await exec(db, `INSERT INTO invoice_lines (invoice_id, position, name, description, quantity_milli, unit, unit_price_cents, vat_rate)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [invoiceId, i + 1, l.name, l.description, l.quantityMilli, l.unit, l.unitPriceCents, l.vatRate])
+      await exec(db, `INSERT INTO invoice_lines (invoice_id, position, name, description, quantity_milli, unit, unit_price_cents, vat_rate, discount_bp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [invoiceId, i + 1, l.name, l.description, l.quantityMilli, l.unit, l.unitPriceCents, l.vatRate, l.discountBp])
     }
   }
 
@@ -161,10 +189,10 @@ export class InvoiceRepository {
 
   private document(mode: RenderDocument['mode'], number: string, issueDate: string, deliveryDate: string, dueDate: string, seller: Seller,
     buyer: PartyDocument, lines: Line[], tax: { smallBusiness: boolean, exemptionReason: string | null }, note: string | null,
-    logo: { data: Buffer, type: string } | null, type: '380' | '381' = '380', precedingNumber: string | null = null): RenderDocument {
+    logo: { data: Buffer, type: string } | null, type: '380' | '381' = '380', precedingNumber: string | null = null, correction = false): RenderDocument {
     const { iban, bic, bankName: _bank, ...party } = seller
     return {
-      mode, number, type, issueDate, deliveryDate, dueDate, seller: party, buyer, lines, iban, bic, note, precedingNumber,
+      mode, number, type, issueDate, deliveryDate, dueDate, seller: party, buyer, lines, iban, bic, note, precedingNumber, correction,
       smallBusiness: tax.smallBusiness,
       exemptionReason: tax.smallBusiness ? SMALL_BUSINESS_NOTE : tax.exemptionReason,
       logo: logo === null ? null : { data: logo.data.toString('base64'), type: logo.type },
@@ -190,7 +218,7 @@ export class InvoiceRepository {
 
   private async finalizeIn(db: PoolConnection, id: number, engine: InvoiceEngine, settings: CompanySettings | null,
     logo: { data: Buffer, type: string } | null, today: string, now: string,
-    cancellation: { precedingNumber: string, buyer: PartyDocument, smallBusiness: boolean, exemptionReason: string | null } | null): Promise<string> {
+    cancellation: { precedingNumber: string, buyer: PartyDocument, smallBusiness: boolean, exemptionReason: string | null, correction: boolean } | null): Promise<string> {
     const draft = await one<{ status: string, type: '380' | '381', customerId: number, deliveryDate: string, paymentDays: number, note: string | null }>(db,
       'SELECT status, type, customer_id AS customerId, delivery_date AS deliveryDate, payment_days AS paymentDays, note FROM invoices WHERE id = ? FOR UPDATE', [id])
     if (draft === null) throw new InvoiceError('Die Rechnung existiert nicht.')
@@ -221,7 +249,7 @@ export class InvoiceRepository {
     const dueDate = addDays(today, draft.paymentDays)
     const t = totals(lines)
     const document = this.document('invoice', number, today, draft.deliveryDate, dueDate, seller, buyer, lines,
-      { smallBusiness, exemptionReason }, draft.note, logo, draft.type, cancellation?.precedingNumber ?? null)
+      { smallBusiness, exemptionReason }, draft.note, logo, draft.type, cancellation?.precedingNumber ?? null, cancellation?.correction ?? false)
     const { pdf, xml } = await render(engine, document)
     if (xml === null) throw new Error('The engine returned no XML for an invoice.')
     const pdfSha = sha256(pdf)
@@ -242,26 +270,56 @@ export class InvoiceRepository {
 
   /** Cancels a finalized invoice with a Stornorechnung over all its lines; returns the new id and number. */
   async cancel(id: number, reason: string | null, engine: InvoiceEngine, master: MasterData, today: string, now: string): Promise<{ id: number, number: string }> {
+    const note = reason !== null && reason !== '' ? `Grund der Stornierung: ${reason}` : null
+    return this.credit(id, null, note, engine, master, today, now, (number) => `durch ${number}${reason ? `: ${reason}` : ''}`)
+  }
+
+  /**
+   * Credits part of a finalized invoice with a Rechnungskorrektur: the given positions
+   * (taken from the invoice, with smaller quantities or prices) as a document of type 381.
+   * Several corrections are possible, together at most the invoice's gross amount.
+   */
+  async correct(id: number, lines: Line[], reason: string | null, engine: InvoiceEngine, master: MasterData, today: string, now: string): Promise<{ id: number, number: string }> {
+    const note = reason !== null && reason !== '' ? `Grund der Korrektur: ${reason}` : null
+    return this.credit(id, lines, note, engine, master, today, now, (number) => `${number}${reason ? `: ${reason}` : ''}`)
+  }
+
+  /** A 381 to an invoice: all its lines (cancellation, lines null) or the given ones (correction). */
+  private async credit(id: number, partialLines: Line[] | null, note: string | null, engine: InvoiceEngine, master: MasterData, today: string, now: string,
+    detail: (number: string) => string): Promise<{ id: number, number: string }> {
     const [settings, logo] = await Promise.all([master.settings(), master.logo(), this.ensureSequences(today)])
     return transaction(this.pool, async (db) => {
+      // FOR UPDATE on the invoice serializes cancellations and corrections of it, so two
+      // clicks cannot cancel it twice or credit more than its amount.
       const original = await one<{ status: string, type: string, number: string, customerId: number, projectId: number | null, deliveryDate: string,
-        buyer: string, smallBusiness: number, exemptionReason: string | null }>(db,
+        buyer: string, smallBusiness: number, exemptionReason: string | null, grossCents: number }>(db,
       `SELECT status, type, number, customer_id AS customerId, project_id AS projectId, delivery_date AS deliveryDate, buyer,
-        small_business AS smallBusiness, exemption_reason AS exemptionReason FROM invoices WHERE id = ?`, [id])
+        small_business AS smallBusiness, exemption_reason AS exemptionReason, gross_cents AS grossCents FROM invoices WHERE id = ? FOR UPDATE`, [id])
       if (original === null) throw new InvoiceError('Die Rechnung existiert nicht.')
-      if (original.status !== 'final' || original.type !== '380') throw new InvoiceError('Nur festgeschriebene Rechnungen können storniert werden.')
-      // Locks the other cancellations of this invoice, so two clicks cannot cancel it twice.
-      const existing = await one<{ id: number }>(db, `SELECT id FROM invoices WHERE preceding_invoice_id = ? AND type = '381' FOR UPDATE`, [id])
-      if (existing !== null) throw new InvoiceError('Die Rechnung ist bereits storniert.')
-      const lines = await this.lines(id, db)
-      const note = reason !== null && reason !== '' ? `Grund der Stornierung: ${reason}` : null
+      const what = partialLines === null ? 'storniert' : 'korrigiert'
+      if (original.status !== 'final' || original.type !== '380') throw new InvoiceError(`Nur festgeschriebene Rechnungen können ${what} werden.`)
+      const earlier = await rows<{ partial: number, grossCents: number }>(db,
+        `SELECT partial, gross_cents AS grossCents FROM invoices WHERE preceding_invoice_id = ? AND type = '381'`, [id])
+      if (earlier.some(e => Number(e.partial) === 0)) throw new InvoiceError('Die Rechnung ist bereits storniert.')
+      const credited = earlier.reduce((sum, e) => sum + num(e.grossCents), 0)
+      const smallBusiness = original.smallBusiness === 1
+      let lines: Line[]
+      if (partialLines === null) {
+        if (credited > 0) throw new InvoiceError('Zu dieser Rechnung gibt es schon eine Rechnungskorrektur. Schreibe den Rest bitte mit einer weiteren Rechnungskorrektur gut.')
+        lines = await this.lines(id, db)
+      }
+      else {
+        lines = partialLines
+        const problem = correctionProblem(await this.lines(id, db), lines, num(original.grossCents) - credited, smallBusiness)
+        if (problem !== null) throw new InvoiceError(problem)
+      }
       const newId = await this.createDraft({ customerId: original.customerId, projectId: original.projectId, deliveryDate: original.deliveryDate, paymentDays: 0, note, lines }, now, db)
-      await exec(db, `UPDATE invoices SET type = '381', preceding_invoice_id = ? WHERE id = ?`, [id, newId])
+      await exec(db, `UPDATE invoices SET type = '381', preceding_invoice_id = ?, partial = ? WHERE id = ?`, [id, partialLines === null ? 0 : 1, newId])
       const number = await this.finalizeIn(db, newId, engine, settings, logo, today, now, {
         precedingNumber: original.number, buyer: JSON.parse(original.buyer) as PartyDocument,
-        smallBusiness: original.smallBusiness === 1, exemptionReason: original.exemptionReason,
+        smallBusiness, exemptionReason: original.exemptionReason, correction: partialLines !== null,
       })
-      await this.event(db, id, 'cancelled', `durch ${number}${reason ? `: ${reason}` : ''}`, now)
+      await this.event(db, id, partialLines === null ? 'cancelled' : 'corrected', detail(number), now)
       return { id: newId, number }
     })
   }

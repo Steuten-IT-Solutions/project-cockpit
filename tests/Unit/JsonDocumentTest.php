@@ -47,6 +47,21 @@ final class JsonDocumentTest extends TestCase
         self::assertSame(['Angebot', 'ENTWURF'], [$quoteDraft['title'] ?? null, $quoteDraft['watermark'] ?? null]);
     }
 
+    public function testBuildsDiscountsAndPartialCorrections(): void
+    {
+        $data = self::document();
+        $data['lines'][0]['discountBp'] = 1000;
+        self::assertSame(12150, JsonDocument::invoice($data)->grossTotal(), '10 % off 135.00 €.');
+
+        $correction = ['type' => '381', 'precedingNumber' => 'R-2026-0001', 'correction' => true, 'number' => 'R-2026-0002'] + $data;
+        $options = JsonDocument::options($correction, JsonDocument::invoice($correction));
+        self::assertSame('Rechnungskorrektur', $options['title'] ?? null);
+        self::assertSame('R-2026-0001', $options['meta']['Korrektur zu'] ?? null);
+        // Without the flag a 381 stays a cancellation with the standard heading.
+        $cancellation = ['correction' => false] + $correction;
+        self::assertArrayNotHasKey('title', JsonDocument::options($cancellation, JsonDocument::invoice($cancellation)));
+    }
+
     public function testRefusesInvalidInput(): void
     {
         $this->expectException(InvalidArgumentException::class);

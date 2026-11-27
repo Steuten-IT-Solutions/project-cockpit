@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { parseAmount } from '#shared/lib/costs'
-import { euro, type Line, lineFromForm, type LineForm, lineNet, parseQuantity, priceText, totals, UNITS, VAT_RATES } from '#shared/lib/erp'
+import { euro, type Line, lineFromForm, type LineForm, lineNet, parsePercent, parseQuantity, priceText, totals, UNITS, VAT_RATES } from '#shared/lib/erp'
 import type { CatalogItem } from '#shared/types/erp'
 
 // The positions of an invoice, quote, order or recurring invoice. The totals are
@@ -17,8 +17,8 @@ const pick = ref<number | undefined>(undefined)
 function add(item?: CatalogItem) {
   const vat = props.smallBusiness ? 0 : (item?.vatRate ?? 19)
   lines.value.push(item
-    ? { name: item.name, description: item.description ?? '', quantity: '1', unit: item.unit, price: priceText(item.unitPriceCents), vatRate: vat }
-    : { name: '', description: '', quantity: '1', unit: 'HUR', price: '', vatRate: vat })
+    ? { name: item.name, description: item.description ?? '', quantity: '1', unit: item.unit, price: priceText(item.unitPriceCents), vatRate: vat, discount: '' }
+    : { name: '', description: '', quantity: '1', unit: 'HUR', price: '', vatRate: vat, discount: '' })
 }
 
 watch(pick, (id) => {
@@ -39,7 +39,17 @@ function move(i: number, step: number) {
 function lineSum(line: LineForm): string {
   const q = parseQuantity(line.quantity)
   const p = parseAmount(line.price)
-  return q === null || p === null ? '–' : euro(lineNet({ quantityMilli: q, unitPriceCents: p }))
+  const d = parsePercent(line.discount ?? '')
+  return q === null || p === null || d === null ? '–' : euro(lineNet({ quantityMilli: q, unitPriceCents: p, discountBp: d }))
+}
+
+// One discount for the whole document is given as the same discount on every position:
+// the e-invoice then carries it per line, and every amount stays exactly as printed.
+const allDiscount = ref('')
+const allDiscountValid = computed(() => allDiscount.value.trim() !== '' && parsePercent(allDiscount.value) !== null)
+function discountAll() {
+  if (!allDiscountValid.value) return
+  for (const line of lines.value) line.discount = allDiscount.value.trim()
 }
 
 const sum = computed(() => totals(lines.value
@@ -64,7 +74,7 @@ const sum = computed(() => totals(lines.value
       <UFormField label="Beschreibung" hint="optional">
         <UTextarea v-model="line.description" :maxlength="500" :rows="2" autoresize class="w-full" />
       </UFormField>
-      <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div class="grid grid-cols-2 gap-2 sm:grid-cols-6">
         <UFormField label="Menge">
           <UInput v-model="line.quantity" inputmode="decimal" class="w-full" />
         </UFormField>
@@ -77,6 +87,9 @@ const sum = computed(() => totals(lines.value
         <UFormField label="USt.">
           <USelect v-model="line.vatRate" :items="vatItems" class="w-full" />
         </UFormField>
+        <UFormField label="Rabatt (%)">
+          <UInput v-model="line.discount" inputmode="decimal" placeholder="0" class="w-full" />
+        </UFormField>
         <div class="col-span-2 text-right text-sm sm:col-span-1 sm:pt-7">
           <span class="text-muted">Netto </span><strong>{{ lineSum(line) }}</strong>
         </div>
@@ -88,6 +101,12 @@ const sum = computed(() => totals(lines.value
         Position
       </UButton>
       <USelect v-if="catalogItems.length > 0" v-model="pick" :items="catalogItems" placeholder="Artikel übernehmen …" class="w-64" />
+      <div v-if="lines.length > 1" class="flex items-center gap-2">
+        <UInput v-model="allDiscount" inputmode="decimal" placeholder="Rabatt %" aria-label="Rabatt in Prozent für alle Positionen" class="w-28" />
+        <UButton color="neutral" variant="outline" :disabled="!allDiscountValid" @click="discountAll()">
+          Auf alle Positionen
+        </UButton>
+      </div>
     </div>
 
     <dl class="ml-auto max-w-xs space-y-1 text-sm">
