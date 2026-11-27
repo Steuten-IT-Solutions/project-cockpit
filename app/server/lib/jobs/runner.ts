@@ -72,6 +72,14 @@ export function runJobs(ctx: JobContext, trigger: string | null = null): Promise
   return withLock(ctx.pool, LOCK, () => execute(ctx, trigger))
 }
 
+/**
+ * Only the migrations, under the same lock as the jobs (server start). null if a job
+ * run holds the lock: that run migrates first anyway.
+ */
+export function migrateNow(ctx: Pick<JobContext, 'pool' | 'migrationsDir'>): Promise<string[] | null> {
+  return withLock(ctx.pool, LOCK, () => migrate(ctx.pool, ctx.migrationsDir))
+}
+
 const nowSeconds = () => Math.floor(Date.now() / 1000)
 
 async function execute(ctx: JobContext, trigger: string | null): Promise<JobResult> {
