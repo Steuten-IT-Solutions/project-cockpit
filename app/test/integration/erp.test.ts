@@ -334,4 +334,27 @@ describe('ERP', () => {
     expect(invoice.state).toBe('paid')
     expect((await client.json<{ problems: string[] }>('/api/erp/invoices/verify')).problems).toEqual([])
   })
+
+  it('suggests the fields of an invoice without e-invoice data, from its text or by OCR', async () => {
+    // A quote is a PDF with text but without e-invoice data, like many supplier invoices.
+    const quote = await send('POST', '/api/erp/sales', { kind: 'quote', customerId, lines: [{ ...LINE, quantity: '2' }] })
+    const pdf = Buffer.from(await (await client.request(`/api/erp/sales/${quote.json.id as number}/preview`)).arrayBuffer())
+    const suggest = async (data: Buffer, name: string, type: string) => {
+      const form = new FormData()
+      form.append('file', new Blob([data], { type }), name)
+      return (await upload('/api/erp/incoming/extract', form)).json as { einvoice: boolean, source: string | null, problem: string | null, fields: Record<string, unknown> | null }
+    }
+    const fromText = await suggest(pdf, 'rechnung.pdf', 'application/pdf')
+    expect(fromText).toMatchObject({ einvoice: false, source: 'pdf', problem: null, fields: { netCents: 18000, taxCents: 0, grossCents: 18000 } })
+
+    // The same page as a photo: read by Tesseract.
+    const scan = join(dir, 'scan')
+    execFileSync('pdftoppm', ['-r', '200', '-gray', '-png', '-f', '1', '-l', '1', '-', scan], { input: pdf })
+    const fromPhoto = await suggest(readFileSync(`${scan}-1.png`), 'foto.png', 'image/png')
+    expect(fromPhoto).toMatchObject({ einvoice: false, source: 'ocr', fields: { grossCents: 18000 } })
+
+    // An e-invoice needs no suggestions.
+    const einvoice = Buffer.from(await (await client.request(`/api/erp/invoices/${invoiceId}/pdf`)).arrayBuffer())
+    expect(await suggest(einvoice, 'e.pdf', 'application/pdf')).toMatchObject({ einvoice: true, fields: null })
+  })
 })

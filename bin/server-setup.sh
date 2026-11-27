@@ -29,6 +29,8 @@
 #                                stop it and drop the copy
 #   bin/server-setup.sh cutover  switch both host names to the Node cockpit and the PHP cron off
 #   bin/server-setup.sh rollback back to the PHP cockpit (keeps the Node build for later)
+#   bin/server-setup.sh ocr      text recognition for incoming invoices without e-invoice data:
+#                                poppler-utils (text of PDFs) and Tesseract with German
 #
 # On the server, "cockpit-setup <step>" loads the current version from GitHub (main) and runs it.
 # The script is idempotent: running it again keeps existing data, passwords and keys.
@@ -112,7 +114,7 @@ base() {
     apt-get install -y -q \
         apache2 "php$PHP-fpm" "php$PHP-cli" "php$PHP-curl" "php$PHP-mbstring" "php$PHP-mysql" \
         "php$PHP-xml" "php$PHP-zip" "php$PHP-gd" mariadb-server ufw unattended-upgrades certbot python3-certbot-apache \
-        fail2ban python3-systemd rsync cron
+        fail2ban python3-systemd rsync cron poppler-utils tesseract-ocr tesseract-ocr-deu
 
     # Security updates install themselves (Debian's default origins: security archive).
     dpkg-reconfigure -f noninteractive unattended-upgrades
@@ -1117,6 +1119,17 @@ WantedBy=multi-user.target
 EOF
 }
 
+# The cockpit reads the text of incoming invoices without e-invoice data with these
+# programs (app/server/lib/erp/ocr.ts); nothing leaves the server. Part of "base" for new
+# servers; this step adds them to an existing one.
+ocr() {
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -q
+    apt-get install -y -q poppler-utils tesseract-ocr tesseract-ocr-deu
+    echo "Installed: $(pdftotext -v 2>&1 | head -1), $(tesseract --version 2>&1 | head -1), languages: $(tesseract --list-langs 2>/dev/null | tail -n +2 | tr '\n' ' ')"
+    echo "The cockpit uses them at once; no restart needed."
+}
+
 node_setup() {
     [ -f "$APP/config/config.php" ] || die "$APP/config/config.php is missing"
     command -v php > /dev/null || die "php is missing"
@@ -1427,5 +1440,6 @@ case "${1:-}" in
     rehearsal-stop) rehearsal_stop ;;
     cutover) cutover ;;
     rollback) rollback ;;
-    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback" ;;
+    ocr) ocr ;;
+    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback|ocr" ;;
 esac
