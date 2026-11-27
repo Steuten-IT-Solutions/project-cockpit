@@ -236,6 +236,27 @@ describe('ERP', () => {
     expect((await client.json<{ mailFiles: IncomingMailFile[] }>('/api/erp/incoming')).mailFiles).toHaveLength(0)
     expect((await send('POST', `/api/erp/incoming/mail/${waiting.id}/ignore`)).status).toBe(422)
 
+    // A waiting file that was uploaded by hand instead of via "Erfassen" stops waiting;
+    // one whose invoice number is in the books already is set aside when entered.
+    const insertMailFile = async (content: Buffer) => ((await sql(`INSERT INTO incoming_mail_files (file_name, file_type, sha256, content, status, created_at, updated_at)
+      VALUES ('b.pdf', 'application/pdf', SHA2(?, 256), ?, 'new', NOW(), NOW()) RETURNING id`, [content, content])) as [{ id: number }])[0].id
+    const other = Buffer.from('%PDF-1.4\n% andere Datei\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')
+    const byHand = await insertMailFile(other)
+    const twin = await insertMailFile(Buffer.from('%PDF-1.4\n% Kopie\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n'))
+    expect((await client.json<{ mailFiles: IncomingMailFile[] }>('/api/erp/incoming')).mailFiles.map(m => m.id)).toEqual([byHand, twin])
+    const entry = (content: Buffer, extra: Record<string, string>) => {
+      const f = new FormData()
+      f.append('file', new Blob([content], { type: 'application/pdf' }), 'b.pdf')
+      for (const [k, v] of Object.entries({ category: 'other', supplierName: 'Lieferant', number: 'P-8', issueDate: '2026-11-20', net: '20', tax: '0', ...extra })) f.append(k, v)
+      return upload('/api/erp/incoming', f)
+    }
+    expect((await entry(other, {})).status).toBe(200)
+    expect((await sql('SELECT status FROM incoming_mail_files WHERE id = ?', [byHand]))).toEqual([{ status: 'booked' }])
+    const refused = await entry(Buffer.from('%PDF-1.4\n% Kopie\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n'), { mailFileId: String(twin), number: 'P-7' })
+    expect(refused.status).toBe(422)
+    expect((await client.json<{ mailFiles: IncomingMailFile[] }>('/api/erp/incoming')).mailFiles).toHaveLength(0)
+    expect((await sql('SELECT status, problem FROM incoming_mail_files WHERE id = ?', [twin]))).toEqual([{ status: 'ignored', problem: expect.stringContaining('bereits erfasst') }])
+
     // A received XML is shown as text, never as a document the browser would run.
     const [{ id: xmlId }] = (await sql(`INSERT INTO incoming_mail_files (file_name, file_type, sha256, content, status, created_at, updated_at)
       VALUES ('x.xml', 'application/xml', REPEAT('a', 64), '<x/>', 'new', NOW(), NOW()) RETURNING id`)) as [{ id: number }]

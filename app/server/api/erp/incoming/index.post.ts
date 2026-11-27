@@ -1,5 +1,6 @@
 import { idField, incomingFromBody } from '../../../lib/erp/forms'
 import { IncomingRepository, type ManualEntry } from '../../../lib/erp/incoming'
+import { InvoiceError } from '../../../lib/erp/invoices'
 import { MailFileRepository } from '../../../lib/erp/mailbox'
 import { INCOMING_CATEGORIES } from '#shared/lib/erp'
 
@@ -33,9 +34,24 @@ export default defineEventHandler(async (event) => {
       ? fields
       : { supplierId: supplierId === 'invalid' ? null : supplierId, supplierName: (body.supplierName ?? '').trim().slice(0, 100) || null, fields }
   }
-  const result = await erpAction(() => new IncomingRepository(erp.pool).upload({ name: file.filename ?? 'rechnung', data: file.data }, manual, category, projectId, erp.engine, erp.now()))
+  const mailFiles = new MailFileRepository(erp.pool)
   const mailFileId = idField(body.mailFileId)
-  if (typeof mailFileId === 'number') await new MailFileRepository(erp.pool).booked(mailFileId, result.id, erp.now())
+  const result = await erpAction(async () => {
+    try {
+      return await new IncomingRepository(erp.pool).upload({ name: file.filename ?? 'rechnung', data: file.data }, manual, category, projectId, erp.engine, erp.now())
+    }
+    catch (e) {
+      // The invoice is in the books already (the same file, or this supplier's invoice
+      // number from another file): the mailbox file need not wait any longer.
+      if (e instanceof InvoiceError && e.message.includes('bereits erfasst') && typeof mailFileId === 'number') await mailFiles.ignore(mailFileId, erp.now(), e.message)
+      throw e
+    }
+    finally {
+      // A mailbox file with the same content as an entered invoice no longer waits.
+      await mailFiles.settle(erp.now())
+    }
+  })
+  if (typeof mailFileId === 'number') await mailFiles.booked(mailFileId, result.id, erp.now())
   const read = result.format === 'other' ? 'Erfasst.' : 'E-Rechnung gelesen und erfasst.'
   return { ...result, message: read }
 })
