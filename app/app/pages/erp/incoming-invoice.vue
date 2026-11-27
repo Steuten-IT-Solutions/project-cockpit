@@ -44,6 +44,7 @@ const relatedItems = computed(() => [{ value: 'none', label: '– keine –' }, 
   .map(i => ({ value: String(i.id), label: `${i.number} · ${day(i.issueDate)} · ${euro(i.grossCents)}` }))])
 const related = computed(() => data.value?.siblings.find(i => i.id === data.value?.invoice.relatedId) ?? null)
 const credits = computed(() => (data.value?.siblings ?? []).filter(i => i.relatedId === data.value?.invoice.id && i.status !== 'discarded'))
+const creditSum = computed(() => credits.value.reduce((s, c) => s + c.grossCents, 0))
 const categoryItems = Object.entries(INCOMING_CATEGORIES).map(([value, label]) => ({ value, label }))
 // The stored split in euros, as the evaluation counts it.
 const projectParts = computed(() => {
@@ -173,10 +174,6 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
             Gutschrift zur Rechnung <NuxtLink :to="`/erp/incoming-invoice?id=${related.id}`" class="text-primary hover:underline">{{ related.number }}</NuxtLink>
             vom {{ day(related.issueDate) }} über {{ euro(related.grossCents) }}.
           </p>
-          <p v-if="credits.length > 0" class="text-sm">
-            Gutschriften zu dieser Rechnung:
-            <span v-for="(c, k) in credits" :key="c.id">{{ k > 0 ? ', ' : '' }}<NuxtLink :to="`/erp/incoming-invoice?id=${c.id}`" class="text-primary hover:underline">{{ c.number }}</NuxtLink> ({{ euro(c.grossCents) }})</span>
-          </p>
           <UFormField v-if="data.invoice.format === 'other' || data.invoice.currency !== 'EUR'" label="Währung">
             <ErpCurrency v-model:currency="form.currency" v-model:euro-gross="form.euroGross" :net="form.net" :tax="form.tax" :disabled="data.invoice.status === 'discarded'" />
           </UFormField>
@@ -201,6 +198,27 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
         </form>
       </UCard>
     </div>
+
+    <UCard v-if="credits.length > 0">
+      <template #header>
+        <h2 class="font-semibold text-highlighted">
+          Gutschriften und Erstattungen zu dieser Rechnung
+        </h2>
+      </template>
+      <ul class="divide-y divide-default text-sm">
+        <li v-for="c in credits" :key="c.id" class="flex flex-wrap items-center justify-between gap-2 py-1">
+          <span>
+            <NuxtLink :to="`/erp/incoming-invoice?id=${c.id}`" class="text-primary hover:underline">{{ c.number }}</NuxtLink>
+            <span class="text-muted"> vom {{ day(c.issueDate) }} · {{ c.status === 'paid' ? `erstattet am ${day(c.paidOn)}` : 'noch nicht erstattet' }}</span>
+          </span>
+          <span>{{ euro(-c.grossCents) }}</span>
+        </li>
+      </ul>
+      <p class="mt-2 flex justify-between text-sm">
+        <span>Rechnung {{ euro(data.invoice.grossCents) }} abzüglich Gutschriften</span>
+        <strong>{{ euro(data.invoice.grossCents - creditSum) }}</strong>
+      </p>
+    </UCard>
 
     <UCard v-if="data.invoice.status !== 'discarded'">
       <div class="flex flex-wrap items-end gap-3">
