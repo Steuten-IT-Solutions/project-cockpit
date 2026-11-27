@@ -19,6 +19,9 @@ export default defineEventHandler(async (event) => {
       if (!(e instanceof EngineInputError)) throw e
     }
   }
-  const [supplier, otherIbans, projects] = await Promise.all([repository.supplier(invoice.supplierId), repository.otherIbans(invoice), erp.master.projects()])
-  return { invoice, supplier, otherIbans, parsed, projects, today: erp.today() }
+  const [supplier, otherIbans, projects, all] = await Promise.all([repository.supplier(invoice.supplierId), repository.otherIbans(invoice), erp.master.projects(), repository.list()])
+  // The supplier's other documents: a credit note can be linked to one of its invoices,
+  // and an invoice shows the credit notes that refer to it.
+  const siblings = all.filter(i => i.supplierId === invoice.supplierId && i.id !== invoice.id)
+  return { invoice, supplier, otherIbans, parsed, projects, siblings, today: erp.today() }
 })

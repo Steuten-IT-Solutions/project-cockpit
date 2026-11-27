@@ -148,6 +148,10 @@ export interface IncomingInvoice {
   supplierId: number
   supplierName: string
   status: 'open' | 'paid' | 'discarded'
+  /** 'credit' for a credit note or refund from the supplier: it lowers the expenses; "paid" means refunded. */
+  kind: 'invoice' | 'credit'
+  /** For a credit: the incoming invoice it refers to, if known. */
+  relatedId: number | null
   number: string
   issueDate: string
   dueDate: string | null

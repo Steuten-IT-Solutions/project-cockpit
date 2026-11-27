@@ -140,6 +140,8 @@ export function supplierFromBody(body: Body): SupplierInput | string {
 export interface IncomingInput {
   number: string, issueDate: string, dueDate: string | null, netCents: number, taxCents: number, grossCents: number
   category: string, projects: ProjectShare[], iban: string | null, note: string | null
+  /** 'credit' for a credit note or refund of the supplier, optionally for the incoming invoice relatedId. */
+  kind: 'invoice' | 'credit', relatedId: number | null
   /** The invoice's currency; for another one than EUR the amounts above are the euros entered for it. */
   currency: string, originalNetCents: number | null, originalTaxCents: number | null, exchangeRate: number | null
 }
@@ -208,13 +210,16 @@ export function incomingFromBody(body: Body, projectIds: number[]): IncomingInpu
   }
   const category = String(field(body, 'category') ?? '')
   if (!(category in INCOMING_CATEGORIES)) return 'Bitte eine Kategorie wählen.'
+  const kind = field(body, 'kind') === 'credit' ? 'credit' : 'invoice'
+  const related = idField(field(body, 'relatedId'))
+  if (related === 'invalid') return 'Unbekannte Rechnung für die Gutschrift.'
   const projects = projectSharesFromBody(body, projectIds)
   if (typeof projects === 'string') return projects
   const iban = optional(body, 'iban', 50)?.replaceAll(' ', '').toUpperCase() ?? null
   if (iban !== null && !isValidIban(iban)) return 'Die IBAN ist ungültig.'
   return {
     number, issueDate, dueDate, netCents: amounts.netCents, taxCents: amounts.taxCents, grossCents: amounts.netCents + amounts.taxCents, category, projects, iban,
-    note: cleanText(field(body, 'note'), 500, true), currency, exchangeRate,
+    note: cleanText(field(body, 'note'), 500, true), currency, exchangeRate, kind, relatedId: kind === 'credit' ? related : null,
     originalNetCents: exchangeRate === null ? null : netCents, originalTaxCents: exchangeRate === null ? null : taxCents,
   }
 }

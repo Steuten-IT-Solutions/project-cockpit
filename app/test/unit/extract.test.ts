@@ -41,6 +41,13 @@ describe('reading incoming invoices without e-invoice data', () => {
     expect(dateIso('2026-11-20')).toBe('2026-11-20')
     expect(dateIso('3. Dezember 2026')).toBe('2026-12-03')
     expect(dateIso('31.02.2026')).toBeNull()
+    expect(dateIso('November 27, 2026')).toBe('2026-11-27')
+    expect(dateIso('Sept 3rd, 2026')).toBe('2026-09-03')
+    expect(dateIso('Dec 1 2026')).toBe('2026-12-01')
+    expect(dateIso('27 Nov 2026')).toBe('2026-11-27')
+    expect(dateIso('4. März 2026')).toBe('2026-03-04')
+    expect(dateIso('February 30, 2026')).toBeNull()
+    expect(dateIso('Augsburg 12 2026')).toBeNull()
   })
 
   it('fills the fields of a typical invoice', () => {
@@ -48,7 +55,7 @@ describe('reading incoming invoices without e-invoice data', () => {
       number: 'RE-2026/0815', issueDate: '2026-11-20', dueDate: '2026-12-04',
       netCents: 20000, taxCents: 3800, grossCents: 23800,
       // The own IBAN and VAT id (buyer) are skipped; the supplier is known by its IBAN.
-      iban: 'DE02120300000000202051', vatId: 'DE123456789', supplierId: 2, currency: 'EUR',
+      iban: 'DE02120300000000202051', vatId: 'DE123456789', supplierId: 2, currency: 'EUR', kind: 'invoice',
     })
   })
 
@@ -68,7 +75,7 @@ describe('reading incoming invoices without e-invoice data', () => {
     const text = `Rechnung vom 03.11.2026\nRechnungsnummer: siehe unten\nHetzner Online GmbH\nSumme 19,00 %\nTotal 12,34`
     expect(extractFields(text, SUPPLIERS, OWN)).toMatchObject({ number: null, issueDate: '2026-11-03', grossCents: 1234, supplierId: 1 })
     expect(extractFields('', SUPPLIERS, OWN)).toEqual({
-      number: null, issueDate: null, dueDate: null, netCents: null, taxCents: null, grossCents: null, iban: null, vatId: null, supplierId: null, currency: 'EUR',
+      number: null, issueDate: null, dueDate: null, netCents: null, taxCents: null, grossCents: null, iban: null, vatId: null, supplierId: null, currency: 'EUR', kind: 'invoice',
     })
   })
 
@@ -78,5 +85,35 @@ describe('reading incoming invoices without e-invoice data', () => {
     expect(currencyOf('Summe 12,00 € (USD-Konto: nein)')).toBe('EUR')
     expect(currencyOf('Total: £20.00')).toBe('GBP')
     expect(currencyOf('Betrag 10,00')).toBe('EUR')
+  })
+
+  it('notices credit notes', () => {
+    expect(extractFields('Gutschrift Nr. G-12\nDatum 05.11.2026\nGesamtbetrag 23,80 €', [], OWN)).toMatchObject({ number: 'G-12', kind: 'credit', grossCents: 2380 })
+    expect(extractFields('Credit note CN-7\nTotal $5.00', [], OWN)).toMatchObject({ kind: 'credit', currency: 'USD' })
+  })
+
+  it('reads English labels and dates as on a Stripe invoice', () => {
+    const stripe = `Invoice
+Invoice number      ABCD1234-0007
+Date of issue       November 3, 2026
+Date due            November 17, 2026
+
+Anthropic, PBC                         Bill to
+548 Market Street                      Steuten IT Solutions
+
+$118.00 USD due November 17, 2026
+
+Description                 Qty     Unit price      Amount
+Claude Max                  1       $100.00         $100.00
+Subtotal                                            $100.00
+Tax (18%)                                            $18.00
+Total                                               $118.00
+Amount due                                          $118.00 USD`
+    expect(extractFields(stripe, [], OWN)).toMatchObject({
+      number: 'ABCD1234-0007', issueDate: '2026-11-03', dueDate: '2026-11-17', netCents: 10000, taxCents: 1800, grossCents: 11800, currency: 'USD',
+    })
+    // The due date also when only the sentence says it, and not the date of service for the invoice date.
+    expect(extractFields('Date of service: 01 Oct 2026\nIssue date: 02 Oct 2026\n$5.00 due Oct 16, 2026', [], OWN))
+      .toMatchObject({ issueDate: '2026-10-02', dueDate: '2026-10-16' })
   })
 })
