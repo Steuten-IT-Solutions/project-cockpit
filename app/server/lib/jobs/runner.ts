@@ -21,7 +21,10 @@ import { ReleaseRepository } from '../repositories/releases'
 import { AlertRepository, InstallationRepository, StatusRepository } from '../repositories/status'
 import { VercelRepository } from '../repositories/vercel'
 import { evaluateAlerts, KEEP_DAYS as ALERT_KEEP_DAYS } from '../status/alerts'
+import type { Crypto } from '../crypto'
+import type { InvoiceEngine } from '../erp/engine'
 import { InvoiceRepository } from '../erp/invoices'
+import { fetchIncomingMail, fetchSummary } from '../erp/mailbox'
 import { SubscriptionRepository } from '../erp/subscriptions'
 import { Notifier, sendmail } from '../status/notifier'
 import { cut } from '../text'
@@ -49,6 +52,8 @@ export interface JobContext {
   migrationsDir: string
   /** Reads a key file; tests replace it. */
   readKey?: (path: string) => Promise<string>
+  /** For the mailbox of incoming invoices; without it that step is skipped. */
+  erp?: { engine: InvoiceEngine, crypto: Crypto }
 }
 
 export interface JobResult { status: 'ok' | 'warn', message: string | null }
@@ -191,6 +196,17 @@ async function execute(ctx: JobContext, trigger: string | null): Promise<JobResu
   }
   catch (e) {
     fail(`Wiederkehrende Rechnungen: ${(e as Error).message}`)
+  }
+
+  // Incoming invoices by e-mail (server/lib/erp/mailbox.ts), if a mailbox is set up.
+  if (ctx.erp !== undefined) {
+    try {
+      const result = await fetchIncomingMail(pool, ctx.erp.crypto, ctx.erp.engine, utc())
+      if (result !== null && result.messages > 0) messages.push(fetchSummary(result))
+    }
+    catch (e) {
+      fail(`Postfach: ${(e as Error).message}`)
+    }
   }
 
   const message = messages.length === 0 ? null : cut(messages.join(' · '), 255)

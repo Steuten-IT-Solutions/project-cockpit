@@ -14,8 +14,8 @@ import { utc } from '../lib/time'
 
 let engine: { key: string, instance: InvoiceEngine } | undefined
 
-export function useErp(event: H3Event) {
-  const { pool, config } = useCockpit(event)
+/** The e-invoice engine; also used by the background jobs, which have no request. */
+export function erpEngine(event?: H3Event): InvoiceEngine {
   const runtime = useRuntimeConfig(event)
   // On the server the app runs in <app>/node, so the PHP code (bin/, vendor/) is one level up.
   const phpDir = runtime.erp.phpDir !== '' ? runtime.erp.phpDir : resolve(process.cwd(), '..')
@@ -23,11 +23,17 @@ export function useErp(event: H3Event) {
   if (engine?.key !== `${phpBinary}\n${phpDir}`) {
     engine = { key: `${phpBinary}\n${phpDir}`, instance: new InvoiceEngine(phpBinary, phpDir) }
   }
+  return engine.instance
+}
+
+export function useErp(event: H3Event) {
+  const { pool, config, crypto } = useCockpit(event)
   return {
     pool,
     config,
+    crypto,
     master: new MasterData(pool),
-    engine: engine.instance,
+    engine: erpEngine(event),
     mail: sendmailSender(config.mail.sendmail),
     /** Today in the cockpit's time zone (invoice dates are local days). */
     today: () => today(config.timezone),
@@ -59,7 +65,10 @@ export async function readObject(event: H3Event): Promise<Record<string, unknown
 
 /** Sends a stored file as a download (or inline, e.g. a PDF shown in the browser). */
 export function sendFile(event: H3Event, content: Buffer, filename: string, type: string, inline = false) {
-  setResponseHeader(event, 'Content-Type', type)
+  // Received files come from strangers (e-mail, uploads). Shown in the browser, an XML file
+  // could carry XHTML with scripts on the cockpit's origin, so it is shown as plain text.
+  setResponseHeader(event, 'Content-Type', inline && type === 'application/xml' ? 'text/plain; charset=utf-8' : type)
+  setResponseHeader(event, 'X-Content-Type-Options', 'nosniff')
   setResponseHeader(event, 'Content-Length', content.length)
   const safe = filename.replace(/[^\w.-]+/g, '_')
   setResponseHeader(event, 'Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${safe}"`)

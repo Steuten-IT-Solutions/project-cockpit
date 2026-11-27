@@ -113,6 +113,27 @@ export interface Supplier {
   note: string | null
 }
 
+/** An attachment from the mailbox for incoming invoices (server/lib/erp/mailbox.ts). */
+export interface IncomingMailFile {
+  id: number
+  sender: string | null
+  subject: string | null
+  receivedAt: string | null
+  fileName: string
+  fileType: string
+  status: 'new' | 'booked' | 'ignored'
+  incomingInvoiceId: number | null
+  problem: string | null
+  createdAt: string
+}
+
+/** The mailbox settings as shown; the password is never sent back. */
+export interface MailboxSettings {
+  host: string | null
+  user: string | null
+  hasPassword: boolean
+}
+
 export interface IncomingInvoice {
   id: number
   supplierId: number
