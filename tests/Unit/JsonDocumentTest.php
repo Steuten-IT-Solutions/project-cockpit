@@ -42,6 +42,9 @@ final class JsonDocumentTest extends TestCase
         self::assertSame('DE463748776', $invoice->seller->vatId);
         self::assertSame('Gültig bis', array_keys(JsonDocument::options(['mode' => 'quote'] + self::document(), $invoice)['meta'] ?? [])[2]);
         self::assertSame('ENTWURF', JsonDocument::options(['mode' => 'draft'] + self::document(), $invoice)['watermark'] ?? null);
+        // A quote not issued yet keeps the quote's heading and gets the watermark too.
+        $quoteDraft = JsonDocument::options(['mode' => 'quote', 'draft' => true] + self::document(), $invoice);
+        self::assertSame(['Angebot', 'ENTWURF'], [$quoteDraft['title'] ?? null, $quoteDraft['watermark'] ?? null]);
     }
 
     public function testRefusesInvalidInput(): void

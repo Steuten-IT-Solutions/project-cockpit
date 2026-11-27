@@ -121,7 +121,7 @@ Sales and invoicing without bookkeeping, under `/erp` (pages in `app/pages/erp`,
 
 | Module | What it does |
 | --- | --- |
-| Invoices | Drafts with positions from the catalog; finalizing assigns the next number (R-2026-0001), freezes seller and buyer, renders the ZUGFeRD PDF and the XML once and stores both. Corrections only by cancellation (Stornorechnung, type 381). Sent by e-mail as rechnung@ through Postfix (archived by always_bcc). |
+| Invoices | Drafts with positions from the catalog (shown as "Artikel"); finalizing assigns the next number (R-2026-0001), freezes seller and buyer, renders the ZUGFeRD PDF and the XML once and stores both. Corrections only by cancellation (Stornorechnung, type 381). Sent by e-mail as rechnung@ through Postfix (archived by always_bcc). |
 | Payments and dunning | Payments (also partial) per invoice; open and overdue invoices; Zahlungserinnerung, 1. and 2. Mahnung by e-mail with a new deadline of 10 days. |
 | Incoming invoices | Upload of ZUGFeRD PDFs and XRechnung/CII XML (read automatically), other PDFs and photos (typed in). The file is kept unchanged; duplicates are refused; an IBAN that differs from the supplier's earlier invoices is flagged. |
 | Recurring invoices | On each date the background jobs write a draft for the period (Leistungszeitraum on the invoice); finalizing stays manual. |

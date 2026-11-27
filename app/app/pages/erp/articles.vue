@@ -4,7 +4,7 @@ import type { CatalogItem } from '#shared/types/erp'
 
 // Products and services offered again and again. A position copies name, unit and
 // price from here; changing the catalog later does not change existing documents.
-useHead({ title: 'Katalog · Cockpit' })
+useHead({ title: 'Artikel · Cockpit' })
 const { data, refresh } = await useFetch<{ catalog: CatalogItem[], smallBusiness: boolean }>('/api/erp/catalog')
 const { busy, run } = useAction()
 
@@ -57,7 +57,7 @@ async function archive(c: CatalogItem) {
   <div v-if="data" class="space-y-4">
     <ErpNav />
     <h1 class="text-2xl font-semibold text-highlighted">
-      Katalog
+      Artikel
     </h1>
     <div class="grid gap-4 lg:grid-cols-2">
       <UCard>
@@ -65,7 +65,7 @@ async function archive(c: CatalogItem) {
           <USwitch v-model="showArchived" label="Archivierte zeigen" />
         </div>
         <p v-if="list.length === 0" class="text-sm text-muted">
-          Noch keine Einträge, z. B. „Stundensatz Entwicklung“ oder „Hosting-Paket“.
+          Noch keine Artikel, z. B. „Stundensatz Entwicklung“ oder „Hosting-Paket“.
         </p>
         <ul v-else class="divide-y divide-default">
           <li v-for="c in list" :key="c.id" class="flex flex-wrap items-start justify-between gap-2 py-2">

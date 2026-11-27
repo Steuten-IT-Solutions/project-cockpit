@@ -100,7 +100,8 @@ export class SalesRepository {
     const delivery = doc.deliveryDate ?? issueDate
     const { iban, bic, bankName: _bank, ...seller } = MasterData.seller(settings)
     return {
-      mode: draft ? 'draft' : doc.kind, number, issueDate,
+      // The kind decides heading and texts; a preview only adds the watermark (#46).
+      mode: doc.kind, draft, number, issueDate,
       deliveryDate: delivery,
       dueDate: doc.kind === 'quote' ? validUntil : (delivery >= issueDate ? delivery : issueDate),
       seller, buyer: MasterData.buyer(customer), lines: doc.lines, smallBusiness: settings.smallBusiness, iban, bic,

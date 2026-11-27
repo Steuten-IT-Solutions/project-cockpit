@@ -87,7 +87,7 @@ const sum = computed(() => totals(lines.value
       <UButton color="neutral" variant="outline" icon="i-lucide-plus" @click="add()">
         Position
       </UButton>
-      <USelect v-if="catalogItems.length > 0" v-model="pick" :items="catalogItems" placeholder="Aus dem Katalog …" class="w-64" />
+      <USelect v-if="catalogItems.length > 0" v-model="pick" :items="catalogItems" placeholder="Artikel übernehmen …" class="w-64" />
     </div>
 
     <dl class="ml-auto max-w-xs space-y-1 text-sm">
