@@ -70,7 +70,7 @@ const suggestionNote = computed(() => {
   const found = [s.fields.number, s.fields.issueDate, s.fields.netCents].filter(v => v !== null).length
   const how = s.source === 'ocr' ? 'per Texterkennung (OCR) gelesen' : 'aus dem Text der PDF gelesen'
   return found === 0
-    ? `Text ${how}, aber keine Angaben sicher erkannt. Bitte trage sie selbst ein.`
+    ? `Keine Angaben sicher erkannt (${s.source === 'ocr' ? 'Texterkennung' : 'Text der PDF'}). Bitte trage sie selbst ein.`
     : `Vorschlag ${how}. Bitte prüfe alle Angaben vor dem Speichern.`
 })
 
@@ -91,6 +91,22 @@ async function enterMailFile(item: IncomingMailFile) {
   // "Name <address>" of the original sender, as a name for a new supplier.
   void suggest(loaded, item.sender?.replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '').trim() || null)
 }
+// "Beleg öffnen" while typing in the fields: the mailbox file from the server, a file
+// picked on this device as a local blob: URL. Only PDFs and images keep their type; any
+// other file (XML) opens as plain text, so nothing in it can run on the cockpit's origin.
+const localUrl = ref<string | null>(null)
+watch(file, (selected) => {
+  if (localUrl.value !== null) URL.revokeObjectURL(localUrl.value)
+  localUrl.value = null
+  if (selected === null || mailFile.value !== null) return
+  const type = ['application/pdf', 'image/png', 'image/jpeg'].includes(selected.type) ? selected.type : 'text/plain'
+  localUrl.value = URL.createObjectURL(new Blob([selected], { type }))
+}, { flush: 'post' })
+onBeforeUnmount(() => {
+  if (localUrl.value !== null) URL.revokeObjectURL(localUrl.value)
+})
+const fileUrl = computed(() => mailFile.value !== null ? `/api/erp/incoming/mail/${mailFile.value.id}` : localUrl.value)
+
 async function ignoreMailFile(item: IncomingMailFile) {
   if (await run(`ignore-${item.id}`, () => cockpitSend('POST', `/api/erp/incoming/mail/${item.id}/ignore`)) !== null) await refresh()
 }
@@ -238,9 +254,14 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
             Rechnung erfassen
           </h2>
         </template>
-        <p v-if="mailFile" class="mb-3 text-sm">
-          Datei aus dem Postfach: <strong>{{ mailFile.fileName }}</strong>
-        </p>
+        <div v-if="file" class="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+          <p class="min-w-0 truncate">
+            {{ mailFile ? 'Datei aus dem Postfach:' : 'Datei:' }} <strong>{{ file.name }}</strong>
+          </p>
+          <UButton v-if="fileUrl" :to="fileUrl" target="_blank" rel="noopener" external size="xs" color="neutral" variant="outline" icon="i-lucide-external-link">
+            Beleg öffnen
+          </UButton>
+        </div>
         <UAlert v-if="error" color="error" variant="subtle" :title="error" class="mb-3" role="alert" />
         <UAlert v-for="(w, i) in warnings" :key="i" color="warning" variant="subtle" :title="w" class="mb-3" />
         <form class="space-y-3" @submit.prevent="upload">
