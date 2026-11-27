@@ -136,13 +136,16 @@ async function removeLogo() {
         </template>
         <div class="space-y-3">
           <div class="grid gap-3 sm:grid-cols-2">
-            <UFormField label="Steuernummer" hint="oder USt-IdNr.">
+            <UFormField label="Steuernummer">
               <UInput v-model="form.taxNumber" :maxlength="30" class="w-full" />
             </UFormField>
             <UFormField label="USt-IdNr.">
               <UInput v-model="form.vatId" :maxlength="20" placeholder="DE…" class="w-full" />
             </UFormField>
           </div>
+          <p class="text-xs text-muted">
+            Auf jeder Rechnung muss die Steuernummer oder die USt-IdNr. stehen (§ 14 Abs. 4 Nr. 2 UStG). Eines der beiden Felder genügt, du kannst auch beide ausfüllen.
+          </p>
           <USwitch v-model="form.smallBusiness" label="Kleinunternehmer nach § 19 UStG (keine Umsatzsteuer)" />
           <UFormField v-if="!form.smallBusiness" label="Befreiungsgrund für Positionen mit 0 %" hint="z. B. Steuerbefreiung nach § 4 Nr. … UStG">
             <UInput v-model="form.exemptionReason" :maxlength="255" class="w-full" />

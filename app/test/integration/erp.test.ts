@@ -59,7 +59,7 @@ describe('ERP', () => {
   it('saves company data, customers and the catalog', async () => {
     expect((await send('PUT', '/api/erp/settings', { ...SETTINGS, iban: 'DE00' })).json.statusMessage).toBe('Die IBAN ist ungültig.')
     expect((await send('PUT', '/api/erp/settings', SETTINGS)).status).toBe(200)
-    const created = await send('POST', '/api/erp/customers', { kind: 'business', name: 'Kunde GmbH', street: 'Weg 2', postcode: '10115', city: 'Berlin', email: 'kunde@example.org', projectId: '1' })
+    const created = await send('POST', '/api/erp/customers', { kind: 'business', name: 'Kunde GmbH', contactName: 'Erika Kunde', street: 'Weg 2', postcode: '10115', city: 'Berlin', email: 'kunde@example.org', projectId: '1' })
     expect(created.status).toBe(200)
     customerId = created.json.id as number
     expect((await send('POST', '/api/erp/catalog', { name: 'Stunde', unit: 'HUR', price: '90', vatRate: 19 })).json.statusMessage).toContain('Kleinunternehmer')
@@ -88,7 +88,10 @@ describe('ERP', () => {
     invoiceId = draft.json.id as number
     const preview = await client.request(`/api/erp/invoices/${invoiceId}/preview`)
     expect(preview.headers.get('content-type')).toBe('application/pdf')
-    expect(Buffer.from(await preview.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-')
+    const previewPdf = Buffer.from(await preview.arrayBuffer())
+    expect(previewPdf.subarray(0, 5).toString()).toBe('%PDF-')
+    // The customer's contact person is printed below its name.
+    expect(execFileSync('pdftotext', ['-', '-'], { input: previewPdf }).toString()).toMatch(/Kunde GmbH\s+Erika Kunde\s+Weg 2/)
 
     const finalized = await send('POST', `/api/erp/invoices/${invoiceId}/finalize`)
     expect(finalized.status).toBe(200)

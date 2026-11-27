@@ -73,7 +73,13 @@ final class InvoicePdf
         $pdf->Cell(85, 4, self::t("{$seller->name} · {$seller->street} · {$seller->postcode} {$seller->city}"));
         $pdf->SetFont('DejaVu', '', 10);
         $pdf->SetXY(self::LEFT, 53);
-        $pdf->MultiCell(85, 5, self::t(implode("\n", [$buyer->name, $buyer->street, "{$buyer->postcode} {$buyer->city}"])));
+        // The customer's contact person goes below the name (DIN 5008, without "z. Hd.").
+        $address = [$buyer->name];
+        if ($buyer->contactName !== null && trim($buyer->contactName) !== '' && $buyer->contactName !== $buyer->name) {
+            $address[] = $buyer->contactName;
+        }
+        array_push($address, $buyer->street, "{$buyer->postcode} {$buyer->city}");
+        $pdf->MultiCell(85, 5, self::t(implode("\n", $address)));
 
         // Seller block on the right.
         $pdf->SetXY(125, 20);

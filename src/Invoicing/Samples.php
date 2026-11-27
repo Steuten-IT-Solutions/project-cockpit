@@ -22,7 +22,7 @@ final class Samples
             taxNumber: '123/456/78901', email: 'rechnung@example.org', phone: '+49 123 456789', contactName: 'Max Muster',
             id: '123/456/78901',
         );
-        $buyer = new Party('Kompanie Beispiel GmbH', 'Hauptstraße 2', '54321', 'Beispielstadt', email: 'buchhaltung@example.com');
+        $buyer = new Party('Kompanie Beispiel GmbH', 'Hauptstraße 2', '54321', 'Beispielstadt', email: 'buchhaltung@example.com', contactName: 'Erika Beispiel');
         $iban = 'DE89 3704 0044 0532 0130 00';
         $issued = new DateTimeImmutable('2026-11-20');
         $delivered = new DateTimeImmutable('2026-11-15');

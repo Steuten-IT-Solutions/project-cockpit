@@ -49,6 +49,10 @@ final class ZugferdXml
             $b->addDocumentBuyerVATRegistrationNumber($buyer->vatId);
         }
         $b->setDocumentBuyerAddress($buyer->street, null, null, $buyer->postcode, $buyer->city, $buyer->country);
+        // BT-56: the buyer's contact person, so the invoice reaches the right desk.
+        if ($buyer->contactName !== null && trim($buyer->contactName) !== '') {
+            $b->setDocumentBuyerContact($buyer->contactName, null, null, null, null);
+        }
         if ($buyer->email !== null) {
             $b->setDocumentBuyerCommunication('EM', $buyer->email);
         }
