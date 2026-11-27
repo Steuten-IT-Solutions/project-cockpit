@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { day, euro, INCOMING_CATEGORIES, priceText, type ShareForm, sharesBody } from '#shared/lib/erp'
 import type { Choice, IncomingInvoice, IncomingMailFile, Supplier } from '#shared/types/erp'
+import { emptyFilter, type IncomingFilter, isFiltered, matchesIncoming } from '#shared/lib/incomingFilter'
 
 // Incoming invoices: upload, attachments from the mailbox to enter, open ones to pay, all received.
 useHead({ title: 'Eingangsrechnungen · Cockpit' })
@@ -190,11 +191,27 @@ const creditsOf = computed(() => {
 const signed = (i: IncomingInvoice) => i.kind === 'credit' ? -i.grossCents : i.grossCents
 const refundSum = computed(() => (data.value?.invoices ?? []).filter(i => i.status === 'open' && i.kind === 'credit').reduce((s, i) => s + i.grossCents, 0))
 
-const filter = ref('open')
-// Second filter: all documents, only invoices or only credit notes and refunds.
-const kindFilter = ref('all')
-const list = computed(() => (data.value?.invoices ?? []).filter(i => (filter.value === 'all' || i.status === filter.value)
-  && (kindFilter.value === 'all' || i.kind === kindFilter.value)))
+// Search and filters (shared/lib/incomingFilter.ts); status and kind as buttons, the rest below.
+const search = reactive<IncomingFilter>(emptyFilter())
+const showFilters = ref(false)
+const list = computed(() => (data.value?.invoices ?? []).filter(i => matchesIncoming(i, search)))
+function resetFilters() {
+  Object.assign(search, { ...emptyFilter(), status: search.status, kind: search.kind })
+}
+// USelect cannot hold an empty value, so "all" is a placeholder mapped to ''.
+const ALL = 'all'
+const filterSupplierItems = computed(() => [{ value: ALL, label: 'Alle Lieferanten' },
+  ...(data.value?.suppliers ?? []).map(s => ({ value: String(s.id), label: s.name })).sort((a, b) => a.label.localeCompare(b.label, 'de'))])
+const filterCategoryItems = [{ value: ALL, label: 'Alle Kategorien' }, ...Object.entries(INCOMING_CATEGORIES).map(([value, label]) => ({ value, label }))]
+const filterProjectItems = computed(() => [{ value: ALL, label: 'Alle Projekte' }, { value: 'none', label: '– ohne Projekt –' },
+  ...(data.value?.projects ?? []).map(p => ({ value: String(p.id), label: p.name }))])
+const selectModel = (key: 'supplierId' | 'category' | 'projectId') => computed({
+  get: () => search[key] === '' ? ALL : search[key],
+  set: (v: string) => { search[key] = v === ALL ? '' : v },
+})
+const supplierFilter = selectModel('supplierId')
+const categoryFilter = selectModel('category')
+const projectFilter = selectModel('projectId')
 const listSum = computed(() => list.value.reduce((s, i) => s + signed(i), 0))
 const openSum = computed(() => (data.value?.invoices ?? []).filter(i => i.status === 'open' && i.kind === 'invoice').reduce((s, i) => s + i.grossCents, 0))
 const STATUS: Record<string, { label: string, color: 'info' | 'success' | 'neutral' }> = {
@@ -275,22 +292,46 @@ const STATUS: Record<string, { label: string, color: 'info' | 'success' | 'neutr
           <div class="flex flex-col items-start gap-1">
             <div class="flex gap-1">
               <UButton
-v-for="f in [['open', 'Offen'], ['paid', kindFilter === 'credit' ? 'Erstattet' : 'Bezahlt'], ['discarded', 'Verworfen'], ['all', 'Alle']]" :key="f[0]" size="xs"
-                :color="filter === f[0] ? 'primary' : 'neutral'" :variant="filter === f[0] ? 'solid' : 'outline'" @click="filter = f[0]!">
+v-for="f in [['open', 'Offen'], ['paid', search.kind === 'credit' ? 'Erstattet' : 'Bezahlt'], ['discarded', 'Verworfen'], ['all', 'Alle']]" :key="f[0]" size="xs"
+                :color="search.status === f[0] ? 'primary' : 'neutral'" :variant="search.status === f[0] ? 'solid' : 'outline'" @click="search.status = f[0] as IncomingFilter['status']">
                 {{ f[1] }}
               </UButton>
             </div>
             <div class="flex gap-1">
               <UButton
 v-for="f in [['all', 'Alle Arten'], ['invoice', 'Rechnungen'], ['credit', 'Gutschriften']]" :key="f[0]" size="xs"
-                :color="kindFilter === f[0] ? 'primary' : 'neutral'" :variant="kindFilter === f[0] ? 'solid' : 'outline'" @click="kindFilter = f[0]!">
+                :color="search.kind === f[0] ? 'primary' : 'neutral'" :variant="search.kind === f[0] ? 'solid' : 'outline'" @click="search.kind = f[0] as IncomingFilter['kind']">
                 {{ f[1] }}
               </UButton>
             </div>
           </div>
         </div>
+        <div class="mb-3 space-y-2">
+          <div class="flex gap-2">
+            <UInput v-model="search.query" icon="i-lucide-search" placeholder="Suchen: Lieferant, Nummer, Notiz, Betrag" class="flex-1" />
+            <UButton color="neutral" :variant="showFilters || isFiltered(search) ? 'soft' : 'outline'" icon="i-lucide-sliders-horizontal" @click="showFilters = !showFilters">
+              Filter
+            </UButton>
+          </div>
+          <div v-if="showFilters" class="grid gap-2 sm:grid-cols-2">
+            <USelect v-model="supplierFilter" :items="filterSupplierItems" class="w-full" aria-label="Lieferant" />
+            <USelect v-model="categoryFilter" :items="filterCategoryItems" class="w-full" aria-label="Kategorie" />
+            <USelect v-model="projectFilter" :items="filterProjectItems" class="w-full" aria-label="Projekt" />
+            <div class="flex items-center gap-1">
+              <UInput v-model="search.from" type="date" class="flex-1" aria-label="Rechnungsdatum von" />
+              <span class="text-muted">–</span>
+              <UInput v-model="search.to" type="date" class="flex-1" aria-label="Rechnungsdatum bis" />
+            </div>
+          </div>
+          <p v-if="isFiltered(search)" class="flex items-center justify-between text-xs text-muted">
+            <span>{{ list.length }} Treffer · Summe {{ euro(listSum) }}</span>
+            <UButton size="xs" color="neutral" variant="link" @click="resetFilters">
+              Filter zurücksetzen
+            </UButton>
+          </p>
+        </div>
         <p v-if="list.length === 0" class="text-sm text-muted">
-          Keine Rechnungen.
+          {{ isFiltered(search) ? 'Keine Treffer.' : 'Keine Rechnungen.' }}
         </p>
         <ul v-else class="divide-y divide-default">
           <li v-for="i in list" :key="i.id">
@@ -312,7 +353,7 @@ v-for="f in [['all', 'Alle Arten'], ['invoice', 'Rechnungen'], ['credit', 'Gutsc
             </NuxtLink>
           </li>
         </ul>
-        <p v-if="list.length > 1 && kindFilter === 'credit'" class="mt-2 flex justify-between border-t border-default pt-2 text-sm">
+        <p v-if="list.length > 1 && search.kind === 'credit' && !isFiltered(search)" class="mt-2 flex justify-between border-t border-default pt-2 text-sm">
           <span>Summe der angezeigten Gutschriften</span>
           <strong>{{ euro(listSum) }}</strong>
         </p>
