@@ -29,3 +29,10 @@ jobs:
         run: composer analyse
       - name: Tests
         run: composer test
+
+  # The static company website (website/): no open placeholders, no inline code, no broken links.
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: bin/check-website.sh

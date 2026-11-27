@@ -78,7 +78,7 @@ jobs:
       - name: Assemble build
         run: |
           mkdir -p build/config
-          cp -R public receiver src templates migrations cron resources vendor build/
+          cp -R public receiver website src templates migrations cron resources vendor build/
           # The e-invoice engine the Node server calls (app/server/lib/erp/engine.ts).
           mkdir -p build/bin && cp bin/invoice.php build/bin/
           # Unpacks the next deployment on the server (see the step "Upload").

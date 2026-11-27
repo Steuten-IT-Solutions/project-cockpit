@@ -20,8 +20,10 @@ architecture, server setup and security model.
 ## Rules
 
 - Never commit secrets. `config/config.php` exists only on the server.
-- Only `public/` (cockpit) and `receiver/` (status subdomain) are web-reachable. Do not
-  add PHP files to either other than their `index.php`; everything else is routed through it.
+- Only `public/` (cockpit), `receiver/` (status subdomain) and `website/` (static company site on
+  www) are web-reachable. Do not add PHP files to the first two other than their `index.php`;
+  everything else is routed through it. `website/` holds only HTML, CSS and images; run
+  `bin/check-website.sh` after changing it.
 - Escape every dynamic value in templates with `$e()`. No inline scripts or styles:
   the CSP forbids them.
 - Every POST needs the `_csrf` field (except the receiver's report endpoint, which has no

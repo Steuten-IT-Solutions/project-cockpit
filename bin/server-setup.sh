@@ -31,6 +31,8 @@
 #   bin/server-setup.sh rollback back to the PHP cockpit (keeps the Node build for later)
 #   bin/server-setup.sh ocr      text recognition for incoming invoices without e-invoice data:
 #                                poppler-utils (text of PDFs) and Tesseract with German
+#   bin/server-setup.sh website  the company website (website/) on WEB_HOST and WEB_APEX; HTTPS
+#                                as soon as both names point here (run again after the DNS change)
 #
 # On the server, "cockpit-setup <step>" loads the current version from GitHub (main) and runs it.
 # The script is idempotent: running it again keeps existing data, passwords and keys.
@@ -47,6 +49,9 @@ umask 022
 COCKPIT_HOST="${COCKPIT_HOST:-cockpit.steuten-it-solutions.de}"
 STATUS_HOST="${STATUS_HOST:-status.steuten-it-solutions.de}"
 MAIL_HOST="${MAIL_HOST:-mail.steuten-it-solutions.de}"
+# Company website (step "website"): www serves it, the apex redirects there.
+WEB_HOST="${WEB_HOST:-www.steuten-it-solutions.de}"
+WEB_APEX="${WEB_APEX:-steuten-it-solutions.de}"
 MAIL_DOMAIN="${MAIL_DOMAIN:-steuten-it-solutions.de}"
 # Mailboxes (local parts) and forwardings (alias:mailbox). A forwarding's target may send as
 # the alias; every mailbox sends as itself. Running "mail" again applies changes to these lists.
@@ -1439,6 +1444,161 @@ php_crypt() {
     php -r 'echo crypt($argv[1], "\$6\$rounds=5000\$" . bin2hex(random_bytes(8)) . "\$");' "$1"
 }
 
+# Company website on WEB_HOST (www) and WEB_APEX: static files from $APP/website (website/ in
+# the repository, deployed with every merge). No PHP, no .htaccess, a CSP that allows only files
+# from this host. The apex redirects to www. Access logs go to /var/log/website and are deleted
+# after at most 7 days (the privacy notice on the site says so). Without a certificate the site
+# answers on port 80 only; once both names point to this server, the step gets one from Let's
+# Encrypt (renewed by certbot's timer) and switches to HTTPS. Run again after the DNS change.
+website_site() {
+    local tls="$1" cert="/etc/letsencrypt/live/$WEB_HOST" options=""
+    [ -f /etc/letsencrypt/options-ssl-apache.conf ] && options="Include /etc/letsencrypt/options-ssl-apache.conf"
+    # Shared by the HTTP-only and the HTTPS variant: what is served and with which headers.
+    local body
+    body="$(cat <<EOF
+    DocumentRoot $APP/website
+    <Directory $APP/website>
+        Options -Indexes -ExecCGI +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+    # Never run or show PHP here, even if a .php file ended up in the folder.
+    <FilesMatch "\.(php|phtml|phar)$">
+        Require all denied
+    </FilesMatch>
+    ErrorDocument 404 /404.html
+    Header always set Content-Security-Policy "default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "no-referrer"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    <FilesMatch "\.html$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+    <LocationMatch "^/assets/">
+        Header set Cache-Control "public, max-age=3600"
+    </LocationMatch>
+    ErrorLog /var/log/website/error.log
+    CustomLog /var/log/website/access.log combined
+EOF
+)"
+    echo "# Written by server-setup.sh website. The company website (website/ in the repository)."
+    if [ "$tls" = "no" ]; then
+        cat <<EOF
+<VirtualHost *:80>
+    ServerName $WEB_HOST
+    ServerAlias $WEB_APEX
+$body
+</VirtualHost>
+EOF
+        return
+    fi
+    cat <<EOF
+<VirtualHost *:80>
+    ServerName $WEB_HOST
+    ServerAlias $WEB_APEX
+    RewriteEngine on
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://$WEB_HOST%{REQUEST_URI} [END,NE,R=permanent]
+    ErrorLog /var/log/website/error.log
+    CustomLog /var/log/website/access.log combined
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName $WEB_APEX
+    SSLEngine on
+    SSLCertificateFile $cert/fullchain.pem
+    SSLCertificateKeyFile $cert/privkey.pem
+    $options
+    Header always set Strict-Transport-Security "max-age=31536000"
+    RewriteEngine on
+    RewriteRule ^ https://$WEB_HOST%{REQUEST_URI} [END,NE,R=permanent]
+    ErrorLog /var/log/website/error.log
+    CustomLog /var/log/website/access.log combined
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName $WEB_HOST
+    SSLEngine on
+    SSLCertificateFile $cert/fullchain.pem
+    SSLCertificateKeyFile $cert/privkey.pem
+    $options
+    Header always set Strict-Transport-Security "max-age=31536000"
+$body
+</VirtualHost>
+EOF
+}
+
+# True if every A and AAAA record of the name is an address of this server (and there is an A).
+points_here() {
+    local name="$1" v4 v6 record
+    v4="$(dig +short A "$name" | grep -E '^[0-9.]+$' || true)"
+    v6="$(dig +short AAAA "$name" | grep ':' || true)"
+    [ -n "$v4" ] || return 1
+    for record in $v4; do [ "$record" = "$(ip_of 4)" ] || return 1; done
+    for record in $v6; do [ "$record" = "$(ip_of 6)" ] || return 1; done
+}
+
+website() {
+    [ -f "$APP/website/index.html" ] || die "no website in $APP/website: merge and deploy first"
+    export DEBIAN_FRONTEND=noninteractive
+    command -v dig > /dev/null || apt-get install -y -q bind9-dnsutils > /dev/null
+
+    install -d -o root -g adm -m 750 /var/log/website
+    # rotate 6 + daily: a log line is deleted at the latest 7 days after it was written.
+    cat > /etc/logrotate.d/cockpit-website <<'EOF'
+/var/log/website/*.log {
+    daily
+    rotate 6
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 640 root adm
+    sharedscripts
+    postrotate
+        if pgrep -x apache2 > /dev/null; then systemctl reload apache2 > /dev/null; fi
+    endscript
+}
+EOF
+    a2enmod -q headers rewrite ssl > /dev/null
+
+    local tls="no"
+    [ -f "/etc/letsencrypt/live/$WEB_HOST/fullchain.pem" ] && tls="yes"
+    website_site "$tls" > /etc/apache2/sites-available/cockpit-website.conf
+    a2ensite -q cockpit-website > /dev/null
+    apache2ctl configtest
+    systemctl reload apache2
+
+    if [ "$tls" = "no" ]; then
+        if points_here "$WEB_HOST" && points_here "$WEB_APEX"; then
+            echo "Both names point to this server; requesting the certificate ..."
+            # The apache plugin answers the challenge itself; the deploy hook loads renewed certificates.
+            certbot certonly --apache --non-interactive --agree-tos --register-unsafely-without-email \
+                --cert-name "$WEB_HOST" -d "$WEB_HOST" -d "$WEB_APEX" \
+                --deploy-hook "systemctl reload apache2"
+            tls="yes"
+            website_site yes > /etc/apache2/sites-available/cockpit-website.conf
+            apache2ctl configtest
+            systemctl reload apache2
+        else
+            cat <<EOF
+
+The website is set up on port 80, but $WEB_HOST and $WEB_APEX do not both point to this
+server yet (A $(ip_of 4), AAAA $(ip_of 6) or none). Set the DNS records, wait until they are
+visible ("dig +short A $WEB_HOST"), then run "cockpit-setup website" again for HTTPS.
+EOF
+        fi
+    fi
+
+    # Check through Apache on this server, whatever the public DNS says.
+    local scheme="http" port=80 code csp
+    [ "$tls" = "yes" ] && scheme="https" && port=443
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --resolve "$WEB_HOST:$port:127.0.0.1" "$scheme://$WEB_HOST/" || true)"
+    csp="$(curl -s -D - -o /dev/null --max-time 10 --resolve "$WEB_HOST:$port:127.0.0.1" "$scheme://$WEB_HOST/" | grep -ci '^content-security-policy:' || true)"
+    [ "$code" = "200" ] && [ "$csp" -ge 1 ] || die "check failed: $scheme://$WEB_HOST/ answered $code, CSP header: $csp"
+    echo "Done: $scheme://$WEB_HOST/ is served from $APP/website."
+}
+
 case "${1:-}" in
     base) base ;;
     certs) certs ;;
@@ -1453,5 +1613,6 @@ case "${1:-}" in
     cutover) cutover ;;
     rollback) rollback ;;
     ocr) ocr ;;
-    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback|ocr" ;;
+    website) website ;;
+    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback|ocr|website" ;;
 esac
