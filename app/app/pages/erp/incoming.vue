@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { day, euro, INCOMING_CATEGORIES } from '#shared/lib/erp'
+import { day, euro, INCOMING_CATEGORIES, priceText } from '#shared/lib/erp'
 import type { Choice, IncomingInvoice, IncomingMailFile, Supplier } from '#shared/types/erp'
 
 // Incoming invoices: upload, attachments from the mailbox to enter, open ones to pay, all received.
@@ -24,7 +24,55 @@ function pickFile(event: Event) {
   file.value = (event.target as HTMLInputElement).files?.[0] ?? null
   mailFile.value = null
   error.value = null
+  if (file.value !== null) void suggest(file.value, null)
 }
+
+// Suggestions from the file's text (server/lib/erp/extract.ts): for a file without
+// e-invoice data the form opens with what was found; the user checks it before saving.
+interface Suggestion {
+  einvoice: boolean
+  source: 'pdf' | 'ocr' | null
+  problem: string | null
+  fields: { number: string | null, issueDate: string | null, dueDate: string | null, netCents: number | null, taxCents: number | null,
+    iban: string | null, supplierId: number | null } | null
+}
+const suggestion = ref<Suggestion | null>(null)
+async function suggest(selected: File, senderName: string | null) {
+  suggestion.value = null
+  const body = new FormData()
+  body.append('file', selected)
+  const result = await run('suggest', () => $fetch<Suggestion>('/api/erp/incoming/extract', {
+    method: 'POST', body, headers: { 'X-CSRF-Token': useCockpitSession().value?.csrf ?? '' },
+  }))
+  // The user may have picked another file meanwhile.
+  if (result === null || file.value !== selected) return
+  suggestion.value = result
+  if (result.einvoice) return
+  showManual.value = true
+  const f = result.fields
+  if (f === null) return
+  Object.assign(form, {
+    supplierId: f.supplierId !== null ? String(f.supplierId) : NEW,
+    supplierName: f.supplierId === null && form.supplierName === '' ? (senderName ?? '') : form.supplierName,
+    number: f.number ?? form.number,
+    issueDate: f.issueDate ?? form.issueDate,
+    dueDate: f.dueDate ?? form.dueDate,
+    net: f.netCents !== null ? priceText(f.netCents) : form.net,
+    tax: f.taxCents !== null ? priceText(f.taxCents) : form.tax,
+    iban: f.iban ?? form.iban,
+  })
+}
+const suggestionNote = computed(() => {
+  const s = suggestion.value
+  if (s === null || s.einvoice) return s?.einvoice ? 'E-Rechnung erkannt: Die Angaben werden beim Speichern automatisch gelesen.' : null
+  if (s.problem !== null) return s.problem
+  if (s.fields === null) return 'In der Datei wurde kein Text gefunden. Bitte trage die Angaben selbst ein.'
+  const found = [s.fields.number, s.fields.issueDate, s.fields.netCents].filter(v => v !== null).length
+  const how = s.source === 'ocr' ? 'per Texterkennung (OCR) gelesen' : 'aus dem Text der PDF gelesen'
+  return found === 0
+    ? `Text ${how}, aber keine Angaben sicher erkannt. Bitte trage sie selbst ein.`
+    : `Vorschlag ${how}. Bitte prüfe alle Angaben vor dem Speichern.`
+})
 
 // An attachment from the mailbox goes into the form above: the file is loaded from the
 // server and sent back with the typed-in fields; the upload then marks it as entered.
@@ -32,13 +80,16 @@ const mailFile = ref<IncomingMailFile | null>(null)
 async function enterMailFile(item: IncomingMailFile) {
   const blob = await run('mail-load', () => $fetch<Blob>(`/api/erp/incoming/mail/${item.id}`, { responseType: 'blob' }))
   if (blob === null) return
-  file.value = new File([blob], item.fileName, { type: item.fileType })
+  const loaded = new File([blob], item.fileName, { type: item.fileType })
+  file.value = loaded
   if (fileInput.value) fileInput.value.value = ''
   mailFile.value = item
   showManual.value = true
   error.value = item.problem
   warnings.value = []
   document.getElementById('erfassen')?.scrollIntoView({ behavior: 'smooth' })
+  // "Name <address>" of the original sender, as a name for a new supplier.
+  void suggest(loaded, item.sender?.replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '').trim() || null)
 }
 async function ignoreMailFile(item: IncomingMailFile) {
   if (await run(`ignore-${item.id}`, () => cockpitSend('POST', `/api/erp/incoming/mail/${item.id}/ignore`)) !== null) await refresh()
@@ -72,6 +123,7 @@ async function upload() {
     mailFile.value = null
     if (fileInput.value) fileInput.value.value = ''
     showManual.value = false
+    suggestion.value = null
     Object.assign(form, { supplierId: NEW, supplierName: '', number: '', issueDate: '', dueDate: '', net: '', tax: '0', iban: '', note: '' })
     await refresh()
     if (result.warnings.length === 0) await navigateTo(`/erp/incoming-invoice?id=${result.id}`)
@@ -188,7 +240,7 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
         <UAlert v-for="(w, i) in warnings" :key="i" color="warning" variant="subtle" :title="w" class="mb-3" />
         <form class="space-y-3" @submit.prevent="upload">
           <p class="text-xs text-muted">
-            E-Rechnungen (ZUGFeRD-PDF, XRechnung im CII-Format) werden automatisch gelesen. Bei anderen PDFs oder Fotos trägst du die Angaben selbst ein.
+            E-Rechnungen (ZUGFeRD-PDF, XRechnung im CII-Format) werden automatisch gelesen. Bei anderen PDFs und Fotos liest das Cockpit den Text und schlägt die Angaben vor.
           </p>
           <input v-show="!mailFile" ref="fileInput" type="file" accept=".pdf,.xml,application/pdf,application/xml,text/xml,image/png,image/jpeg" class="block w-full text-sm" aria-label="Datei" @change="pickFile">
           <div class="grid grid-cols-2 gap-3">
@@ -199,6 +251,10 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
               <USelect v-model="form.projectId" :items="projectItems" class="w-full" />
             </UFormField>
           </div>
+          <p v-if="busy === 'suggest'" class="text-xs text-muted">
+            Datei wird gelesen …
+          </p>
+          <UAlert v-else-if="suggestionNote" :color="suggestion?.fields && !suggestion.problem ? 'info' : 'neutral'" variant="subtle" :title="suggestionNote" />
           <USwitch v-model="showManual" label="Angaben von Hand eintragen (keine E-Rechnung)" />
           <template v-if="showManual">
             <UFormField label="Lieferant">

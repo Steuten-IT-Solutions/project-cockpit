@@ -144,6 +144,14 @@ until it is entered by hand or ignored. The same file is never taken twice (SHA-
 message is moved to "Verarbeitet" (or "Ohne Rechnung"), never deleted, and stays in the mail
 archive.
 
+**Invoices without e-invoice data.** When such a file is entered, the form is filled with
+suggestions (`POST /api/erp/incoming/extract`). The text comes from the PDF itself (pdftotext)
+or, for scans and photos, from Tesseract OCR with the German model (`server/lib/erp/ocr.ts`);
+both run on the server, so the invoice never leaves it. Plain rules find number, dates,
+amounts, IBAN and a known supplier (`server/lib/erp/extract.ts`); a field stays empty when the
+rules are not sure, and amounts are only filled when net + tax = gross. The programs are
+installed by `cockpit-setup ocr`; without them the form stays empty and says so.
+
 **Senders and logo.** Each kind of document (invoice, cancellation, reminder, quote, order
 confirmation) can have its own From address in the settings; empty falls back to the general
 sender (`senderFor()` in `shared/lib/erp.ts`). The logo may be PNG, JPEG or SVG. An SVG is
