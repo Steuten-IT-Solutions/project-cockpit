@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  addDays, addMonths, csvAmount, csvRow, daysBetween, documentNumber, euro, invoiceState, isoDate, isValidIban, lineDiscount, lineFromForm, lineNet, openAmount, parsePercent, percentText,
+  addDays, addMonths, csvAmount, equalShares, splitCents, csvRow, daysBetween, documentNumber, euro, invoiceState, isoDate, isValidIban, lineDiscount, lineFromForm, lineNet, openAmount, parsePercent, percentText,
   linesFromForm, mailText, parseQuantity, senderFor, period, priceText, quantity, reminderText, totals,
 } from '../../shared/lib/erp'
 import { nextReminder } from '../../server/lib/erp/dunning'
 import { chainHash, correctionProblem, finalizeProblem } from '../../server/lib/erp/invoices'
-import { customerFromBody, incomingFromBody, settingsFromBody, timeFromBody } from '../../server/lib/erp/forms'
+import { customerFromBody, incomingFromBody, projectSharesFromBody, settingsFromBody, timeFromBody } from '../../server/lib/erp/forms'
 import { incomingType, logoType } from '../../server/lib/erp/files'
 import { isSvg, svgProblem, svgToPng } from '../../server/lib/erp/logo'
 import { mimeMessage } from '../../server/lib/erp/mail'
@@ -210,8 +210,30 @@ describe('forms', () => {
     expect(senderFor({ ...senders, mailFrom: null }, 'order')).toBeNull()
   })
 
+  it('splits an incoming invoice across projects', () => {
+    expect(splitCents(10000, [3334, 3333, 3333])).toEqual([3334, 3333, 3333])
+    expect(splitCents(100, [5000, 5000])).toEqual([50, 50])
+    expect(splitCents(101, [5000, 5000])).toEqual([51, 50])
+    expect(splitCents(1, [3334, 3333, 3333])).toEqual([1, 0, 0])
+    expect(splitCents(999, [6000, 4000]).reduce((a, b) => a + b, 0)).toBe(999)
+    expect(equalShares(3)).toEqual([3334, 3333, 3333])
+    expect(equalShares(1)).toEqual([10000])
+    expect(projectSharesFromBody({ projectId: '7' }, [7])).toEqual([{ projectId: 7, shareBp: 10000 }])
+    expect(projectSharesFromBody({ projectId: '' }, [7])).toEqual([])
+    expect(projectSharesFromBody({ projects: '[{"projectId":"7","share":""}]' }, [7])).toEqual([{ projectId: 7, shareBp: 10000 }])
+    expect(projectSharesFromBody({ projects: [{ projectId: 7, share: '60' }, { projectId: 8, share: '40' }] }, [7, 8])).toEqual([{ projectId: 7, shareBp: 6000 }, { projectId: 8, shareBp: 4000 }])
+    expect(projectSharesFromBody({ projects: [{ projectId: 7, share: '60' }, { projectId: 8, share: '30' }] }, [7, 8])).toBe('Die Anteile der Projekte müssen zusammen 100 % ergeben.')
+    expect(projectSharesFromBody({ projects: [{ projectId: 7, share: '50' }, { projectId: 7, share: '50' }] }, [7])).toBe('Jedes Projekt darf nur einmal vorkommen.')
+    expect(projectSharesFromBody({ projects: [{ projectId: 9, share: '' }] }, [7])).toBe('Unbekanntes Projekt.')
+    expect(projectSharesFromBody({ projects: [{ projectId: 7, share: '' }, { projectId: 8, share: '100' }] }, [7, 8])).toMatch(/Anteil in Prozent/)
+  })
+
   it('validates incoming invoices and time entries', () => {
     expect(incomingFromBody({ number: 'RE-1', issueDate: '2026-11-01', net: '100', tax: '19', category: 'hosting' }, [])).toMatchObject({ grossCents: 11900 })
+    // A credit note asks for its own number and date.
+    expect(incomingFromBody({ kind: 'credit', issueDate: '2026-11-01', net: '10', tax: '0', category: 'hosting' }, [])).toBe('Bitte die Nummer der Gutschrift eingeben.')
+    expect(incomingFromBody({ kind: 'credit', number: 'G-1', net: '10', tax: '0', category: 'hosting' }, [])).toBe('Bitte das Datum der Gutschrift angeben.')
+    expect(incomingFromBody({ kind: 'credit', number: 'G-1', issueDate: '2026-11-01', net: '10', tax: '0', category: 'hosting' }, [])).toMatchObject({ kind: 'credit', relatedId: null })
     expect(incomingFromBody({ number: 'RE-1', issueDate: '2026-11-01', net: '100', category: 'x' }, [])).toBe('Bitte eine Kategorie wählen.')
     const time = { workDate: '2026-11-26', customerId: '3', description: 'Arbeit', quantity: '1,5', unit: 'HUR', price: '90', vatRate: 0 }
     expect(timeFromBody(time, { customers: [3], projects: [], orders: [] }, true)).toMatchObject({ quantityMilli: 1500, unitPriceCents: 9000 })

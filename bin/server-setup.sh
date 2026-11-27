@@ -29,6 +29,10 @@
 #                                stop it and drop the copy
 #   bin/server-setup.sh cutover  switch both host names to the Node cockpit and the PHP cron off
 #   bin/server-setup.sh rollback back to the PHP cockpit (keeps the Node build for later)
+#   bin/server-setup.sh ocr      text recognition for incoming invoices without e-invoice data:
+#                                poppler-utils (text of PDFs) and Tesseract with German
+#   bin/server-setup.sh website  the company website (website/) on WEB_HOST and WEB_APEX; HTTPS
+#                                as soon as both names point here (run again after the DNS change)
 #
 # On the server, "cockpit-setup <step>" loads the current version from GitHub (main) and runs it.
 # The script is idempotent: running it again keeps existing data, passwords and keys.
@@ -45,6 +49,9 @@ umask 022
 COCKPIT_HOST="${COCKPIT_HOST:-cockpit.steuten-it-solutions.de}"
 STATUS_HOST="${STATUS_HOST:-status.steuten-it-solutions.de}"
 MAIL_HOST="${MAIL_HOST:-mail.steuten-it-solutions.de}"
+# Company website (step "website"): www serves it, the apex redirects there.
+WEB_HOST="${WEB_HOST:-www.steuten-it-solutions.de}"
+WEB_APEX="${WEB_APEX:-steuten-it-solutions.de}"
 MAIL_DOMAIN="${MAIL_DOMAIN:-steuten-it-solutions.de}"
 # Mailboxes (local parts) and forwardings (alias:mailbox). A forwarding's target may send as
 # the alias; every mailbox sends as itself. Running "mail" again applies changes to these lists.
@@ -112,7 +119,7 @@ base() {
     apt-get install -y -q \
         apache2 "php$PHP-fpm" "php$PHP-cli" "php$PHP-curl" "php$PHP-mbstring" "php$PHP-mysql" \
         "php$PHP-xml" "php$PHP-zip" "php$PHP-gd" mariadb-server ufw unattended-upgrades certbot python3-certbot-apache \
-        fail2ban python3-systemd rsync cron
+        fail2ban python3-systemd rsync cron poppler-utils tesseract-ocr tesseract-ocr-deu
 
     # Security updates install themselves (Debian's default origins: security archive).
     dpkg-reconfigure -f noninteractive unattended-upgrades
@@ -507,7 +514,7 @@ EOF
         chown _rspamd:_rspamd "$dkim_key" "/var/lib/rspamd/dkim/$MAIL_DOMAIN.$DKIM_SELECTOR.txt"
         chmod 600 "$dkim_key"
     fi
-    rspamadm configtest > /dev/null
+    rspamd_settings
 
     # Firewall and fail2ban for the mail ports.
     ufw allow 25/tcp
@@ -1129,6 +1136,17 @@ WantedBy=multi-user.target
 EOF
 }
 
+# The cockpit reads the text of incoming invoices without e-invoice data with these
+# programs (app/server/lib/erp/ocr.ts); nothing leaves the server. Part of "base" for new
+# servers; this step adds them to an existing one.
+ocr() {
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -q
+    apt-get install -y -q poppler-utils tesseract-ocr tesseract-ocr-deu
+    echo "Installed: $(pdftotext -v 2>&1 | head -1), $(tesseract --version 2>&1 | head -1), languages: $(tesseract --list-langs 2>/dev/null | tail -n +2 | tr '\n' ' ')"
+    echo "The cockpit uses them at once; no restart needed."
+}
+
 node_setup() {
     [ -f "$APP/config/config.php" ] || die "$APP/config/config.php is missing"
     command -v php > /dev/null || die "php is missing"
@@ -1426,6 +1444,217 @@ php_crypt() {
     php -r 'echo crypt($argv[1], "\$6\$rounds=5000\$" . bin2hex(random_bytes(8)) . "\$");' "$1"
 }
 
+# Rspamd settings for mail that this server's own software hands to sendmail. The contact form
+# of the website (app/server/routes/_website) sends from noreply@ with the visitor's address as
+# Reply-To, so a reply goes straight to them; Rspamd scores exactly that as a spoofed Reply-To
+# (SPOOF_REPLYTO 6, FREEMAIL_REPLYTO_NEQ_FROM 2) and the message landed in Junk. Only for mail
+# from 127.0.0.1 (local pickup, i.e. this server's programs) with the envelope sender noreply@
+# are these two checks switched off; the content is still checked as usual.
+rspamd_settings() {
+    [ -d /etc/rspamd/local.d ] || return 0
+    cat > /etc/rspamd/local.d/settings.conf <<EOF
+# Written by server-setup.sh (rspamd_settings).
+contact_form {
+  priority = high;
+  ip = "127.0.0.1";
+  from = "noreply@$MAIL_DOMAIN";
+  apply {
+    symbols_disabled = ["SPOOF_REPLYTO", "FREEMAIL_REPLYTO_NEQ_FROM"];
+  }
+}
+EOF
+    rspamadm configtest > /dev/null
+    if systemctl is-active --quiet rspamd; then systemctl reload rspamd; fi
+}
+
+# Company website on WEB_HOST (www) and WEB_APEX: static files from $APP/website (website/ in
+# the repository, deployed with every merge). No PHP, no .htaccess, a CSP that allows only files
+# from this host. Only the contact form's POST goes to the Node cockpit (needs step "node"
+# and the cutover; until then the form shows its error page). The apex redirects to www. Access logs go to /var/log/website and are deleted
+# after at most 7 days (the privacy notice on the site says so). Without a certificate the site
+# answers on port 80 only; once both names point to this server, the step gets one from Let's
+# Encrypt (renewed by certbot's timer) and switches to HTTPS. Run again after the DNS change.
+website_site() {
+    local tls="$1" cert="/etc/letsencrypt/live/$WEB_HOST" options=""
+    [ -f /etc/letsencrypt/options-ssl-apache.conf ] && options="Include /etc/letsencrypt/options-ssl-apache.conf"
+    # Shared by the HTTP-only and the HTTPS variant: what is served and with which headers.
+    local body
+    body="$(cat <<EOF
+    DocumentRoot $APP/website
+    <Directory $APP/website>
+        Options -Indexes -ExecCGI +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+    # Never run or show PHP here, even if a .php file ended up in the folder.
+    <FilesMatch "\.(php|phtml|phar)$">
+        Require all denied
+    </FilesMatch>
+    ErrorDocument 404 /404.html
+    # The contact form is the only dynamic part: POST /kontakt/senden goes to the Node cockpit
+    # (app/server/routes/_website), which mails it to info@ and redirects to a static page.
+    # Other methods are refused, so nothing else of the cockpit is reachable through www.
+    ProxyRequests Off
+    ProxyPreserveHost On
+    ProxyTimeout 30
+    <Location "/kontakt/senden">
+        <LimitExcept POST>
+            Require all denied
+        </LimitExcept>
+        LimitRequestBody 32768
+        ProxyPass "http://127.0.0.1:$APP_PORT/_website/kontakt"
+    </Location>
+    # Node not running: the form's error page instead of Apache's.
+    ErrorDocument 502 /kontakt/fehler/index.html
+    ErrorDocument 503 /kontakt/fehler/index.html
+    Header always set Content-Security-Policy "default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "no-referrer"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    <FilesMatch "\.html$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+    <LocationMatch "^/assets/">
+        Header set Cache-Control "public, max-age=3600"
+    </LocationMatch>
+    ErrorLog /var/log/website/error.log
+    CustomLog /var/log/website/access.log combined
+EOF
+)"
+    echo "# Written by server-setup.sh website. The company website (website/ in the repository)."
+    if [ "$tls" = "no" ]; then
+        cat <<EOF
+<VirtualHost *:80>
+    ServerName $WEB_HOST
+    ServerAlias $WEB_APEX
+$body
+</VirtualHost>
+EOF
+        return
+    fi
+    cat <<EOF
+<VirtualHost *:80>
+    ServerName $WEB_HOST
+    ServerAlias $WEB_APEX
+    RewriteEngine on
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://$WEB_HOST%{REQUEST_URI} [END,NE,R=permanent]
+    ErrorLog /var/log/website/error.log
+    CustomLog /var/log/website/access.log combined
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName $WEB_APEX
+    SSLEngine on
+    SSLCertificateFile $cert/fullchain.pem
+    SSLCertificateKeyFile $cert/privkey.pem
+    $options
+    Header always set Strict-Transport-Security "max-age=31536000"
+    RewriteEngine on
+    RewriteRule ^ https://$WEB_HOST%{REQUEST_URI} [END,NE,R=permanent]
+    ErrorLog /var/log/website/error.log
+    CustomLog /var/log/website/access.log combined
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName $WEB_HOST
+    SSLEngine on
+    SSLCertificateFile $cert/fullchain.pem
+    SSLCertificateKeyFile $cert/privkey.pem
+    $options
+    Header always set Strict-Transport-Security "max-age=31536000"
+$body
+</VirtualHost>
+EOF
+}
+
+# True if every A and AAAA record of the name is an address of this server (and there is an A).
+# Asks the domain's own name server, not the local resolver: that one may still hold the old
+# records from an earlier run for as long as their TTL (often an hour). Prints what it found.
+points_here() {
+    local name="$1" ns v4 v6 record mine4 mine6 ok=0
+    ns="$(dig +short NS "$WEB_APEX" | head -n 1)"
+    ask() { if [ -n "$ns" ]; then dig +short "$1" "$2" "@$ns"; else dig +short "$1" "$2"; fi; }
+    v4="$(ask A "$name" | grep -E '^[0-9.]+$' || true)"
+    v6="$(ask AAAA "$name" | grep ':' || true)"
+    mine4="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1)"
+    mine6="$(ip -6 -o addr show scope global | awk '{print $4}' | cut -d/ -f1)"
+    echo "DNS ${ns:-(local resolver)}: $name A ${v4//$'\n'/ } AAAA ${v6//$'\n'/ }" | tr -s ' '
+    [ -n "$v4" ] || ok=1
+    for record in $v4; do grep -qxF "$record" <<< "$mine4" || ok=1; done
+    for record in $v6; do grep -qxF "$record" <<< "$mine6" || ok=1; done
+    return "$ok"
+}
+
+website() {
+    [ -f "$APP/website/index.html" ] || die "no website in $APP/website: merge and deploy first"
+    export DEBIAN_FRONTEND=noninteractive
+    command -v dig > /dev/null || apt-get install -y -q bind9-dnsutils > /dev/null
+
+    install -d -o root -g adm -m 750 /var/log/website
+    # rotate 6 + daily: a log line is deleted at the latest 7 days after it was written.
+    cat > /etc/logrotate.d/cockpit-website <<'EOF'
+/var/log/website/*.log {
+    daily
+    rotate 6
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 640 root adm
+    sharedscripts
+    postrotate
+        if pgrep -x apache2 > /dev/null; then systemctl reload apache2 > /dev/null; fi
+    endscript
+}
+EOF
+    a2enmod -q headers rewrite ssl proxy proxy_http > /dev/null
+    # The contact form's mail must not land in Junk (see rspamd_settings).
+    rspamd_settings
+    # A global name keeps Apache from warning (AH00558) that it cannot determine one.
+    echo "ServerName $COCKPIT_HOST" > /etc/apache2/conf-available/cockpit-servername.conf
+    a2enconf -q cockpit-servername > /dev/null
+
+    local tls="no"
+    [ -f "/etc/letsencrypt/live/$WEB_HOST/fullchain.pem" ] && tls="yes"
+    website_site "$tls" > /etc/apache2/sites-available/cockpit-website.conf
+    a2ensite -q cockpit-website > /dev/null
+    apache2ctl configtest
+    systemctl reload apache2
+
+    if [ "$tls" = "no" ]; then
+        local www_ok=0 apex_ok=0
+        points_here "$WEB_HOST" || www_ok=1
+        points_here "$WEB_APEX" || apex_ok=1
+        if [ "$www_ok" = 0 ] && [ "$apex_ok" = 0 ]; then
+            echo "Both names point to this server; requesting the certificate ..."
+            # The apache plugin answers the challenge itself; the deploy hook loads renewed certificates.
+            certbot certonly --apache --non-interactive --agree-tos --register-unsafely-without-email \
+                --cert-name "$WEB_HOST" -d "$WEB_HOST" -d "$WEB_APEX" \
+                --deploy-hook "systemctl reload apache2"
+            tls="yes"
+            website_site yes > /etc/apache2/sites-available/cockpit-website.conf
+            apache2ctl configtest
+            systemctl reload apache2
+        else
+            cat <<EOF
+
+The website is set up on port 80, but $WEB_HOST and $WEB_APEX do not both point to this
+server yet (A $(ip_of 4), AAAA $(ip_of 6) or none). Set the DNS records, wait until they are
+visible ("dig +short A $WEB_HOST"), then run "cockpit-setup website" again for HTTPS.
+EOF
+        fi
+    fi
+
+    # Check through Apache on this server, whatever the public DNS says.
+    local scheme="http" port=80 code csp
+    [ "$tls" = "yes" ] && scheme="https" && port=443
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --resolve "$WEB_HOST:$port:127.0.0.1" "$scheme://$WEB_HOST/" || true)"
+    csp="$(curl -s -D - -o /dev/null --max-time 10 --resolve "$WEB_HOST:$port:127.0.0.1" "$scheme://$WEB_HOST/" | grep -ci '^content-security-policy:' || true)"
+    [ "$code" = "200" ] && [ "$csp" -ge 1 ] || die "check failed: $scheme://$WEB_HOST/ answered $code, CSP header: $csp"
+    echo "Done: $scheme://$WEB_HOST/ is served from $APP/website."
+}
+
 case "${1:-}" in
     base) base ;;
     certs) certs ;;
@@ -1439,5 +1668,7 @@ case "${1:-}" in
     rehearsal-stop) rehearsal_stop ;;
     cutover) cutover ;;
     rollback) rollback ;;
-    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback" ;;
+    ocr) ocr ;;
+    website) website ;;
+    *) die "usage: $0 base|certs|mail|mail-password <address>|mail-import <address>|backup <storage box>|archive|node|rehearsal|rehearsal-stop|cutover|rollback|ocr|website" ;;
 esac

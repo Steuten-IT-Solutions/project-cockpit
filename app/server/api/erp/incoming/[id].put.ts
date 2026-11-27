@@ -6,6 +6,6 @@ export default defineEventHandler(async (event) => {
   const erp = useErp(event)
   const values = incomingFromBody(await readObject(event), (await erp.master.projects()).map(p => p.id))
   if (typeof values === 'string') refuse(values)
-  if (!await new IncomingRepository(erp.pool).update(idParam(event), values, erp.now())) refuse('Verworfene Rechnungen können nicht geändert werden.')
+  if (!await erpAction(() => new IncomingRepository(erp.pool).update(idParam(event), values, erp.now()))) refuse('Verworfene Rechnungen können nicht geändert werden.')
   return { message: 'Gespeichert.' }
 })

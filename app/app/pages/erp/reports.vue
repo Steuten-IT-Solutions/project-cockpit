@@ -9,7 +9,7 @@ interface Report {
   customers: { name: string, net: number }[]
   projects: { name: string, revenue: number, expenses: number }[]
   categories: { category: string, gross: number }[]
-  totals: { invoicedNet: number, invoicedTax: number, received: number, expensesPaid: number, expensesInvoiced: number, openReceivables: number, openPayables: number }
+  totals: { invoicedNet: number, invoicedTax: number, received: number, expensesPaid: number, expensesInvoiced: number, paymentDifferences: number, openReceivables: number, openPayables: number }
   smallBusiness: { previousYearReceived: number, currentYearReceived: number, limits: { previousYear: number, currentYear: number } }
 }
 const year = ref<number | null>(null)
@@ -67,6 +67,9 @@ const sb = computed(() => data.value?.report.smallBusiness)
         </p>
         <p class="text-2xl font-semibold text-highlighted">
           {{ euro(data.report.totals.expensesPaid) }}
+        </p>
+        <p v-if="data.report.totals.paymentDifferences !== 0" class="mt-1 text-xs text-muted">
+          davon Abweichungen zur Rechnung (Bankgebühren, Kursdifferenzen) {{ euro(data.report.totals.paymentDifferences) }}
         </p>
       </UCard>
       <UCard>

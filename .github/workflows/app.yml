@@ -56,6 +56,9 @@ jobs:
       - name: PHP dependencies
         working-directory: .
         run: composer install --no-dev --no-interaction --no-progress --prefer-dist
+      # Text of PDFs and OCR for incoming invoices without e-invoice data, as on the server (cockpit-setup ocr).
+      - name: OCR programs
+        run: sudo apt-get update -q && sudo apt-get install -y -q poppler-utils tesseract-ocr tesseract-ocr-deu
       - name: Integration tests
         env:
           # The tests drop and recreate this database.

@@ -1,4 +1,4 @@
-import { idField, incomingFromBody } from '../../../lib/erp/forms'
+import { idField, incomingFromBody, projectSharesFromBody } from '../../../lib/erp/forms'
 import { IncomingRepository, type ManualEntry } from '../../../lib/erp/incoming'
 import { MailFileRepository } from '../../../lib/erp/mailbox'
 import { INCOMING_CATEGORIES } from '#shared/lib/erp'
@@ -20,8 +20,8 @@ export default defineEventHandler(async (event) => {
   const category = body.category ?? 'other'
   if (!(category in INCOMING_CATEGORIES)) refuse('Bitte eine Kategorie wählen.')
   const projectIds = (await erp.master.projects()).map(p => p.id)
-  const projectId = idField(body.projectId)
-  if (projectId === 'invalid' || (projectId !== null && !projectIds.includes(projectId))) refuse('Unbekanntes Projekt.')
+  const projects = projectSharesFromBody(body, projectIds)
+  if (typeof projects === 'string') refuse(projects)
 
   // The typed-in fields count only when the file is no e-invoice; until then a
   // validation message is kept and shown only if they are needed.
@@ -33,9 +33,20 @@ export default defineEventHandler(async (event) => {
       ? fields
       : { supplierId: supplierId === 'invalid' ? null : supplierId, supplierName: (body.supplierName ?? '').trim().slice(0, 100) || null, fields }
   }
-  const result = await erpAction(() => new IncomingRepository(erp.pool).upload({ name: file.filename ?? 'rechnung', data: file.data }, manual, category, projectId, erp.engine, erp.now()))
+  const mailFiles = new MailFileRepository(erp.pool)
   const mailFileId = idField(body.mailFileId)
-  if (typeof mailFileId === 'number') await new MailFileRepository(erp.pool).booked(mailFileId, result.id, erp.now())
+  const result = await erpAction(async () => {
+    // A refused entry leaves the mailbox file waiting, so a typo (e.g. the number of the
+    // original invoice on a credit note) never makes it disappear.
+    try {
+      return await new IncomingRepository(erp.pool).upload({ name: file.filename ?? 'rechnung', data: file.data }, manual, category, projects, erp.engine, erp.now())
+    }
+    finally {
+      // A mailbox file with the same content as an entered invoice no longer waits.
+      await mailFiles.settle(erp.now())
+    }
+  })
+  if (typeof mailFileId === 'number') await mailFiles.booked(mailFileId, result.id, erp.now())
   const read = result.format === 'other' ? 'Erfasst.' : 'E-Rechnung gelesen und erfasst.'
   return { ...result, message: read }
 })

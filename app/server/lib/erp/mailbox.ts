@@ -83,16 +83,39 @@ export class MailFileRepository {
 
   /** Files waiting to be entered, oldest first. */
   async waiting(): Promise<IncomingMailFile[]> {
-    return rows<IncomingMailFile>(this.pool, `SELECT ${COLUMNS} FROM incoming_mail_files WHERE status = 'new' ORDER BY id`)
+    // A file entered on another way (uploaded by hand) no longer waits, even before settle() ran.
+    return rows<IncomingMailFile>(this.pool, `SELECT ${COLUMNS} FROM incoming_mail_files m WHERE status = 'new'
+      AND NOT EXISTS (SELECT 1 FROM incoming_invoices i WHERE i.file_sha256 = m.sha256) ORDER BY id`)
   }
 
   async file(id: number): Promise<{ content: Buffer, name: string, type: string } | null> {
     return one(this.pool, 'SELECT content, file_name AS name, file_type AS type FROM incoming_mail_files WHERE id = ?', [id])
   }
 
-  async ignore(id: number, now: string): Promise<boolean> {
-    const result = await exec(this.pool, `UPDATE incoming_mail_files SET status = 'ignored', problem = 'Von Hand ignoriert.', updated_at = ? WHERE id = ? AND status = 'new'`, [now, id])
+  /** The most recently set aside files (ignored by hand or skipped on fetching), newest first. */
+  async ignored(limit = 30): Promise<IncomingMailFile[]> {
+    return rows<IncomingMailFile>(this.pool, `SELECT ${COLUMNS} FROM incoming_mail_files WHERE status = 'ignored' ORDER BY updated_at DESC, id DESC LIMIT ?`, [limit])
+  }
+
+  /** Puts an ignored file back on the list to be entered. */
+  async restore(id: number, now: string): Promise<boolean> {
+    const result = await exec(this.pool, `UPDATE incoming_mail_files SET status = 'new', problem = NULL, updated_at = ? WHERE id = ? AND status = 'ignored'`, [now, id])
     return result.affectedRows > 0
+  }
+
+  async ignore(id: number, now: string, reason = 'Von Hand ignoriert.'): Promise<boolean> {
+    const result = await exec(this.pool, `UPDATE incoming_mail_files SET status = 'ignored', problem = ?, updated_at = ? WHERE id = ? AND status = 'new'`, [reason.slice(0, 500), now, id])
+    return result.affectedRows > 0
+  }
+
+  /**
+   * Marks waiting files as entered whose very file is already an incoming invoice, e.g.
+   * when the same PDF was uploaded by hand instead of via "Erfassen". Returns how many.
+   */
+  async settle(now: string): Promise<number> {
+    const result = await exec(this.pool, `UPDATE incoming_mail_files m JOIN incoming_invoices i ON i.file_sha256 = m.sha256
+      SET m.status = 'booked', m.incoming_invoice_id = i.id, m.problem = NULL, m.updated_at = ? WHERE m.status = 'new'`, [now])
+    return result.affectedRows
   }
 
   async booked(id: number, incomingInvoiceId: number, now: string): Promise<void> {
@@ -111,9 +134,12 @@ export class MailFileRepository {
     [mail.messageId, file.sender, file.subject, received, file.name, file.type, sha, file.data, now, now])
     if (inserted.affectedRows === 0) return 'known'
     const id = inserted.insertId
-    if (file.type.startsWith('image/')) return 'new'
+    if (file.type.startsWith('image/')) {
+      await this.settle(now)
+      return (await one<{ status: string }>(this.pool, 'SELECT status FROM incoming_mail_files WHERE id = ?', [id]))?.status === 'booked' ? 'ignored' : 'new'
+    }
     try {
-      const result = await new IncomingRepository(this.pool).upload({ name: file.name, data: file.data }, null, 'other', null, engine, now)
+      const result = await new IncomingRepository(this.pool).upload({ name: file.name, data: file.data }, null, 'other', [], engine, now)
       await this.booked(id, result.id, now)
       if (result.warnings.length > 0) await exec(this.pool, 'UPDATE incoming_mail_files SET problem = ? WHERE id = ?', [result.warnings.join(' ').slice(0, 500), id])
       return 'booked'
@@ -147,6 +173,7 @@ export async function fetchMailbox(access: MailboxAccess, pool: Pool, engine: In
   connect: (access: MailboxAccess) => ImapFlow = imapClient): Promise<FetchResult> {
   const repository = new MailFileRepository(pool)
   const result: FetchResult = { messages: 0, booked: 0, waiting: 0, ignored: 0 }
+  await repository.settle(now)
   const client = connect(access)
   await client.connect()
   try {

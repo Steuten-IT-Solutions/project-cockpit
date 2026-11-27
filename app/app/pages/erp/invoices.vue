@@ -13,13 +13,14 @@ const FILTERS = [
   { value: 'draft', label: 'Entwürfe' },
   { value: 'paid', label: 'Bezahlt' },
 ]
-const route = useRoute()
-const filter = ref(String(route.query.filter ?? 'all'))
-const search = ref('')
+// Filter and search live in the address (?filter=unpaid&q=…), so going back from an invoice
+// shows the list as it was; the overview links here with ?filter=… too.
+const state = useListState({ filter: 'all', q: '' }, { filter: FILTERS.map(f => f.value) })
+const { last, rowId, open: remember } = useLastOpened('invoices')
 const list = computed(() => (data.value?.invoices ?? []).filter((i) => {
-  if (filter.value === 'unpaid' && i.state !== 'open' && i.state !== 'overdue') return false
-  if (filter.value !== 'all' && filter.value !== 'unpaid' && i.state !== filter.value) return false
-  const q = search.value.trim().toLowerCase()
+  if (state.filter === 'unpaid' && i.state !== 'open' && i.state !== 'overdue') return false
+  if (state.filter !== 'all' && state.filter !== 'unpaid' && i.state !== state.filter) return false
+  const q = state.q.trim().toLowerCase()
   return q === '' || `${i.number ?? ''} ${i.customerName}`.toLowerCase().includes(q)
 }))
 const open = computed(() => (data.value?.invoices ?? []).filter(i => i.state === 'open' || i.state === 'overdue'))
@@ -42,18 +43,21 @@ const overdueSum = computed(() => open.value.filter(i => i.state === 'overdue').
       Offen <strong class="text-highlighted">{{ euro(openSum) }}</strong> · davon überfällig <strong :class="overdueSum > 0 ? 'text-error' : 'text-highlighted'">{{ euro(overdueSum) }}</strong>
     </p>
     <div class="flex flex-wrap gap-2">
-      <UButton v-for="f in FILTERS" :key="f.value" size="sm" :color="filter === f.value ? 'primary' : 'neutral'" :variant="filter === f.value ? 'solid' : 'outline'" @click="filter = f.value">
+      <UButton v-for="f in FILTERS" :key="f.value" size="sm" :color="state.filter === f.value ? 'primary' : 'neutral'" :variant="state.filter === f.value ? 'solid' : 'outline'" @click="state.filter = f.value">
         {{ f.label }}
       </UButton>
-      <UInput v-model="search" size="sm" icon="i-lucide-search" placeholder="Nummer oder Kunde" class="w-56" aria-label="Suchen" />
+      <UInput v-model="state.q" size="sm" icon="i-lucide-search" placeholder="Nummer oder Kunde" class="w-56" aria-label="Suchen" />
     </div>
     <UCard>
       <p v-if="list.length === 0" class="text-sm text-muted">
         Keine Rechnungen.
       </p>
       <ul v-else class="divide-y divide-default">
-        <li v-for="i in list" :key="i.id">
-          <NuxtLink :to="`/erp/invoice?id=${i.id}`" class="flex flex-wrap items-center justify-between gap-2 py-2 hover:bg-elevated/50">
+        <li v-for="i in list" :id="rowId(i.id)" :key="i.id">
+          <NuxtLink
+            :to="`/erp/invoice?id=${i.id}`" class="flex flex-wrap items-center justify-between gap-2 py-2 hover:bg-elevated/50"
+            :class="last === i.id ? 'bg-primary/10 ring-1 ring-primary/40 rounded-md px-2 -mx-2' : ''" @click="remember(i.id)"
+          >
             <div class="text-sm">
               <strong>{{ i.number ?? 'Entwurf' }}</strong>
               <span class="ml-2">{{ i.customerName }}</span>

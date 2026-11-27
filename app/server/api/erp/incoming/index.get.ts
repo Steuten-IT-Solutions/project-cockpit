@@ -5,7 +5,8 @@ export default defineEventHandler(async (event) => {
   await requireUser(event)
   const erp = useErp(event)
   const repository = new IncomingRepository(erp.pool)
-  const [invoices, suppliers, projects, mailFiles, mailbox] = await Promise.all([repository.list(), repository.suppliers(), erp.master.projects(),
-    new MailFileRepository(erp.pool).waiting(), new MailboxSettingsRepository(erp.pool, erp.crypto).settings()])
-  return { invoices, suppliers, projects, mailFiles, mailbox: mailbox.user, today: erp.today() }
+  const mailFiles = new MailFileRepository(erp.pool)
+  const [invoices, suppliers, projects, waiting, ignoredMailFiles, mailbox] = await Promise.all([repository.list(), repository.suppliers(), erp.master.projects(),
+    mailFiles.waiting(), mailFiles.ignored(), new MailboxSettingsRepository(erp.pool, erp.crypto).settings()])
+  return { invoices, suppliers, projects, mailFiles: waiting, ignoredMailFiles, mailbox: mailbox.user, today: erp.today() }
 })

@@ -1,0 +1,252 @@
+/* Company website (www). Static, no scripts, no external resources: the CSP of its Apache
+   site (bin/server-setup.sh, step "website") allows only files from this host.
+   The colours come from the company logo: anthracite (#20272a, #192124) with the greys of
+   the folded S (#454b4e to #5b6063). Everything else derives from them. */
+:root {
+  --brand: #20272a;
+  --brand-deep: #192124;
+  --brand-grey: #5b6063;
+  --brand-text: #ffffff;
+  --bg: #ffffff;
+  --bg-alt: #f3f4f5;
+  --surface: #ffffff;
+  --text: #1a1d23;
+  --muted: #5b6063;
+  --border: #e2e4e6;
+  --radius: 14px;
+  --wrap: 1120px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121719;
+    --bg-alt: #192124;
+    --surface: #1e2629;
+    --text: #e8ecf1;
+    --muted: #a3a9ad;
+    --border: #2f383c;
+    --brand: #e6e9ec;
+    --brand-text: #192124;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+img { max-width: 100%; height: auto; }
+
+a { color: var(--brand); }
+
+a:focus-visible, .button:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 20px; }
+.narrow > * { max-width: 760px; }
+
+/* Header */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(160%) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-row, .footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header-row { min-height: 64px; }
+.footer-row { flex-wrap: wrap; }
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.brand img { display: block; width: auto; height: 32px; }
+
+@media (min-width: 600px) {
+  .brand img { height: 36px; }
+}
+
+nav { display: flex; gap: 16px; font-size: 0.95rem; }
+
+@media (min-width: 600px) {
+  nav { gap: 24px; font-size: 1rem; }
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+nav a:hover, nav a[aria-current="page"] { color: var(--text); }
+
+/* Hero */
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: 72px 0 80px;
+  color: #ffffff;
+  background:
+    radial-gradient(900px 460px at 90% -20%, color-mix(in srgb, var(--brand-grey) 55%, transparent), transparent 70%),
+    radial-gradient(600px 360px at -10% 120%, color-mix(in srgb, #454b4e 45%, transparent), transparent 70%),
+    linear-gradient(160deg, #20282b, var(--brand-deep));
+}
+
+.hero .eyebrow { color: #b6bbbe; }
+.hero .lead { color: #d5d9dc; }
+.hero .button { background: #ffffff; color: var(--brand-deep); }
+.hero .button:hover { box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1, h2, h3 { line-height: 1.2; letter-spacing: -0.02em; }
+
+.hero h1 {
+  margin: 0 0 20px;
+  max-width: 18ch;
+  font-size: clamp(2.1rem, 6vw, 3.6rem);
+}
+
+.lead {
+  max-width: 60ch;
+  margin: 0 0 32px;
+  color: var(--muted);
+  font-size: 1.15rem;
+}
+
+.button {
+  display: inline-block;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--brand-text);
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--brand) 35%, transparent);
+}
+
+/* Sections */
+.section { padding: 64px 0; }
+.section-alt { background: var(--bg-alt); }
+.section h2 { margin: 0 0 24px; font-size: clamp(1.6rem, 4vw, 2.2rem); }
+
+.cards { display: grid; gap: 16px; }
+
+.card {
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  border-top: 4px solid var(--brand-grey);
+}
+
+.card h3 { margin: 0 0 8px; font-size: 1.2rem; }
+.card p { margin: 0; color: var(--muted); }
+
+.section-lead { margin: -8px 0 28px; color: var(--muted); max-width: 60ch; }
+
+.card-link {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-link:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgb(0 0 0 / 10%); }
+.card-link h3 { margin: 0; }
+.card-link .card-url { margin-top: auto; padding-top: 8px; color: var(--text); font-weight: 600; font-size: 0.95rem; }
+.card-link .card-url::after { content: " \2197"; }
+
+@media (min-width: 900px) {
+  .cards { grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .hero { padding: 112px 0 120px; }
+  .section { padding: 96px 0; }
+}
+
+/* Contact form */
+.contact-form { display: grid; gap: 6px; margin-top: 24px; }
+
+.contact-form label { font-weight: 600; margin-top: 10px; }
+
+.contact-form input, .contact-form textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.contact-form textarea { resize: vertical; min-height: 160px; }
+
+.contact-form input:focus-visible, .contact-form textarea:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-grey) 60%, transparent);
+  outline-offset: 1px;
+  border-color: var(--brand-grey);
+}
+
+.contact-form .button { justify-self: start; border: 0; cursor: pointer; font-size: 1rem; }
+
+.form-note { margin: 12px 0 8px; color: var(--muted); font-size: 0.9rem; }
+
+/* The honeypot: out of sight and out of the tab order, but still in the form for bots. */
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+/* Legal pages */
+.legal h1 { margin-top: 0; font-size: clamp(1.8rem, 5vw, 2.6rem); }
+.legal h2 { margin: 32px 0 8px; font-size: 1.2rem; }
+.legal p, .legal li { overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+
+/* Footer */
+.site-footer {
+  padding: 28px 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.hero a:focus-visible { outline-color: #ffffff; }

@@ -59,7 +59,7 @@ describe('ERP', () => {
   it('saves company data, customers and the catalog', async () => {
     expect((await send('PUT', '/api/erp/settings', { ...SETTINGS, iban: 'DE00' })).json.statusMessage).toBe('Die IBAN ist ungültig.')
     expect((await send('PUT', '/api/erp/settings', SETTINGS)).status).toBe(200)
-    const created = await send('POST', '/api/erp/customers', { kind: 'business', name: 'Kunde GmbH', street: 'Weg 2', postcode: '10115', city: 'Berlin', email: 'kunde@example.org', projectId: '1' })
+    const created = await send('POST', '/api/erp/customers', { kind: 'business', name: 'Kunde GmbH', contactName: 'Erika Kunde', street: 'Weg 2', postcode: '10115', city: 'Berlin', email: 'kunde@example.org', projectId: '1' })
     expect(created.status).toBe(200)
     customerId = created.json.id as number
     expect((await send('POST', '/api/erp/catalog', { name: 'Stunde', unit: 'HUR', price: '90', vatRate: 19 })).json.statusMessage).toContain('Kleinunternehmer')
@@ -88,7 +88,10 @@ describe('ERP', () => {
     invoiceId = draft.json.id as number
     const preview = await client.request(`/api/erp/invoices/${invoiceId}/preview`)
     expect(preview.headers.get('content-type')).toBe('application/pdf')
-    expect(Buffer.from(await preview.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-')
+    const previewPdf = Buffer.from(await preview.arrayBuffer())
+    expect(previewPdf.subarray(0, 5).toString()).toBe('%PDF-')
+    // The customer's contact person is printed below its name.
+    expect(execFileSync('pdftotext', ['-', '-'], { input: previewPdf }).toString()).toMatch(/Kunde GmbH\s+Erika Kunde\s+Weg 2/)
 
     const finalized = await send('POST', `/api/erp/invoices/${invoiceId}/finalize`)
     expect(finalized.status).toBe(200)
@@ -236,6 +239,37 @@ describe('ERP', () => {
     expect((await client.json<{ mailFiles: IncomingMailFile[] }>('/api/erp/incoming')).mailFiles).toHaveLength(0)
     expect((await send('POST', `/api/erp/incoming/mail/${waiting.id}/ignore`)).status).toBe(422)
 
+    // A waiting file that was uploaded by hand instead of via "Erfassen" stops waiting;
+    // one refused because its number is in the books already keeps waiting to be corrected.
+    const insertMailFile = async (content: Buffer) => ((await sql(`INSERT INTO incoming_mail_files (file_name, file_type, sha256, content, status, created_at, updated_at)
+      VALUES ('b.pdf', 'application/pdf', SHA2(?, 256), ?, 'new', NOW(), NOW()) RETURNING id`, [content, content])) as [{ id: number }])[0].id
+    const other = Buffer.from('%PDF-1.4\n% andere Datei\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')
+    const byHand = await insertMailFile(other)
+    const twin = await insertMailFile(Buffer.from('%PDF-1.4\n% Kopie\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n'))
+    expect((await client.json<{ mailFiles: IncomingMailFile[] }>('/api/erp/incoming')).mailFiles.map(m => m.id)).toEqual([byHand, twin])
+    const entry = (content: Buffer, extra: Record<string, string>) => {
+      const f = new FormData()
+      f.append('file', new Blob([content], { type: 'application/pdf' }), 'b.pdf')
+      for (const [k, v] of Object.entries({ category: 'other', supplierName: 'Lieferant', number: 'P-8', issueDate: '2026-11-20', net: '20', tax: '0', ...extra })) f.append(k, v)
+      return upload('/api/erp/incoming', f)
+    }
+    expect((await entry(other, {})).status).toBe(200)
+    expect((await sql('SELECT status FROM incoming_mail_files WHERE id = ?', [byHand]))).toEqual([{ status: 'booked' }])
+    const refused = await entry(Buffer.from('%PDF-1.4\n% Kopie\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n'), { mailFileId: String(twin), number: 'P-7' })
+    expect(refused.status).toBe(422)
+    expect((await client.json<{ mailFiles: IncomingMailFile[] }>('/api/erp/incoming')).mailFiles.map(m => m.id)).toEqual([twin])
+    // A credit note may carry the number of the supplier's invoice it refers to.
+    expect((await entry(Buffer.from('%PDF-1.4\n% Kopie\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n'), { mailFileId: String(twin), number: 'P-7', kind: 'credit' })).status).toBe(200)
+    expect((await sql('SELECT status FROM incoming_mail_files WHERE id = ?', [twin]))).toEqual([{ status: 'booked' }])
+    // An ignored file can be put back on the list.
+    const ignored = await insertMailFile(Buffer.from('%PDF-1.4\n% ignoriert\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n'))
+    expect((await send('POST', `/api/erp/incoming/mail/${ignored}/ignore`)).status).toBe(200)
+    expect((await client.json<{ ignoredMailFiles: IncomingMailFile[] }>('/api/erp/incoming')).ignoredMailFiles.map(m => m.id)).toContain(ignored)
+    expect((await send('POST', `/api/erp/incoming/mail/${ignored}/restore`)).status).toBe(200)
+    expect((await send('POST', `/api/erp/incoming/mail/${ignored}/restore`)).status).toBe(422)
+    expect((await client.json<{ mailFiles: IncomingMailFile[] }>('/api/erp/incoming')).mailFiles.map(m => m.id)).toEqual([ignored])
+    expect((await send('POST', `/api/erp/incoming/mail/${ignored}/ignore`)).status).toBe(200)
+
     // A received XML is shown as text, never as a document the browser would run.
     const [{ id: xmlId }] = (await sql(`INSERT INTO incoming_mail_files (file_name, file_type, sha256, content, status, created_at, updated_at)
       VALUES ('x.xml', 'application/xml', REPEAT('a', 64), '<x/>', 'new', NOW(), NOW()) RETURNING id`)) as [{ id: number }]
@@ -333,5 +367,127 @@ describe('ERP', () => {
     ;({ invoice } = await client.json<{ invoice: InvoiceDetail }>(`/api/erp/invoices/${id}`))
     expect(invoice.state).toBe('paid')
     expect((await client.json<{ problems: string[] }>('/api/erp/invoices/verify')).problems).toEqual([])
+  })
+
+  it('suggests the fields of an invoice without e-invoice data, from its text or by OCR', async () => {
+    // A quote is a PDF with text but without e-invoice data, like many supplier invoices.
+    const quote = await send('POST', '/api/erp/sales', { kind: 'quote', customerId, lines: [{ ...LINE, quantity: '2' }] })
+    const pdf = Buffer.from(await (await client.request(`/api/erp/sales/${quote.json.id as number}/preview`)).arrayBuffer())
+    const suggest = async (data: Buffer, name: string, type: string) => {
+      const form = new FormData()
+      form.append('file', new Blob([data], { type }), name)
+      return (await upload('/api/erp/incoming/extract', form)).json as { einvoice: boolean, source: string | null, problem: string | null, fields: Record<string, unknown> | null }
+    }
+    const fromText = await suggest(pdf, 'rechnung.pdf', 'application/pdf')
+    expect(fromText).toMatchObject({ einvoice: false, source: 'pdf', problem: null, fields: { netCents: 18000, taxCents: 0, grossCents: 18000 } })
+
+    // The same page as a photo: read by Tesseract.
+    const scan = join(dir, 'scan')
+    execFileSync('pdftoppm', ['-r', '200', '-gray', '-png', '-f', '1', '-l', '1', '-', scan], { input: pdf })
+    const fromPhoto = await suggest(readFileSync(`${scan}-1.png`), 'foto.png', 'image/png')
+    expect(fromPhoto).toMatchObject({ einvoice: false, source: 'ocr', fields: { grossCents: 18000 } })
+
+    // An e-invoice needs no suggestions.
+    const einvoice = Buffer.from(await (await client.request(`/api/erp/invoices/${invoiceId}/pdf`)).arrayBuffer())
+    expect(await suggest(einvoice, 'e.pdf', 'application/pdf')).toMatchObject({ einvoice: true, fields: null })
+  })
+
+  it('splits an incoming invoice across projects', async () => {
+    await sql(`INSERT INTO projects (id, full_name, owner, name, html_url, is_private, is_archived, is_fork, default_branch, synced_at, hidden)
+      VALUES (2, 'Org/web', 'Org', 'web', 'https://github.com/Org/web', 1, 0, 0, 'main', NOW(), 0)`)
+    const year = new Date().getFullYear()
+    const form = new FormData()
+    form.append('file', new Blob([Buffer.from('%PDF-1.4\n% Server\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')], { type: 'application/pdf' }), 'server.pdf')
+    const fields = { category: 'hosting', supplierName: 'Hoster', number: 'H-1', issueDate: `${year}-03-01`, net: '100,01', tax: '19,00',
+      projects: JSON.stringify([{ projectId: '1', share: '60' }, { projectId: '2', share: '40' }]) }
+    for (const [k, v] of Object.entries(fields)) form.append(k, v)
+    const created = await upload('/api/erp/incoming', form)
+    expect(created.status).toBe(200)
+    const id = created.json.id as number
+    const detail = () => client.json<{ invoice: { projectId: number | null, projects: { projectId: number, shareBp: number }[] } }>(`/api/erp/incoming/${id}`)
+    expect((await detail()).invoice).toMatchObject({ projectId: 1, projects: [{ projectId: 1, shareBp: 6000 }, { projectId: 2, shareBp: 4000 }] })
+
+    // The evaluation counts 60,01 € for app and 40,00 € for web: the parts add up to the net.
+    const expenses = async () => (await client.json<{ report: { projects: { name: string, expenses: number }[] } }>(`/api/erp/report?year=${year}`)).report.projects
+    const before = await expenses()
+    const of = (list: { name: string, expenses: number }[], name: string) => list.find(p => p.name === name)?.expenses ?? 0
+    expect(of(before, 'web')).toBe(4000)
+
+    const base = { number: 'H-1', issueDate: `${year}-03-01`, net: '100,01', tax: '19,00', category: 'hosting', iban: '', note: '' }
+    expect((await send('PUT', `/api/erp/incoming/${id}`, { ...base, projects: [{ projectId: '1', share: '70' }, { projectId: '2', share: '20' }] })).json.statusMessage).toContain('100 %')
+    expect((await send('PUT', `/api/erp/incoming/${id}`, { ...base, projects: [{ projectId: '2', share: '' }] })).status).toBe(200)
+    expect((await detail()).invoice).toMatchObject({ projectId: 2, projects: [{ projectId: 2, shareBp: 10000 }] })
+    const after = await expenses()
+    expect(of(after, 'web')).toBe(10001)
+    expect(of(after, 'app')).toBe(of(before, 'app') - 6001)
+  })
+
+  it('records an incoming invoice in US dollars with the euros paid', async () => {
+    const form = new FormData()
+    form.append('file', new Blob([Buffer.from('%PDF-1.4\n% USD\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')], { type: 'application/pdf' }), 'usd.pdf')
+    for (const [k, v] of Object.entries({ category: 'software', supplierName: 'US Inc.', number: 'INV-9', issueDate: '2026-11-03', net: '100,00', tax: '0', currency: 'USD', euroGross: '80,00' })) form.append(k, v)
+    const created = await upload('/api/erp/incoming', form)
+    expect(created.status).toBe(200)
+    const id = created.json.id as number
+    const { invoice } = await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)
+    expect(invoice).toMatchObject({ netCents: 8000, grossCents: 8000, currency: 'USD', originalNetCents: 10000, originalTaxCents: 0, exchangeRate: 1.25 })
+    // Back to euros: the originals go.
+    const base = { number: 'INV-9', issueDate: '2026-11-03', net: '81,00', tax: '0', category: 'software', iban: '', note: '', currency: 'EUR', euroGross: '' }
+    expect((await send('PUT', `/api/erp/incoming/${id}`, base)).status).toBe(200)
+    expect((await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)).invoice).toMatchObject({ netCents: 8100, currency: 'EUR', exchangeRate: null })
+  })
+
+  it('records a credit note of a supplier that lowers the expenses', async () => {
+    const year = new Date().getFullYear()
+    const { invoices } = await client.json<{ invoices: { id: number, number: string, supplierName: string }[] }>('/api/erp/incoming')
+    const original = invoices.find(i => i.number === 'H-1')!
+    const other = invoices.find(i => i.number === 'INV-9')!
+    const expenses = async () => (await client.json<{ report: { projects: { name: string, expenses: number }[] } }>(`/api/erp/report?year=${year}`)).report.projects
+      .find(p => p.name === 'web')?.expenses ?? 0
+    const before = await expenses()
+    const credit = (relatedId: number, name: string) => {
+      const form = new FormData()
+      form.append('file', new Blob([Buffer.from(`%PDF-1.4\n% Credit ${relatedId}\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n`)], { type: 'application/pdf' }), name)
+      const fields = { category: 'hosting', supplierName: 'Hoster', number: 'G-1', issueDate: `${year}-03-10`, net: '20,00', tax: '3,80',
+        kind: 'credit', relatedId: String(relatedId), projects: JSON.stringify([{ projectId: '2', share: '' }]) }
+      for (const [k, v] of Object.entries(fields)) form.append(k, v)
+      return upload('/api/erp/incoming', form)
+    }
+    // An invoice of another supplier is refused.
+    expect((await credit(other.id, 'wrong.pdf')).json.statusMessage).toContain('selben Lieferanten')
+    const created = await credit(original.id, 'credit.pdf')
+    expect(created.status).toBe(200)
+    const id = created.json.id as number
+    const detail = await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)
+    expect(detail.invoice).toMatchObject({ kind: 'credit', relatedId: original.id, grossCents: 2380 })
+    expect(await expenses()).toBe(before - 2000)
+    // The original lists it, and cannot become a credit note itself.
+    const page = await client.json<{ siblings: { id: number, relatedId: number | null }[] }>(`/api/erp/incoming/${original.id}`)
+    expect(page.siblings.find(s => s.id === id)?.relatedId).toBe(original.id)
+    const base = { number: 'H-1', issueDate: `${year}-03-01`, net: '100,01', tax: '19,00', category: 'hosting', iban: '', note: '', kind: 'credit', relatedId: '' }
+    expect((await send('PUT', `/api/erp/incoming/${original.id}`, base)).json.statusMessage).toContain('Gutschriften')
+    // Marked as refunded, it counts as paid back in the export.
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: `${year}-03-12` })).status).toBe(200)
+  })
+
+  it('records a debit that differs from the invoice without changing it', async () => {
+    const year = new Date().getFullYear()
+    const form = new FormData()
+    form.append('file', new Blob([Buffer.from('%PDF-1.4\n% Abbuchung\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')], { type: 'application/pdf' }), 'ai.pdf')
+    for (const [k, v] of Object.entries({ category: 'software', supplierName: 'KI-Dienst', number: 'AI-1', issueDate: `${year}-02-01`, net: '20,00', tax: '3,80' })) form.append(k, v)
+    const id = (await upload('/api/erp/incoming', form)).json.id as number
+    const totals = async () => (await client.json<{ report: { totals: { expensesPaid: number, paymentDifferences: number } } }>(`/api/erp/report?year=${year}`)).report.totals
+    const before = await totals()
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: `${year}-02-03`, paidAmount: 'zwanzig' })).status).toBe(422)
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: `${year}-02-03`, paidAmount: '24,22' })).status).toBe(200)
+    const { invoice } = await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)
+    expect(invoice).toMatchObject({ grossCents: 2380, taxCents: 380, paidCents: 2422, status: 'paid' })
+    const after = await totals()
+    expect(after.expensesPaid - before.expensesPaid).toBe(2422)
+    expect(after.paymentDifferences - before.paymentDifferences).toBe(42)
+    // The same amount as the invoice is no difference; opening again clears it.
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: '' })).status).toBe(200)
+    expect((await send('POST', `/api/erp/incoming/${id}/paid`, { paidOn: `${year}-02-03`, paidAmount: '23,80' })).status).toBe(200)
+    expect((await client.json<{ invoice: Record<string, unknown> }>(`/api/erp/incoming/${id}`)).invoice).toMatchObject({ paidCents: null })
   })
 })

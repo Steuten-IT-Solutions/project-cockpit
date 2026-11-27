@@ -29,6 +29,7 @@ The user interface is German; code, comments, commits and documentation are Engl
 ```
 public/       document root of the cockpit subdomain (index.php, assets, .htaccess)
 receiver/     document root of the status subdomain (accepts status and bug reports only)
+website/      the static company website on www (HTML and CSS only, see "Company website")
 src/          application code (namespace Cockpit\)
 templates/    PHP templates; every dynamic value is escaped with $e()
 migrations/   NNNN_name.sql, applied in order by cron/run.php and the setup page
@@ -37,7 +38,7 @@ config/       config.example.php in Git; config.php only on the server
 var/          sessions (server only, never deployed)
 ```
 
-Only `public/` and `receiver/` may be reachable from the web. A root `.htaccess` denies everything
+Only `public/`, `receiver/` and the static `website/` may be reachable from the web. A root `.htaccess` denies everything
 in case the document root is ever pointed at the project root by mistake.
 
 ## Server setup on the IONOS webspace (one-time, legacy)
@@ -109,6 +110,36 @@ the new Nuxt cockpit; see `app/README.md`, "Deployment" and "Cutover checklist".
    `/srv/cockpit/app/.previous/` and logs each deployment in `.deploy-log`. The first deployment
    with this script uploads file by file over SFTP once and brings the script along. Nothing to
    install.
+
+## Company website
+
+`website/` is the company website for `www.steuten-it-solutions.de` (the apex redirects to www):
+plain HTML and one stylesheet, no scripts, no cookies, nothing loaded from other hosts, plus a
+contact form (see below). Pages are
+folders with an `index.html` (`/impressum/`, `/datenschutz/`); `404.html` is the error page.
+The brand colours are the two variables at the top of `website/assets/site.css`.
+
+- **Check:** `bin/check-website.sh` (CI job `website`) fails on open placeholders
+  (`{{OFFEN: …}}`), inline scripts or styles, resources loaded from other hosts (links to
+  other sites are fine) and broken internal links, so an unfinished page cannot be deployed.
+- **Deployment:** part of every build (`/srv/cockpit/app/website`).
+- **Server:** `cockpit-setup website` writes the Apache site `cockpit-website` (no PHP, strict
+  CSP, HSTS) and logs to `/var/log/website/`, deleted after at most 7 days, as the privacy
+  notice states. Until both `www.` and the apex point to the server (A and, if present, AAAA)
+  it serves HTTP only; after the DNS change run it again and it gets a Let's Encrypt
+  certificate and switches to HTTPS.
+- **Contact form:** the only dynamic part. Apache forwards `POST /kontakt/senden` (nothing else)
+  to the Node cockpit, `app/server/routes/_website/kontakt.post.ts`, which answers only for the
+  www host name, mails the message from `noreply@` to `info@` through sendmail (Reply-To: the
+  visitor) and redirects to `/kontakt/danke/` or `/kontakt/fehler/`. Spam protection without
+  third parties: a honeypot field, a limit on links, 5 messages per IP and 30 in total per hour
+  (in memory only). Rspamd would score the visitor's Reply-To as spoofed, so for mail from
+  127.0.0.1 with sender `noreply@` the steps `mail` and `website` switch off `SPOOF_REPLYTO` and
+  `FREEMAIL_REPLYTO_NEQ_FROM` (`/etc/rspamd/local.d/settings.conf`). Settings `NUXT_WEBSITE_HOST`, `NUXT_WEBSITE_CONTACT_TO`,
+  `NUXT_WEBSITE_CONTACT_FROM` (defaults in `app/nuxt.config.ts`).
+- **Legal texts:** the Impressum (§ 5 DDG) and the privacy notice describe the real setup. When
+  the site gets a contact form, analytics, external fonts or embedded media, update
+  `website/datenschutz/index.html` in the same pull request.
 
 ## Mail server
 

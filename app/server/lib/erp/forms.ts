@@ -1,5 +1,6 @@
 import { parseAmount } from '#shared/lib/costs'
-import { cleanText, CUSTOMER_KINDS, INCOMING_CATEGORIES, isEmail, isoDate, isValidIban, isVatId, MAIL_SENDERS, type MailSenderField, parseQuantity, SUBSCRIPTION_INTERVALS, UNITS, VAT_RATES } from '#shared/lib/erp'
+import type { ProjectShare } from '#shared/types/erp'
+import { cleanText, CURRENCIES, CUSTOMER_KINDS, INCOMING_CATEGORIES, isEmail, isoDate, isValidIban, isVatId, MAIL_SENDERS, type MailSenderField, parsePercent, parseQuantity, SUBSCRIPTION_INTERVALS, euroParts, UNITS, VAT_RATES } from '#shared/lib/erp'
 
 // Validation of the ERP's forms. Each function takes the request body and returns the
 // clean values or a German message for the user. Pure, unit tested.
@@ -138,28 +139,89 @@ export function supplierFromBody(body: Body): SupplierInput | string {
 
 export interface IncomingInput {
   number: string, issueDate: string, dueDate: string | null, netCents: number, taxCents: number, grossCents: number
-  category: string, projectId: number | null, iban: string | null, note: string | null
+  category: string, projects: ProjectShare[], iban: string | null, note: string | null
+  /** 'credit' for a credit note or refund of the supplier, optionally for the incoming invoice relatedId. */
+  kind: 'invoice' | 'credit', relatedId: number | null
+  /** The invoice's currency; for another one than EUR the amounts above are the euros entered for it. */
+  currency: string, originalNetCents: number | null, originalTaxCents: number | null, exchangeRate: number | null
+}
+
+/**
+ * The projects an incoming invoice is split across: "projects" as a list (or its JSON
+ * text, from a multipart form) of { projectId, share } with the share in percent, or
+ * the older single "projectId". One project takes 100 %; several must add up to 100 %.
+ */
+export function projectSharesFromBody(body: Body, projectIds: number[]): ProjectShare[] | string {
+  let list: unknown = field(body, 'projects')
+  if (typeof list === 'string') {
+    try {
+      list = JSON.parse(list)
+    }
+    catch {
+      return 'Die Projektzuordnung ist ungültig.'
+    }
+  }
+  if (list === undefined || list === null) list = [{ projectId: field(body, 'projectId'), share: '' }]
+  if (!Array.isArray(list) || list.length > 20) return 'Die Projektzuordnung ist ungültig.'
+  const rows: { projectId: number, share: unknown }[] = []
+  for (const item of list as unknown[]) {
+    const entry = typeof item === 'object' && item !== null ? item as Record<string, unknown> : {}
+    const projectId = idField(entry.projectId)
+    if (projectId === null) continue
+    if (projectId === 'invalid' || !projectIds.includes(projectId)) return 'Unbekanntes Projekt.'
+    if (rows.some(r => r.projectId === projectId)) return 'Jedes Projekt darf nur einmal vorkommen.'
+    rows.push({ projectId, share: entry.share })
+  }
+  if (rows.length === 1) return [{ projectId: rows[0]!.projectId, shareBp: 10000 }]
+  const shares: ProjectShare[] = []
+  for (const r of rows) {
+    const shareBp = parsePercent(String(r.share ?? ''))
+    if (shareBp === null || shareBp === 0) return 'Bitte für jedes Projekt einen Anteil in Prozent eintragen, z. B. 50 oder 33,33.'
+    shares.push({ projectId: r.projectId, shareBp })
+  }
+  if (shares.length > 0 && shares.reduce((a, b) => a + b.shareBp, 0) !== 10000) return 'Die Anteile der Projekte müssen zusammen 100 % ergeben.'
+  return shares
 }
 
 /** The editable fields of an incoming invoice; amounts as German text, gross = net + tax. */
 export function incomingFromBody(body: Body, projectIds: number[]): IncomingInput | string {
+  const kind = field(body, 'kind') === 'credit' ? 'credit' : 'invoice'
   const number = optional(body, 'number', 60)
-  if (number === null) return 'Bitte die Rechnungsnummer des Lieferanten eingeben.'
+  if (number === null) return kind === 'credit' ? 'Bitte die Nummer der Gutschrift eingeben.' : 'Bitte die Rechnungsnummer des Lieferanten eingeben.'
   const issueDate = isoDate(field(body, 'issueDate'))
-  if (issueDate === null) return 'Bitte das Rechnungsdatum angeben.'
+  if (issueDate === null) return kind === 'credit' ? 'Bitte das Datum der Gutschrift angeben.' : 'Bitte das Rechnungsdatum angeben.'
   const due = field(body, 'dueDate')
   const dueDate = due === '' || due === null || due === undefined ? null : isoDate(due)
   if (dueDate === null && due !== '' && due !== null && due !== undefined) return 'Das Fälligkeitsdatum ist ungültig.'
   const netCents = parseAmount(String(field(body, 'net') ?? ''))
   const taxCents = parseAmount(String(field(body, 'tax') ?? '0') || '0')
   if (netCents === null || taxCents === null) return 'Netto und Steuer müssen Beträge wie 49,90 sein.'
+  // An invoice in another currency: net and tax are typed as printed on it, and the euro
+  // total ("euroGross", e.g. from the bank statement) is what goes into the books.
+  const currency = String(field(body, 'currency') ?? 'EUR') || 'EUR'
+  if (!(currency in CURRENCIES)) return 'Unbekannte Währung.'
+  let amounts = { netCents, taxCents }
+  let exchangeRate: number | null = null
+  if (currency !== 'EUR') {
+    const euroGross = parseAmount(String(field(body, 'euroGross') ?? ''))
+    if (euroGross === null || euroGross === 0) return `Bitte den Betrag in Euro eintragen, z. B. wie er vom Konto abgebucht wurde.`
+    amounts = euroParts(euroGross, netCents, taxCents)
+    // The rate this means, units of the currency per euro (as banks and the ECB quote it); for reference only.
+    exchangeRate = Number(((netCents + taxCents) / euroGross).toFixed(6))
+  }
   const category = String(field(body, 'category') ?? '')
   if (!(category in INCOMING_CATEGORIES)) return 'Bitte eine Kategorie wählen.'
-  const projectId = idField(field(body, 'projectId'))
-  if (projectId === 'invalid' || (projectId !== null && !projectIds.includes(projectId))) return 'Unbekanntes Projekt.'
+  const related = idField(field(body, 'relatedId'))
+  if (related === 'invalid') return 'Unbekannte Rechnung für die Gutschrift.'
+  const projects = projectSharesFromBody(body, projectIds)
+  if (typeof projects === 'string') return projects
   const iban = optional(body, 'iban', 50)?.replaceAll(' ', '').toUpperCase() ?? null
   if (iban !== null && !isValidIban(iban)) return 'Die IBAN ist ungültig.'
-  return { number, issueDate, dueDate, netCents, taxCents, grossCents: netCents + taxCents, category, projectId, iban, note: cleanText(field(body, 'note'), 500, true) }
+  return {
+    number, issueDate, dueDate, netCents: amounts.netCents, taxCents: amounts.taxCents, grossCents: amounts.netCents + amounts.taxCents, category, projects, iban,
+    note: cleanText(field(body, 'note'), 500, true), currency, exchangeRate, kind, relatedId: kind === 'credit' ? related : null,
+    originalNetCents: exchangeRate === null ? null : netCents, originalTaxCents: exchangeRate === null ? null : taxCents,
+  }
 }
 
 export interface TimeInput {

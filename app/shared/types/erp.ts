@@ -140,25 +140,43 @@ export interface MailboxSettings {
   hasPassword: boolean
 }
 
+/** A project's share of an incoming invoice, in basis points (10000 = 100 %). */
+export interface ProjectShare { projectId: number, shareBp: number }
+
 export interface IncomingInvoice {
   id: number
   supplierId: number
   supplierName: string
   status: 'open' | 'paid' | 'discarded'
+  /** 'credit' for a credit note or refund from the supplier: it lowers the expenses; "paid" means refunded. */
+  kind: 'invoice' | 'credit'
+  /** For a credit: the incoming invoice it refers to, if known. */
+  relatedId: number | null
   number: string
   issueDate: string
   dueDate: string | null
   netCents: number
   taxCents: number
   grossCents: number
+  /** The invoice's currency; for another one than EUR the amounts above are in euros, converted at exchangeRate. */
+  currency: string
+  originalNetCents: number | null
+  originalTaxCents: number | null
+  /** Units of the currency per 1 euro (as the ECB quotes it). */
+  exchangeRate: number | null
   category: string
+  /** The project with the largest share; see `projects` for all of them. */
   projectId: number | null
+  /** The projects the net amount is split across; empty if none. */
+  projects: ProjectShare[]
   iban: string | null
   note: string | null
   format: string
   fileName: string
   fileType: string
   paidOn: string | null
+  /** The euros actually debited, when they differ from the gross amount (bank fees, exchange differences). */
+  paidCents: number | null
   discardedReason: string | null
   createdAt: string
 }
