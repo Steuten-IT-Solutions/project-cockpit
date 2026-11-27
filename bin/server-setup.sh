@@ -514,7 +514,7 @@ EOF
         chown _rspamd:_rspamd "$dkim_key" "/var/lib/rspamd/dkim/$MAIL_DOMAIN.$DKIM_SELECTOR.txt"
         chmod 600 "$dkim_key"
     fi
-    rspamadm configtest > /dev/null
+    rspamd_settings
 
     # Firewall and fail2ban for the mail ports.
     ufw allow 25/tcp
@@ -1444,6 +1444,29 @@ php_crypt() {
     php -r 'echo crypt($argv[1], "\$6\$rounds=5000\$" . bin2hex(random_bytes(8)) . "\$");' "$1"
 }
 
+# Rspamd settings for mail that this server's own software hands to sendmail. The contact form
+# of the website (app/server/routes/_website) sends from noreply@ with the visitor's address as
+# Reply-To, so a reply goes straight to them; Rspamd scores exactly that as a spoofed Reply-To
+# (SPOOF_REPLYTO 6, FREEMAIL_REPLYTO_NEQ_FROM 2) and the message landed in Junk. Only for mail
+# from 127.0.0.1 (local pickup, i.e. this server's programs) with the envelope sender noreply@
+# are these two checks switched off; the content is still checked as usual.
+rspamd_settings() {
+    [ -d /etc/rspamd/local.d ] || return 0
+    cat > /etc/rspamd/local.d/settings.conf <<EOF
+# Written by server-setup.sh (rspamd_settings).
+contact_form {
+  priority = high;
+  ip = "127.0.0.1";
+  from = "noreply@$MAIL_DOMAIN";
+  apply {
+    symbols_disabled = ["SPOOF_REPLYTO", "FREEMAIL_REPLYTO_NEQ_FROM"];
+  }
+}
+EOF
+    rspamadm configtest > /dev/null
+    if systemctl is-active --quiet rspamd; then systemctl reload rspamd; fi
+}
+
 # Company website on WEB_HOST (www) and WEB_APEX: static files from $APP/website (website/ in
 # the repository, deployed with every merge). No PHP, no .htaccess, a CSP that allows only files
 # from this host. Only the contact form's POST goes to the Node cockpit (needs step "node"
@@ -1586,6 +1609,8 @@ website() {
 }
 EOF
     a2enmod -q headers rewrite ssl proxy proxy_http > /dev/null
+    # The contact form's mail must not land in Junk (see rspamd_settings).
+    rspamd_settings
     # A global name keeps Apache from warning (AH00558) that it cannot determine one.
     echo "ServerName $COCKPIT_HOST" > /etc/apache2/conf-available/cockpit-servername.conf
     a2enconf -q cockpit-servername > /dev/null
