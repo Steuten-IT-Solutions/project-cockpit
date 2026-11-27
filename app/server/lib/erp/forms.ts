@@ -1,5 +1,5 @@
 import { parseAmount } from '#shared/lib/costs'
-import { cleanText, CUSTOMER_KINDS, INCOMING_CATEGORIES, isEmail, isoDate, isValidIban, isVatId, parseQuantity, SUBSCRIPTION_INTERVALS, UNITS, VAT_RATES } from '#shared/lib/erp'
+import { cleanText, CUSTOMER_KINDS, INCOMING_CATEGORIES, isEmail, isoDate, isValidIban, isVatId, MAIL_SENDERS, type MailSenderField, parseQuantity, SUBSCRIPTION_INTERVALS, UNITS, VAT_RATES } from '#shared/lib/erp'
 
 // Validation of the ERP's forms. Each function takes the request body and returns the
 // clean values or a German message for the user. Pure, unit tested.
@@ -72,11 +72,16 @@ export function catalogFromBody(body: Body, smallBusiness: boolean): CatalogInpu
   return { name, description: cleanText(field(body, 'description'), 500, true), unit, unitPriceCents, vatRate }
 }
 
-export interface SettingsInput {
+export interface SettingsInput extends Record<MailSenderField, string | null> {
   name: string, contactName: string | null, street: string, postcode: string, city: string, country: string
   email: string | null, phone: string | null, website: string | null, taxNumber: string | null, vatId: string | null
   iban: string, bic: string | null, bankName: string | null, smallBusiness: boolean, paymentDays: number
   exemptionReason: string | null, mailFrom: string | null, mailText: string | null
+}
+
+/** "Name <address>" or a bare address. */
+function isSender(value: string): boolean {
+  return isEmail(/<([^>]+)>$/.exec(value)?.[1] ?? value)
 }
 
 export function settingsFromBody(body: Body): SettingsInput | string {
@@ -97,12 +102,18 @@ export function settingsFromBody(body: Body): SettingsInput | string {
   const paymentDays = Number(field(body, 'paymentDays'))
   if (!Number.isInteger(paymentDays) || paymentDays < 0 || paymentDays > 120) return 'Das Zahlungsziel muss zwischen 0 und 120 Tagen liegen.'
   const mailFrom = optional(body, 'mailFrom', 190)
-  if (mailFrom !== null && !isEmail(/<([^>]+)>$/.exec(mailFrom)?.[1] ?? mailFrom)) return 'Der Absender muss eine E-Mail-Adresse sein, z. B. Steuten IT Solutions <rechnung@steuten-it-solutions.de>.'
+  if (mailFrom !== null && !isSender(mailFrom)) return 'Der Absender muss eine E-Mail-Adresse sein, z. B. Steuten IT Solutions <rechnung@steuten-it-solutions.de>.'
+  const senders = {} as Record<MailSenderField, string | null>
+  for (const { field: key, label } of MAIL_SENDERS) {
+    const value = optional(body, key, 190)
+    if (value !== null && !isSender(value)) return `Der Absender für ${label} muss eine E-Mail-Adresse sein, z. B. Steuten IT Solutions <rechnung@steuten-it-solutions.de>.`
+    senders[key] = value
+  }
   return {
     name, contactName: optional(body, 'contactName', 100), street: place.street!, postcode: place.postcode!, city: place.city!, country: place.country!,
     email, phone: optional(body, 'phone', 50), website: optional(body, 'website', 190), taxNumber, vatId, iban, bic,
     bankName: optional(body, 'bankName', 100), smallBusiness: field(body, 'smallBusiness') === true, paymentDays,
-    exemptionReason: optional(body, 'exemptionReason', 255), mailFrom, mailText: cleanText(field(body, 'mailText'), 2000, true),
+    exemptionReason: optional(body, 'exemptionReason', 255), mailFrom, ...senders, mailText: cleanText(field(body, 'mailText'), 2000, true),
   }
 }
 

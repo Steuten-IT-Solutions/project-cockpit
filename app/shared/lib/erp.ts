@@ -222,6 +222,27 @@ export const INVOICE_STATES: Record<string, { label: string, tone: 'neutral' | '
 }
 
 /** Dunning levels: a friendly reminder first, then two reminders (no fees, no interest). */
+/**
+ * Kinds of documents sent by e-mail, each with its own optional sender (the settings
+ * field) that falls back to the general sender when empty.
+ */
+export const MAIL_SENDERS = [
+  { kind: 'invoice', field: 'mailFromInvoice', label: 'Rechnungen' },
+  { kind: 'cancellation', field: 'mailFromCancellation', label: 'Stornorechnungen' },
+  { kind: 'reminder', field: 'mailFromReminder', label: 'Zahlungserinnerungen und Mahnungen' },
+  { kind: 'quote', field: 'mailFromQuote', label: 'Angebote' },
+  { kind: 'order', field: 'mailFromOrder', label: 'Auftragsbestätigungen' },
+] as const
+
+export type MailKind = typeof MAIL_SENDERS[number]['kind']
+export type MailSenderField = typeof MAIL_SENDERS[number]['field']
+
+/** The From address for a kind of document: its own sender, else the general one. */
+export function senderFor(settings: { mailFrom: string | null } & Record<MailSenderField, string | null>, kind: MailKind): string | null {
+  const own = MAIL_SENDERS.find(s => s.kind === kind)!.field
+  return settings[own] ?? settings.mailFrom
+}
+
 export const REMINDER_LEVELS: Record<number, string> = { 1: 'Zahlungserinnerung', 2: '1. Mahnung', 3: '2. Mahnung' }
 
 /** Days the customer gets after a reminder. */

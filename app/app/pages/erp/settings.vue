@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { MAIL_SENDERS } from '#shared/lib/erp'
 import type { CompanySettings } from '#shared/types/erp'
 
 // Own company data, printed on every document and copied into each invoice when it
@@ -11,7 +12,8 @@ const { busy, run } = useAction()
 const form = reactive({
   name: '', contactName: '', street: '', postcode: '', city: '', country: 'DE', email: '', phone: '', website: '',
   taxNumber: '', vatId: '', iban: '', bic: '', bankName: '', smallBusiness: true, paymentDays: '14',
-  exemptionReason: '', mailFrom: '', mailText: '',
+  exemptionReason: '', mailFrom: '', mailFromInvoice: '', mailFromCancellation: '', mailFromReminder: '', mailFromQuote: '',
+  mailFromOrder: '', mailText: '',
 })
 function fill() {
   const s = data.value?.settings
@@ -159,6 +161,18 @@ async function removeLogo() {
           <UFormField label="Absender" help="Muss ein Postfach auf deinem Mailserver sein, z. B. Steuten IT Solutions <rechnung@steuten-it-solutions.de>.">
             <UInput v-model="form.mailFrom" :maxlength="190" class="w-full" />
           </UFormField>
+          <!-- Optional own sender per kind of document; empty uses the general sender above. -->
+          <fieldset class="space-y-3">
+            <legend class="text-sm font-medium text-highlighted">
+              Eigener Absender je Beleg
+            </legend>
+            <p class="text-xs text-muted">
+              Leer lassen, dann gilt der Absender oben. Nimm nur Adressen, die dein Mailserver für den Versand erlaubt, sonst landen die Mails im Spam.
+            </p>
+            <UFormField v-for="sender in MAIL_SENDERS" :key="sender.kind" :label="sender.label" hint="optional">
+              <UInput v-model="form[sender.field]" :maxlength="190" :placeholder="form.mailFrom || 'Name <adresse@…>'" class="w-full" />
+            </UFormField>
+          </fieldset>
           <UFormField label="Text der E-Mail" help="Platzhalter: {dokument}, {nummer}, {betrag}, {faellig}, {absender}">
             <UTextarea v-model="form.mailText" :rows="7" :maxlength="2000" autoresize class="w-full" />
           </UFormField>
@@ -177,12 +191,12 @@ async function removeLogo() {
             Noch kein Logo. Es erscheint oben links auf Rechnungen, Angeboten und Auftragsbestätigungen.
           </p>
           <p class="text-xs text-muted">
-            PNG oder JPEG, höchstens 1 MB. Gedruckt wird es höchstens 70 × 25 mm groß; am besten ein breites Bild mit transparentem oder weißem Hintergrund.
+            PNG, JPEG oder SVG, höchstens 1 MB. Gedruckt wird es höchstens 70 × 25 mm groß; am besten ein breites Bild mit transparentem oder weißem Hintergrund. Ein SVG wird beim Hochladen in ein scharfes PNG (600 dpi) umgewandelt; Schrift darin am besten vorher in Pfade umwandeln.
           </p>
           <div class="flex flex-wrap items-center gap-2">
             <label class="cursor-pointer">
               <span class="sr-only">Logo hochladen</span>
-              <input type="file" accept="image/png,image/jpeg" class="text-sm" :disabled="!data.settings || busy === 'logo'" @change="uploadLogo">
+              <input type="file" accept="image/png,image/jpeg,image/svg+xml,.svg" class="text-sm" :disabled="!data.settings || busy === 'logo'" @change="uploadLogo">
             </label>
             <UButton v-if="data.settings?.hasLogo" size="sm" color="neutral" variant="ghost" :loading="busy === 'logo-delete'" @click="removeLogo">
               Entfernen

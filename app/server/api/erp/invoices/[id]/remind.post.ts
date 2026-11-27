@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
     const reminder = nextReminder(invoice, settings, erp.today())
     const to = recipient(body.to, invoice.customerEmail)
     const file = await repository.file(id, 'pdf')
-    await sendDocument(erp.mail, settings, to, reminder.subject, reminder.text, [{ filename: `${invoice.number}.pdf`, contentType: 'application/pdf', content: file!.content }])
+    await sendDocument(erp.mail, settings, 'reminder', to, reminder.subject, reminder.text, [{ filename: `${invoice.number}.pdf`, contentType: 'application/pdf', content: file!.content }])
     await repository.addReminder(id, { level: reminder.level, sentOn: erp.today(), newDueDate: reminder.newDueDate, recipient: to, body: reminder.text }, erp.now())
     await repository.event(erp.pool, id, 'reminded', `${reminder.title} an ${to}`, erp.now())
     return { message: `${reminder.title} an ${to} gesendet.` }

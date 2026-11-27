@@ -135,6 +135,13 @@ with Mustang (`.github/workflows/einvoice.yml`). The deploy therefore ships `bin
 `src/`, `vendor/` and `resources/fonts` next to `node/`; `NUXT_ERP_PHP_BINARY` and
 `NUXT_ERP_PHP_DIR` override `php` and the folder above the app.
 
+**Senders and logo.** Each kind of document (invoice, cancellation, reminder, quote, order
+confirmation) can have its own From address in the settings; empty falls back to the general
+sender (`senderFor()` in `shared/lib/erp.ts`). The logo may be PNG, JPEG or SVG. An SVG is
+checked strictly (no scripts, no links outside the file, no DOCTYPE) and turned into a 600 dpi
+PNG with resvg at upload (`server/lib/erp/logo.ts`); only that PNG is stored, printed and shown,
+so the SVG itself never reaches a browser. Text in an SVG uses the fonts installed on the server.
+
 **What is issued cannot change** (§ 146 Abs. 4 AO, GoBD): triggers refuse any update or delete
 of finalized invoices, their lines and files, received files and issued quotes. Each
 finalized invoice carries `hash = SHA-256(prev_hash | number | sha256(xml) | sha256(pdf))` in the

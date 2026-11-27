@@ -5,12 +5,13 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   addDays, addMonths, csvAmount, csvRow, daysBetween, documentNumber, euro, invoiceState, isoDate, isValidIban, lineFromForm, lineNet,
-  linesFromForm, mailText, parseQuantity, period, priceText, quantity, reminderText, totals,
+  linesFromForm, mailText, parseQuantity, senderFor, period, priceText, quantity, reminderText, totals,
 } from '../../shared/lib/erp'
 import { nextReminder } from '../../server/lib/erp/dunning'
 import { chainHash, finalizeProblem } from '../../server/lib/erp/invoices'
 import { customerFromBody, incomingFromBody, settingsFromBody, timeFromBody } from '../../server/lib/erp/forms'
 import { incomingType, logoType } from '../../server/lib/erp/files'
+import { isSvg, svgProblem, svgToPng } from '../../server/lib/erp/logo'
 import { mimeMessage } from '../../server/lib/erp/mail'
 import { entryLine } from '../../server/lib/erp/timeEntries'
 import { crc32, zip } from '../../server/lib/erp/zip'
@@ -166,6 +167,15 @@ describe('forms', () => {
     expect(settingsFromBody({ ...body, iban: 'DE00' })).toBe('Die IBAN ist ungültig.')
     expect(settingsFromBody({ ...body, mailFrom: 'Steuten IT <rechnung@example.org>' })).toMatchObject({ mailFrom: 'Steuten IT <rechnung@example.org>' })
     expect(settingsFromBody({ ...body, mailFrom: 'kein Absender' })).toContain('Absender')
+    expect(settingsFromBody({ ...body, mailFromQuote: 'Info <info@example.org>' })).toMatchObject({ mailFromQuote: 'Info <info@example.org>', mailFromInvoice: null })
+    expect(settingsFromBody({ ...body, mailFromReminder: 'mahnung' })).toContain('Zahlungserinnerungen und Mahnungen')
+  })
+
+  it('takes the sender of the document kind, else the general one', () => {
+    const senders = { mailFrom: 'A <rechnung@example.org>', mailFromInvoice: null, mailFromCancellation: null, mailFromReminder: null, mailFromQuote: 'B <info@example.org>', mailFromOrder: null }
+    expect(senderFor(senders, 'quote')).toBe('B <info@example.org>')
+    expect(senderFor(senders, 'invoice')).toBe('A <rechnung@example.org>')
+    expect(senderFor({ ...senders, mailFrom: null }, 'order')).toBeNull()
   })
 
   it('validates incoming invoices and time entries', () => {
@@ -185,6 +195,32 @@ describe('files', () => {
     expect(incomingType(Buffer.from('%PDF-1.7'))).toBe('application/pdf')
     expect(incomingType(Buffer.from('﻿<?xml version="1.0"?><x/>'))).toBe('application/xml')
     expect(incomingType(Buffer.from('MZ'))).toBeNull()
+  })
+
+  it('turns a plain SVG logo into a sharp PNG and refuses active content', () => {
+    const svg = '<?xml version="1.0"?><!-- Inkscape --><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 200 50">'
+      + '<defs><linearGradient id="g"><stop offset="0" stop-color="#06c"/></linearGradient></defs><rect width="200" height="50" fill="url(#g)"/></svg>'
+    expect(isSvg(Buffer.from(svg))).toBe(true)
+    expect(isSvg(Buffer.from('<html><svg></svg></html>'))).toBe(false)
+    const result = svgToPng(svg)
+    if (typeof result === 'string') throw new Error(result)
+    expect(logoType(result.png)).toBe('image/png')
+    // 70 x 25 mm at 600 dpi is 1654 x 591 px; a 4:1 logo is limited by the width.
+    expect([result.png.readUInt32BE(16), result.png.readUInt32BE(20)]).toEqual([1654, 414])
+    expect(result.hasText).toBe(false)
+
+    const open = (inner: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">${inner}</svg>`
+    expect(svgProblem(open('<script>alert(1)</script>'))).toContain('Skripte')
+    expect(svgProblem(open('<rect onload="alert(1)"/>'))).toContain('Skripte')
+    expect(svgProblem(open('<foreignObject><div/></foreignObject>'))).toContain('Skripte')
+    expect(svgProblem(open('<image href="https://example.org/x.png"/>'))).toContain('verweist')
+    expect(svgProblem(open('<image xlink:href="/etc/passwd"/>'))).toContain('verweist')
+    expect(svgProblem(open('<image href="&#104;ttps://example.org/x.png"/>'))).toContain('verweist')
+    expect(svgProblem(open('<rect style="fill:url(https://example.org/a.svg#x)"/>'))).toContain('verweist')
+    expect(svgProblem(open('<style>@import "https://example.org/a.css";</style>'))).toContain('Stylesheets')
+    expect(svgProblem('<!DOCTYPE svg [<!ENTITY x SYSTEM "file:///etc/passwd">]>' + open('<text>&x;</text>'))).toContain('DOCTYPE')
+    expect(svgProblem(open('<image href="data:image/png;base64,iVBORw0KGgo="/><use href="#a"/>'))).toBeNull()
+    expect(svgToPng('<svg xmlns="http://www.w3.org/2000/svg"><rect></svg>')).toBe('Das SVG kann nicht gelesen werden.')
   })
 
   it('writes ZIP files that unzip reads', () => {

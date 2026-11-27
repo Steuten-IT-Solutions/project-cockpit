@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
     const settings = await erp.master.settings()
     const label = doc.kind === 'quote' ? 'Angebot' : 'Auftragsbestätigung'
     const text = mailText(settings?.mailText ?? null, { document: label, number: file.number, grossCents: doc.grossCents, dueDate: doc.validUntil, sender: settings?.contactName ?? settings?.name ?? '' })
-    await sendDocument(erp.mail, settings, to, `${label} ${file.number} – ${settings?.name ?? ''}`, text, [{ filename: `${file.number}.pdf`, contentType: 'application/pdf', content: file.content }])
+    await sendDocument(erp.mail, settings, doc.kind === 'quote' ? 'quote' : 'order', to, `${label} ${file.number} – ${settings?.name ?? ''}`, text, [{ filename: `${file.number}.pdf`, contentType: 'application/pdf', content: file.content }])
     return { message: `${label} ${file.number} an ${to} gesendet.` }
   })
 })
