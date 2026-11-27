@@ -103,6 +103,12 @@ the new Nuxt cockpit; see `app/README.md`, "Deployment" and "Cutover checklist".
    `cockpit.` and `status.` to the server, then run `bash server-setup.sh certs`. The MX records
    stay unchanged until the mail server is verified.
 6. **Mail:** alert e-mails use PHP `mail()`, which needs a local `sendmail`; see *Mail server*.
+7. **Fast deployments:** with `SFTP_PRIVATE_KEY`, *Deploy* sends the build as one archive over
+   SSH to `bin/receive-deploy.sh` of the previous deployment. It unpacks it next to the
+   application, swaps each folder in with a rename, keeps the replaced version in
+   `/srv/cockpit/app/.previous/` and logs each deployment in `.deploy-log`. The first deployment
+   with this script uploads file by file over SFTP once and brings the script along. Nothing to
+   install.
 
 ## Mail server
 

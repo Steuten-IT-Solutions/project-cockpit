@@ -22,7 +22,9 @@ name: Deploy
 # host names only after "cockpit-setup cutover" on the VPS (app/README.md, "Cutover").
 #
 # Never deployed or deleted on the server: config/config.php, config/*.pem and var/.
-# bin/deploy-sftp.sh refuses to deploy into a folder with foreign content.
+# With a key (VPS), the build goes as one archive over SSH to bin/receive-deploy.sh of the
+# previous deployment (seconds). Without it (first run, IONOS) bin/deploy-sftp.sh uploads it
+# file by file (about 40 minutes) and refuses to deploy into a folder with foreign content.
 
 on:
   push:
@@ -79,6 +81,8 @@ jobs:
           cp -R public receiver src templates migrations cron resources vendor build/
           # The e-invoice engine the Node server calls (app/server/lib/erp/engine.ts).
           mkdir -p build/bin && cp bin/invoice.php build/bin/
+          # Unpacks the next deployment on the server (see the step "Upload").
+          cp bin/receive-deploy.sh build/bin/
           cp .htaccess composer.json build/
           cp config/config.example.php build/config/
           echo "Deployed by project-cockpit. Marks this directory as a deployment target; see bin/deploy-sftp.sh." > build/.cockpit-deploy
@@ -102,7 +106,7 @@ jobs:
             echo "::error::Set SFTP_PRIVATE_KEY (VPS) or SFTP_PASSWORD (IONOS)."; exit 1
           fi
 
-      - name: Upload over SFTP
+      - name: Upload
         env:
           SFTP_HOST: ${{ secrets.SFTP_HOST }}
           SFTP_USER: ${{ secrets.SFTP_USER }}
@@ -119,5 +123,19 @@ jobs:
             (umask 077 && printf '%s\n' "$SFTP_PRIVATE_KEY" > ~/.ssh/deploy_key)
             export SFTP_KEY_FILE="$HOME/.ssh/deploy_key"
           fi
-          # Refuses to touch a directory that is not an earlier deployment of this project.
+          # Fast way (VPS): the whole build as one archive over one SSH connection; the
+          # bin/receive-deploy.sh of the previous deployment unpacks it and switches over.
+          if [ -n "$SFTP_PRIVATE_KEY" ]; then
+            ssh_opts=(-i "$SFTP_KEY_FILE" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts")
+            receive="APP=$(printf '%q' "$SFTP_TARGET_DIR") bash $(printf '%q' "$SFTP_TARGET_DIR/bin/receive-deploy.sh")"
+            if [ "$(ssh "${ssh_opts[@]}" "$SFTP_USER@$SFTP_HOST" "$receive probe" 2>/dev/null || true)" = "ready" ]; then
+              tar -C build -czf build.tgz .
+              echo "Archive: $(du -h build.tgz | cut -f1)"
+              ssh "${ssh_opts[@]}" "$SFTP_USER@$SFTP_HOST" "$receive" < build.tgz
+              exit 0
+            fi
+            echo "::notice::bin/receive-deploy.sh is not on the server yet; uploading file by file this once."
+          fi
+          # Slow way: lftp mirror over SFTP. Refuses to touch a directory that is not an earlier
+          # deployment of this project.
           bin/deploy-sftp.sh
