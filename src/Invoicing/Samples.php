@@ -46,7 +46,7 @@ final class Samples
                 $buyer,
                 [
                     new InvoiceLine('Kompanie-App, Kauf und Einrichtung', 1000, 'LS', 49900, 19),
-                    new InvoiceLine('Fachbuch', 2000, 'C62', 2490, 7),
+                    new InvoiceLine('Fachbuch', 2000, 'C62', 2490, 7, discountBp: 1000),
                     new InvoiceLine('Schulung (steuerfrei)', 1000, 'HUR', 8000, 0),
                 ],
                 false, $iban, bic: 'COBADEFFXXX', exemptionReason: 'Steuerfreie Leistung (Beispieltext für den Test).',

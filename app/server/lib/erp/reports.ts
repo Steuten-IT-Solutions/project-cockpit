@@ -21,9 +21,9 @@ export async function exportArchive(pool: Pool, invoices: InvoiceRepository, fro
   const date = now
 
   const outgoing = await rows<{ id: number, type: string, number: string, issueDate: string, deliveryDate: string, dueDate: string, buyer: string,
-    net: number, tax: number, gross: number, preceding: string | null, hash: string, paid: number }>(pool,
+    net: number, tax: number, gross: number, preceding: string | null, partial: number, hash: string, paid: number }>(pool,
   `SELECT i.id, i.type, i.number, i.issue_date AS issueDate, i.delivery_date AS deliveryDate, i.due_date AS dueDate, i.buyer, i.net_cents AS net,
-    i.tax_cents AS tax, i.gross_cents AS gross, p.number AS preceding, i.hash,
+    i.tax_cents AS tax, i.gross_cents AS gross, p.number AS preceding, i.partial, i.hash,
     (SELECT COALESCE(SUM(amount_cents), 0) FROM invoice_payments x WHERE x.invoice_id = i.id) AS paid
     FROM invoices i LEFT JOIN invoices p ON p.id = i.preceding_invoice_id
     WHERE i.status = 'final' AND i.issue_date BETWEEN ? AND ? ORDER BY i.chain_no`, [from, to])
@@ -33,10 +33,10 @@ export async function exportArchive(pool: Pool, invoices: InvoiceRepository, fro
   }
   entries.push({
     name: 'ausgangsrechnungen.csv', date,
-    content: csv(['Nummer', 'Art', 'Rechnungsdatum', 'Leistungsdatum', 'Fällig', 'Kunde', 'USt-IdNr. Kunde', 'Netto', 'USt', 'Brutto', 'Bezahlt', 'Storniert Rechnung', 'Prüfsumme'],
+    content: csv(['Nummer', 'Art', 'Rechnungsdatum', 'Leistungsdatum', 'Fällig', 'Kunde', 'USt-IdNr. Kunde', 'Netto', 'USt', 'Brutto', 'Bezahlt', 'Bezieht sich auf', 'Prüfsumme'],
       outgoing.map((i) => {
         const buyer = JSON.parse(i.buyer) as { name: string, vatId?: string | null }
-        return [i.number, i.type === '381' ? 'Stornorechnung' : 'Rechnung', day(i.issueDate), day(i.deliveryDate), day(i.dueDate), buyer.name, buyer.vatId ?? null,
+        return [i.number, i.type !== '381' ? 'Rechnung' : Number(i.partial) === 1 ? 'Rechnungskorrektur' : 'Stornorechnung', day(i.issueDate), day(i.deliveryDate), day(i.dueDate), buyer.name, buyer.vatId ?? null,
           csvAmount(num(i.net)), csvAmount(num(i.tax)), csvAmount(num(i.gross)), csvAmount(num(i.paid)), i.preceding, i.hash]
       })),
   })
@@ -141,11 +141,14 @@ export async function yearReport(pool: Pool, year: number): Promise<YearReport> 
 
   const [sums] = await rows<{ net: unknown, tax: unknown }>(pool, `SELECT SUM(${signed} * i.net_cents) AS net, SUM(${signed} * i.tax_cents) AS tax FROM invoices i
     WHERE i.status = 'final' AND i.issue_date BETWEEN ? AND ?`, [from, to])
-  // Open at the end of the year (or today, for the current year): finalized, not cancelled, not fully paid.
-  const [open] = await rows<{ s: unknown }>(pool, `SELECT SUM(i.gross_cents - (SELECT COALESCE(SUM(amount_cents), 0) FROM invoice_payments x WHERE x.invoice_id = i.id AND x.paid_on <= ?)) AS s
+  // Open at the end of the year (or today, for the current year): finalized, not cancelled,
+  // gross minus payments minus Rechnungskorrekturen up to that day, where that is above 0.
+  const [open] = await rows<{ s: unknown }>(pool, `SELECT SUM(GREATEST(0, i.gross_cents
+      - (SELECT COALESCE(SUM(amount_cents), 0) FROM invoice_payments x WHERE x.invoice_id = i.id AND x.paid_on <= ?)
+      - (SELECT COALESCE(SUM(k.gross_cents), 0) FROM invoices k WHERE k.preceding_invoice_id = i.id AND k.type = '381' AND k.partial = 1
+          AND k.status = 'final' AND k.issue_date <= ?))) AS s
     FROM invoices i WHERE i.status = 'final' AND i.type = '380' AND i.issue_date <= ?
-    AND NOT EXISTS (SELECT 1 FROM invoices s WHERE s.preceding_invoice_id = i.id AND s.status = 'final' AND s.issue_date <= ?)
-    AND i.gross_cents > (SELECT COALESCE(SUM(amount_cents), 0) FROM invoice_payments x WHERE x.invoice_id = i.id AND x.paid_on <= ?)`, [to, to, to, to])
+    AND NOT EXISTS (SELECT 1 FROM invoices s WHERE s.preceding_invoice_id = i.id AND s.partial = 0 AND s.status = 'final' AND s.issue_date <= ?)`, [to, to, to, to])
   const [payables] = await rows<{ s: unknown }>(pool, `SELECT SUM(gross_cents) AS s FROM incoming_invoices WHERE status <> 'discarded' AND issue_date <= ?
     AND (paid_on IS NULL OR paid_on > ?)`, [to, to])
   const received = async (y: number) => num((await rows<{ s: unknown }>(pool, 'SELECT SUM(amount_cents) AS s FROM invoice_payments WHERE YEAR(paid_on) = ?', [y]))[0]?.s)

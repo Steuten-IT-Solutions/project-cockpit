@@ -26,15 +26,20 @@ final class InvoicingTest extends TestCase
         $line = new InvoiceLine('Schulung', 1500, 'HUR', 8000);
         self::assertSame(12000, $line->netCents());
         self::assertSame(500, (new InvoiceLine('x', 1500, 'C62', 333))->netCents(), '1.5 × 3.33 € = 4.995 € rounds half up to 5.00 €.');
+        $discounted = new InvoiceLine('Fachbuch', 2000, 'C62', 2490, 7, discountBp: 1000);
+        self::assertSame(4980, $discounted->amountBeforeDiscountCents());
+        self::assertSame(498, $discounted->discountCents());
+        self::assertSame(4482, $discounted->netCents(), '10 % off 49.80 € is 44.82 €.');
+        self::assertSame(1, (new InvoiceLine('x', 1000, 'C62', 5, discountBp: 1250))->discountCents(), '12.5 % of 5 cents = 0.625 rounds half up to 1 cent.');
 
         $invoice = Samples::all()['regelbesteuert'];
-        self::assertSame(62880, $invoice->netTotal());
+        self::assertSame(62382, $invoice->netTotal());
         self::assertSame([
             ['category' => 'S', 'rate' => 19, 'basis' => 49900, 'tax' => 9481],
-            ['category' => 'S', 'rate' => 7, 'basis' => 4980, 'tax' => 349],
+            ['category' => 'S', 'rate' => 7, 'basis' => 4482, 'tax' => 314],
             ['category' => 'E', 'rate' => 0, 'basis' => 8000, 'tax' => 0],
         ], $invoice->vatBreakdown());
-        self::assertSame(72710, $invoice->grossTotal());
+        self::assertSame(72177, $invoice->grossTotal());
     }
 
     public function testSmallBusinessInvoiceCarriesNoVat(): void

@@ -1,4 +1,4 @@
-import { addDays, REMINDER_DAYS, REMINDER_LEVELS, reminderText } from '#shared/lib/erp'
+import { addDays, openAmount, REMINDER_DAYS, REMINDER_LEVELS, reminderText } from '#shared/lib/erp'
 import type { CompanySettings, InvoiceDetail } from '#shared/types/erp'
 import { InvoiceError } from './invoices'
 
@@ -18,7 +18,7 @@ export function nextReminder(invoice: InvoiceDetail, settings: CompanySettings |
   const last = invoice.reminders.at(-1)
   if (last !== undefined && last.newDueDate >= today) throw new InvoiceError(`Die Frist der letzten Erinnerung läuft noch bis ${last.newDueDate.split('-').reverse().join('.')}.`)
   if (settings === null) throw new InvoiceError('Bitte trage zuerst deine Firmendaten ein.')
-  const openCents = invoice.grossCents - invoice.paidCents
+  const openCents = openAmount(invoice)
   const newDueDate = addDays(today, REMINDER_DAYS)
   const text = reminderText({
     level, number: invoice.number!, issueDate: invoice.issueDate!, dueDate: invoice.dueDate!, openCents, newDueDate,

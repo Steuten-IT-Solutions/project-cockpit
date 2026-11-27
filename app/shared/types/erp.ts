@@ -58,7 +58,7 @@ export interface CatalogItem {
 }
 
 /** open: not yet due; overdue: due date passed; partial counts as open or overdue. */
-export type InvoiceState = 'draft' | 'open' | 'overdue' | 'paid' | 'cancelled' | 'cancellation'
+export type InvoiceState = 'draft' | 'open' | 'overdue' | 'paid' | 'cancelled' | 'cancellation' | 'correction'
 
 export interface InvoiceSummary {
   id: number
@@ -75,6 +75,10 @@ export interface InvoiceSummary {
   taxCents: number
   grossCents: number
   paidCents: number
+  /** Gross sum of the Rechnungskorrekturen to this invoice. */
+  creditedCents: number
+  /** A 381 that corrects part of an invoice (Rechnungskorrektur) rather than cancelling it. */
+  correction: boolean
   state: InvoiceState
   reminderLevel: number
   sentAt: string | null
@@ -97,6 +101,8 @@ export interface InvoiceDetail extends InvoiceSummary {
   hash: string | null
   /** The time entries this draft bills (module 6). */
   timeEntryIds: number[]
+  /** Cancellation and Rechnungskorrekturen to this invoice, or for a 381 the invoice it refers to. */
+  related: { id: number, number: string, issueDate: string, grossCents: number, correction: boolean }[]
 }
 
 export interface Supplier {

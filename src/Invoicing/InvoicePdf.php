@@ -139,6 +139,13 @@ final class InvoicePdf
                 $pdf->Cell($w, 6, self::t($value), 0, 0, $align);
             }
             $pdf->Ln();
+            if ($line->discountBp > 0) {
+                $pdf->SetX(self::LEFT + 12);
+                $pdf->SetFont('DejaVu', '', 8);
+                $pdf->MultiCell($cols[1][1], 4, self::t('Rabatt ' . self::percent($line->discountBp) . ' auf '
+                    . self::money($line->amountBeforeDiscountCents()) . ': ' . self::money(-$line->discountCents())), 0, 'L');
+                $pdf->SetFont('DejaVu', '', 9);
+            }
             if ($line->description !== null && trim($line->description) !== '') {
                 $pdf->SetX(self::LEFT + 12);
                 $pdf->SetFont('DejaVu', '', 8);
@@ -242,6 +249,14 @@ final class InvoicePdf
     }
 
     /** "1", "1,5", "0,25" from thousandths. */
+    /** 1000 → "10 %", 1250 → "12,5 %" (hundredths of a percent). */
+    public static function percent(int $basisPoints): string
+    {
+        $text = number_format($basisPoints / 100, 2, ',', '.');
+
+        return rtrim(rtrim($text, '0'), ',') . "\u{00A0}%";
+    }
+
     public static function quantity(int $milli): string
     {
         $text = number_format($milli / 1000, 3, ',', '.');

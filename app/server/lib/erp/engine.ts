@@ -31,13 +31,15 @@ export interface RenderDocument {
   dueDate: string
   seller: PartyDocument
   buyer: PartyDocument
-  lines: { name: string, description: string | null, quantityMilli: number, unit: string, unitPriceCents: number, vatRate: number }[]
+  lines: { name: string, description: string | null, quantityMilli: number, unit: string, unitPriceCents: number, vatRate: number, discountBp: number }[]
   smallBusiness: boolean
   iban: string
   bic?: string | null
   exemptionReason?: string | null
   note?: string | null
   precedingNumber?: string | null
+  /** A 381 that corrects only part of the invoice (Rechnungskorrektur), not a cancellation. */
+  correction?: boolean
   logo?: { data: string, type: string } | null
 }
 

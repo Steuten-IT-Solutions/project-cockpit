@@ -83,8 +83,8 @@ export class SalesRepository {
 
   private async writeLines(db: Sql, id: number, lines: Line[]): Promise<void> {
     for (const [i, l] of lines.entries()) {
-      await exec(db, `INSERT INTO sales_lines (document_id, position, name, description, quantity_milli, unit, unit_price_cents, vat_rate)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [id, i + 1, l.name, l.description, l.quantityMilli, l.unit, l.unitPriceCents, l.vatRate])
+      await exec(db, `INSERT INTO sales_lines (document_id, position, name, description, quantity_milli, unit, unit_price_cents, vat_rate, discount_bp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, i + 1, l.name, l.description, l.quantityMilli, l.unit, l.unitPriceCents, l.vatRate, l.discountBp])
     }
   }
 

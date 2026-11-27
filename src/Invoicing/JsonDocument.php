@@ -31,6 +31,7 @@ final class JsonDocument
                 self::int($line, 'unitPriceCents'),
                 self::int($line, 'vatRate'),
                 self::optional($line, 'description'),
+                array_key_exists('discountBp', $line) ? self::int($line, 'discountBp') : 0,
             );
         }
         $seller = self::party(self::map($data, 'seller'), true);
@@ -75,6 +76,19 @@ final class JsonDocument
         $mode = self::mode($data);
         if ($mode === 'draft' || ($data['draft'] ?? null) === true) {
             $options['watermark'] = 'ENTWURF';
+        }
+        if (($data['correction'] ?? null) === true && $invoice->type === Invoice::TYPE_CREDIT_NOTE) {
+            // A partial correction: the same e-invoice type 381 as a cancellation, but it
+            // reduces the invoice instead of cancelling it.
+            $options['title'] = 'Rechnungskorrektur';
+            $options['meta'] = [
+                'Nummer' => $invoice->number,
+                'Datum' => $invoice->issueDate->format('d.m.Y'),
+                'Leistungsdatum' => $invoice->deliveryDate->format('d.m.Y'),
+                'Korrektur zu' => (string)$invoice->precedingNumber,
+            ];
+            $options['closing'] = 'Diese Rechnungskorrektur mindert den Betrag der Rechnung ' . $invoice->precedingNumber
+                . ' um die oben aufgeführten Positionen. Bereits gezahlte Beträge erstatten wir oder verrechnen sie.';
         }
         if ($mode === 'quote') {
             $options['title'] = 'Angebot';

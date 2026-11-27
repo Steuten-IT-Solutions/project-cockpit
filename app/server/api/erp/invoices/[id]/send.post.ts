@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     if (invoice.status !== 'final' || file === null) refuse('Bitte schreibe die Rechnung zuerst fest.')
     const to = recipient(body.to, invoice.customerEmail)
     const settings = await erp.master.settings()
-    const document = invoice.type === '381' ? 'Stornorechnung' : 'Rechnung'
+    const document = invoice.type !== '381' ? 'Rechnung' : invoice.correction ? 'Rechnungskorrektur' : 'Stornorechnung'
     const text = mailText(settings?.mailText ?? null, { document, number: file.number, grossCents: invoice.grossCents, dueDate: invoice.dueDate, sender: settings?.contactName ?? settings?.name ?? '' })
     await sendDocument(erp.mail, settings, invoice.type === '381' ? 'cancellation' : 'invoice', to, `${document} ${file.number} – ${settings?.name ?? ''}`, text, [{ filename: `${file.number}.pdf`, contentType: 'application/pdf', content: file.content }])
     await repository.event(erp.pool, id, 'sent', to, erp.now())

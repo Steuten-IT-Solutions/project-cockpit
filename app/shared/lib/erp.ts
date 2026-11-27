@@ -23,6 +23,8 @@ export interface Line {
   unit: string
   unitPriceCents: number
   vatRate: number
+  /** Discount on the line in hundredths of a percent: 1000 = 10 %, 0 = none. */
+  discountBp: number
 }
 
 /** A line as typed into the form: quantity and price as German text. */
@@ -33,17 +35,31 @@ export interface LineForm {
   unit: string
   price: string
   vatRate: number
+  /** Discount in percent as German text ("10", "12,5"); empty for none. */
+  discount: string
 }
 
-/** Net amount of a line in cents, rounded half up (like InvoiceLine::netCents()). */
-export function lineNet(line: Pick<Line, 'quantityMilli' | 'unitPriceCents'>): number {
+type Priced = Pick<Line, 'quantityMilli' | 'unitPriceCents'> & { discountBp?: number }
+
+/** Quantity times price in cents, rounded half up, before any discount (InvoiceLine::amountBeforeDiscountCents()). */
+export function lineBeforeDiscount(line: Priced): number {
   return Math.floor((line.quantityMilli * line.unitPriceCents + 500) / 1000)
+}
+
+/** The discount of a line in cents, rounded half up (InvoiceLine::discountCents()). */
+export function lineDiscount(line: Priced): number {
+  return Math.floor((lineBeforeDiscount(line) * (line.discountBp ?? 0) + 5000) / 10000)
+}
+
+/** Net amount of a line in cents after the discount (like InvoiceLine::netCents()). */
+export function lineNet(line: Priced): number {
+  return lineBeforeDiscount(line) - lineDiscount(line)
 }
 
 export interface VatGroup { category: 'S' | 'E', rate: number, basis: number, tax: number }
 
 /** Net, VAT per rate and gross, like Invoice::vatBreakdown(): the tax is computed per rate on its sum. */
-export function totals(lines: Pick<Line, 'quantityMilli' | 'unitPriceCents' | 'vatRate'>[]): { net: number, tax: number, gross: number, groups: VatGroup[] } {
+export function totals(lines: (Priced & Pick<Line, 'vatRate'>)[]): { net: number, tax: number, gross: number, groups: VatGroup[] } {
   const groups = new Map<number, VatGroup>()
   for (const line of lines) {
     const group = groups.get(line.vatRate) ?? { category: line.vatRate === 0 ? 'E' : 'S', rate: line.vatRate, basis: 0, tax: 0 }
@@ -67,6 +83,23 @@ export function parseQuantity(input: string): number | null {
   if (m === null) return null
   const milli = Number.parseInt(m[1]!, 10) * 1000 + Number.parseInt((m[2] ?? '0').padEnd(3, '0'), 10)
   return milli > 0 ? milli : null
+}
+
+/** "10", "12,5" or "" (none) as hundredths of a percent; null unless 0 to 100 with up to 2 decimals. */
+export function parsePercent(input: string): number | null {
+  const value = input.trim().replace(/\s*%$/, '')
+  if (value === '') return 0
+  const m = /^(\d{1,3})(?:[.,](\d{1,2}))?$/.exec(value)
+  if (m === null) return null
+  const bp = Number.parseInt(m[1]!, 10) * 100 + Number.parseInt((m[2] ?? '0').padEnd(2, '0'), 10)
+  return bp <= 10000 ? bp : null
+}
+
+/** 1000 → "10", 1250 → "12,5", 0 → "" (like InvoicePdf::percent() without the sign). */
+export function percentText(bp: number): string {
+  if (bp === 0) return ''
+  const fraction = (bp % 100).toString().padStart(2, '0').replace(/0+$/, '')
+  return fraction === '' ? String(Math.floor(bp / 100)) : `${Math.floor(bp / 100)},${fraction}`
 }
 
 /** "1", "1,5", "0,25" from thousandths (like InvoicePdf::quantity()). */
@@ -105,7 +138,9 @@ export function lineFromForm(form: Partial<LineForm>, position: number, smallBus
   const vatRate = Number(form.vatRate)
   if (!(VAT_RATES as readonly number[]).includes(vatRate)) return `Position ${position}: Unbekannter Steuersatz.`
   if (smallBusiness && vatRate !== 0) return `Position ${position}: Als Kleinunternehmer darfst du keine Umsatzsteuer ausweisen (§ 19 UStG).`
-  return { name, description: cleanText(form.description, 500, true), quantityMilli, unit: form.unit, unitPriceCents, vatRate }
+  const discountBp = parsePercent(form.discount ?? '')
+  if (discountBp === null) return `Position ${position}: Der Rabatt muss ein Prozentsatz zwischen 0 und 100 sein, z. B. 10 oder 12,5.`
+  return { name, description: cleanText(form.description, 500, true), quantityMilli, unit: form.unit, unitPriceCents, vatRate, discountBp }
 }
 
 /** All lines of a document; at least one, at most 100. */
@@ -124,7 +159,7 @@ export function linesFromForm(forms: unknown, smallBusiness: boolean): Line[] | 
 export function lineToForm(line: Line): LineForm {
   return {
     name: line.name, description: line.description ?? '', quantity: quantity(line.quantityMilli),
-    unit: line.unit, price: priceText(line.unitPriceCents), vatRate: line.vatRate,
+    unit: line.unit, price: priceText(line.unitPriceCents), vatRate: line.vatRate, discount: percentText(line.discountBp),
   }
 }
 
@@ -202,14 +237,20 @@ export function daysBetween(a: string, b: string): number {
 
 /**
  * Where an invoice stands. A cancellation (381) and the invoice it cancels are both
- * settled; anything else is paid once the payments cover the gross amount.
+ * settled; anything else is paid once payments and Rechnungskorrekturen cover the gross amount.
  */
-export function invoiceState(invoice: { status: string, type: string, grossCents: number, paidCents: number, dueDate: string | null, cancelled: boolean }, todayDate: string): 'draft' | 'open' | 'overdue' | 'paid' | 'cancelled' | 'cancellation' {
+export function invoiceState(invoice: { status: string, type: string, grossCents: number, paidCents: number, creditedCents?: number, correction?: boolean,
+  dueDate: string | null, cancelled: boolean }, todayDate: string): 'draft' | 'open' | 'overdue' | 'paid' | 'cancelled' | 'cancellation' | 'correction' {
   if (invoice.status === 'draft') return 'draft'
-  if (invoice.type === '381') return 'cancellation'
+  if (invoice.type === '381') return invoice.correction === true ? 'correction' : 'cancellation'
   if (invoice.cancelled) return 'cancelled'
-  if (invoice.paidCents >= invoice.grossCents) return 'paid'
+  if (openAmount(invoice) === 0) return 'paid'
   return invoice.dueDate !== null && invoice.dueDate < todayDate ? 'overdue' : 'open'
+}
+
+/** What the customer still owes: gross minus payments minus Rechnungskorrekturen; never below 0. */
+export function openAmount(invoice: { grossCents: number, paidCents: number, creditedCents?: number }): number {
+  return Math.max(0, invoice.grossCents - invoice.paidCents - (invoice.creditedCents ?? 0))
 }
 
 export const INVOICE_STATES: Record<string, { label: string, tone: 'neutral' | 'info' | 'warning' | 'success' | 'error' }> = {
@@ -219,6 +260,7 @@ export const INVOICE_STATES: Record<string, { label: string, tone: 'neutral' | '
   paid: { label: 'Bezahlt', tone: 'success' },
   cancelled: { label: 'Storniert', tone: 'neutral' },
   cancellation: { label: 'Stornorechnung', tone: 'neutral' },
+  correction: { label: 'Rechnungskorrektur', tone: 'neutral' },
 }
 
 /** Dunning levels: a friendly reminder first, then two reminders (no fees, no interest). */

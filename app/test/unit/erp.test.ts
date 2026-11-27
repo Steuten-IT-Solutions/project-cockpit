@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  addDays, addMonths, csvAmount, csvRow, daysBetween, documentNumber, euro, invoiceState, isoDate, isValidIban, lineFromForm, lineNet,
+  addDays, addMonths, csvAmount, csvRow, daysBetween, documentNumber, euro, invoiceState, isoDate, isValidIban, lineDiscount, lineFromForm, lineNet, openAmount, parsePercent, percentText,
   linesFromForm, mailText, parseQuantity, senderFor, period, priceText, quantity, reminderText, totals,
 } from '../../shared/lib/erp'
 import { nextReminder } from '../../server/lib/erp/dunning'
-import { chainHash, finalizeProblem } from '../../server/lib/erp/invoices'
+import { chainHash, correctionProblem, finalizeProblem } from '../../server/lib/erp/invoices'
 import { customerFromBody, incomingFromBody, settingsFromBody, timeFromBody } from '../../server/lib/erp/forms'
 import { incomingType, logoType } from '../../server/lib/erp/files'
 import { isSvg, svgProblem, svgToPng } from '../../server/lib/erp/logo'
@@ -26,6 +26,18 @@ describe('amounts', () => {
     expect(lineNet({ quantityMilli: 333, unitPriceCents: 1 })).toBe(0) // 0,333 ct
     expect(lineNet({ quantityMilli: 500, unitPriceCents: 1 })).toBe(1) // 0,5 ct rounds up
     expect(lineNet({ quantityMilli: 1250, unitPriceCents: 999 })).toBe(1249) // 12,4875 €
+    // Same figures as tests/Unit/InvoicingTest.php, so screen and PDF agree.
+    expect(lineDiscount({ quantityMilli: 2000, unitPriceCents: 2490, discountBp: 1000 })).toBe(498)
+    expect(lineNet({ quantityMilli: 2000, unitPriceCents: 2490, discountBp: 1000 })).toBe(4482)
+    expect(lineDiscount({ quantityMilli: 1000, unitPriceCents: 5, discountBp: 1250 })).toBe(1) // 0,625 ct rounds up
+    expect(lineNet({ quantityMilli: 1000, unitPriceCents: 5000, discountBp: 10000 })).toBe(0)
+    expect(parsePercent('')).toBe(0)
+    expect(parsePercent('0,25')).toBe(25)
+    expect(parsePercent('100')).toBe(10000)
+    expect(parsePercent('100,01')).toBeNull()
+    expect(parsePercent('1,234')).toBeNull()
+    expect(percentText(1250)).toBe('12,5')
+    expect(percentText(0)).toBe('')
   })
 
   it('computes the tax per rate on the sum of its lines', () => {
@@ -59,8 +71,11 @@ describe('amounts', () => {
   })
 
   it('validates lines with German messages', () => {
-    const ok = { name: 'Beratung', description: '', quantity: '1,5', unit: 'HUR', price: '90', vatRate: 0 }
-    expect(lineFromForm(ok, 1, true)).toEqual({ name: 'Beratung', description: null, quantityMilli: 1500, unit: 'HUR', unitPriceCents: 9000, vatRate: 0 })
+    const ok = { name: 'Beratung', description: '', quantity: '1,5', unit: 'HUR', price: '90', vatRate: 0, discount: '' }
+    expect(lineFromForm(ok, 1, true)).toEqual({ name: 'Beratung', description: null, quantityMilli: 1500, unit: 'HUR', unitPriceCents: 9000, vatRate: 0, discountBp: 0 })
+    expect(lineFromForm({ ...ok, discount: '12,5 %' }, 1, true)).toMatchObject({ discountBp: 1250 })
+    expect(lineFromForm({ ...ok, discount: '101' }, 4, true)).toContain('Position 4: Der Rabatt')
+    expect(lineFromForm({ ...ok, discount: '-5' }, 4, true)).toContain('Der Rabatt')
     expect(lineFromForm({ ...ok, vatRate: 19 }, 2, true)).toContain('Kleinunternehmer')
     expect(lineFromForm({ ...ok, unit: 'XYZ' }, 3, false)).toBe('Position 3: Unbekannte Einheit.')
     expect(lineFromForm({ ...ok, name: '  ' }, 1, false)).toContain('Bezeichnung')
@@ -105,6 +120,23 @@ describe('invoice state', () => {
     expect(invoiceState({ ...base, paidCents: 10000 }, '2026-11-21')).toBe('paid')
     expect(invoiceState({ ...base, cancelled: true }, '2026-11-21')).toBe('cancelled')
     expect(invoiceState({ ...base, type: '381' }, '2026-11-21')).toBe('cancellation')
+    expect(invoiceState({ ...base, type: '381', correction: true }, '2026-11-21')).toBe('correction')
+    // A Rechnungskorrektur lowers what is owed: 60 € paid plus 40 € credited settle 100 €.
+    expect(invoiceState({ ...base, paidCents: 6000, creditedCents: 4000 }, '2026-11-21')).toBe('paid')
+    expect(openAmount({ grossCents: 10000, paidCents: 6000, creditedCents: 1000 })).toBe(3000)
+    expect(openAmount({ grossCents: 10000, paidCents: 10000, creditedCents: 1000 })).toBe(0)
+  })
+
+  it('limits a Rechnungskorrektur to the invoice', () => {
+    const line = { name: 'Beratung', description: null, quantityMilli: 2000, unit: 'HUR', unitPriceCents: 10000, vatRate: 19, discountBp: 0 }
+    const invoice = [line]
+    expect(correctionProblem(invoice, [{ ...line, quantityMilli: 1000 }], 23800, false)).toBeNull()
+    expect(correctionProblem(invoice, [], 23800, false)).toContain('mindestens eine Position')
+    expect(correctionProblem(invoice, [{ ...line, vatRate: 7 }], 23800, false)).toContain('keine Position mit 7 %')
+    expect(correctionProblem(invoice, [{ ...line, unitPriceCents: 0 }], 23800, false)).toContain('größer als 0')
+    // 2 h at 100 € plus 19 % = 238 €; after a credit of 119 € only 119 € are left.
+    expect(correctionProblem(invoice, [line], 11900, false)).toContain('höher als der noch nicht gutgeschriebene Betrag')
+    expect(correctionProblem([{ ...line, vatRate: 0 }], [{ ...line, vatRate: 19 }], 99999, true)).toContain('Kleinunternehmer')
   })
 
   it('names what keeps a draft from being finalized', () => {
@@ -147,7 +179,7 @@ describe('texts', () => {
 
   it('turns a time entry into a position', () => {
     expect(entryLine({ workDate: '2026-11-26', description: 'Server eingerichtet\nmit Backup', quantityMilli: 2500, unit: 'HUR', unitPriceCents: 9000, vatRate: 0 }))
-      .toEqual({ name: 'Server eingerichtet', description: 'Leistung am 26.11.2026\nmit Backup', quantityMilli: 2500, unit: 'HUR', unitPriceCents: 9000, vatRate: 0 })
+      .toEqual({ name: 'Server eingerichtet', description: 'Leistung am 26.11.2026\nmit Backup', quantityMilli: 2500, unit: 'HUR', unitPriceCents: 9000, vatRate: 0, discountBp: 0 })
   })
 })
 

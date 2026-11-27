@@ -42,4 +42,4 @@ export async function transaction<T>(pool: Pool, work: (db: PoolConnection) => P
 export const num = (value: unknown): number => (value === null || value === undefined ? 0 : Number(value))
 
 /** Lines as stored (invoice_lines, subscription_lines, sales_lines) in the shape of `Line`. */
-export const LINE_COLUMNS = 'name, description, quantity_milli AS quantityMilli, unit, unit_price_cents AS unitPriceCents, vat_rate AS vatRate'
+export const LINE_COLUMNS = 'name, description, quantity_milli AS quantityMilli, unit, unit_price_cents AS unitPriceCents, vat_rate AS vatRate, discount_bp AS discountBp'

@@ -77,6 +77,17 @@ final class ZugferdXml
             $b->setDocumentPositionNetPrice(self::eur($line->unitPriceCents));
             $b->setDocumentPositionQuantity($line->quantityMilli / 1000, $line->unit);
             $b->addDocumentPositionTax($invoice->categoryOf($line), 'VAT', (float)$line->vatRate);
+            if ($line->discountBp > 0) {
+                // Line allowance (BG-27): reason code 95 is "Discount" in UNTDID 5189.
+                $b->addDocumentPositionAllowanceCharge(
+                    self::eur($line->discountCents()),
+                    false,
+                    $line->discountBp / 100,
+                    self::eur($line->amountBeforeDiscountCents()),
+                    '95',
+                    'Rabatt',
+                );
+            }
             $b->setDocumentPositionLineSummation(self::eur($line->netCents()));
         }
 

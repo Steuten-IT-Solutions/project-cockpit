@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { addDays, day, euro, type LineForm, lineToForm, ORDER_STATES, QUOTE_STATES, QUOTE_VALID_DAYS, quantity, UNITS } from '#shared/lib/erp'
+import { addDays, day, euro, type LineForm, lineToForm, ORDER_STATES, percentText, QUOTE_STATES, QUOTE_VALID_DAYS, quantity, UNITS } from '#shared/lib/erp'
 import type { CatalogItem, Choice, SalesDocument } from '#shared/types/erp'
 
 // One quote or order confirmation: edit the draft, issue it (number and PDF), send it,
@@ -177,7 +177,7 @@ const statusLabel = computed(() => (kind.value === 'quote' ? QUOTE_STATES : ORDE
                 {{ l.description }}
               </p>
               <p class="text-xs text-muted">
-                {{ quantity(l.quantityMilli) }} {{ UNITS[l.unit] }} × {{ euro(l.unitPriceCents) }}
+                {{ quantity(l.quantityMilli) }} {{ UNITS[l.unit] }} × {{ euro(l.unitPriceCents) }}<span v-if="l.discountBp > 0"> · {{ percentText(l.discountBp) }} % Rabatt</span>
               </p>
             </li>
           </ul>
