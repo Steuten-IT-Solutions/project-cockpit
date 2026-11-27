@@ -132,6 +132,11 @@ async function upload() {
     error.value = errorMessage(e)
     // A file without e-invoice data needs the fields typed in.
     if (error.value.includes('keine E-Rechnung')) showManual.value = true
+    // Already in the books: the mailbox file was set aside, so the list changes.
+    if (error.value.includes('bereits erfasst')) {
+      mailFile.value = null
+      await refresh()
+    }
   }
   finally {
     busy.value = null
