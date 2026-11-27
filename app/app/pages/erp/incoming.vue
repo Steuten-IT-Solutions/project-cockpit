@@ -174,11 +174,23 @@ const kindItems = [{ value: 'invoice', label: 'Rechnung' }, { value: 'credit', l
 const relatedItems = computed(() => [{ value: NONE, label: '– keine –' }, ...(data.value?.invoices ?? [])
   .filter(i => i.kind === 'invoice' && i.status !== 'discarded' && (form.supplierId === NEW || String(i.supplierId) === form.supplierId))
   .map(i => ({ value: String(i.id), label: `${i.supplierName} · ${i.number} · ${day(i.issueDate)} · ${euro(i.grossCents)}` }))])
+// Gross of the credit notes that refer to each invoice, for the hint in the list.
+const creditsOf = computed(() => {
+  const sums = new Map<number, number>()
+  for (const i of data.value?.invoices ?? []) {
+    if (i.kind === 'credit' && i.relatedId !== null && i.status !== 'discarded') sums.set(i.relatedId, (sums.get(i.relatedId) ?? 0) + i.grossCents)
+  }
+  return sums
+})
 const signed = (i: IncomingInvoice) => i.kind === 'credit' ? -i.grossCents : i.grossCents
 const refundSum = computed(() => (data.value?.invoices ?? []).filter(i => i.status === 'open' && i.kind === 'credit').reduce((s, i) => s + i.grossCents, 0))
 
 const filter = ref('open')
-const list = computed(() => (data.value?.invoices ?? []).filter(i => filter.value === 'all' || i.status === filter.value))
+// Second filter: all documents, only invoices or only credit notes and refunds.
+const kindFilter = ref('all')
+const list = computed(() => (data.value?.invoices ?? []).filter(i => (filter.value === 'all' || i.status === filter.value)
+  && (kindFilter.value === 'all' || i.kind === kindFilter.value)))
+const listSum = computed(() => list.value.reduce((s, i) => s + signed(i), 0))
 const openSum = computed(() => (data.value?.invoices ?? []).filter(i => i.status === 'open' && i.kind === 'invoice').reduce((s, i) => s + i.grossCents, 0))
 const STATUS: Record<string, { label: string, color: 'info' | 'success' | 'neutral' }> = {
   open: { label: 'Offen', color: 'info' }, paid: { label: 'Bezahlt', color: 'success' }, discarded: { label: 'Verworfen', color: 'neutral' },
@@ -237,12 +249,21 @@ const STATUS: Record<string, { label: string, color: 'info' | 'success' | 'neutr
             Offen zu zahlen <strong class="text-highlighted">{{ euro(openSum) }}</strong>
             <span v-if="refundSum > 0"> · Erstattungen offen <strong class="text-highlighted">{{ euro(refundSum) }}</strong></span>
           </p>
-          <div class="flex gap-1">
-            <UButton
-v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'], ['all', 'Alle']]" :key="f[0]" size="xs"
-              :color="filter === f[0] ? 'primary' : 'neutral'" :variant="filter === f[0] ? 'solid' : 'outline'" @click="filter = f[0]!">
-              {{ f[1] }}
-            </UButton>
+          <div class="flex flex-col items-start gap-1">
+            <div class="flex gap-1">
+              <UButton
+v-for="f in [['open', 'Offen'], ['paid', kindFilter === 'credit' ? 'Erstattet' : 'Bezahlt'], ['discarded', 'Verworfen'], ['all', 'Alle']]" :key="f[0]" size="xs"
+                :color="filter === f[0] ? 'primary' : 'neutral'" :variant="filter === f[0] ? 'solid' : 'outline'" @click="filter = f[0]!">
+                {{ f[1] }}
+              </UButton>
+            </div>
+            <div class="flex gap-1">
+              <UButton
+v-for="f in [['all', 'Alle Arten'], ['invoice', 'Rechnungen'], ['credit', 'Gutschriften']]" :key="f[0]" size="xs"
+                :color="kindFilter === f[0] ? 'primary' : 'neutral'" :variant="kindFilter === f[0] ? 'solid' : 'outline'" @click="kindFilter = f[0]!">
+                {{ f[1] }}
+              </UButton>
+            </div>
           </div>
         </div>
         <p v-if="list.length === 0" class="text-sm text-muted">
@@ -256,6 +277,8 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
                 <p class="text-xs text-muted">
                   {{ day(i.issueDate) }} · {{ INCOMING_CATEGORIES[i.category] }}<span v-if="i.dueDate && i.status === 'open'" :class="i.dueDate < data.today ? 'text-error' : ''"> · fällig {{ day(i.dueDate) }}</span>
                   <span v-if="i.format !== 'other'"> · E-Rechnung</span>
+                  <span v-if="creditsOf.get(i.id)"> · Gutschriften {{ euro(-creditsOf.get(i.id)!) }}</span>
+                  <span v-if="i.kind === 'credit' && i.relatedId !== null"> · zu {{ data.invoices.find(r => r.id === i.relatedId)?.number ?? 'Rechnung' }}</span>
                 </p>
               </div>
               <div class="flex items-center gap-2 text-sm">
@@ -266,6 +289,10 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
             </NuxtLink>
           </li>
         </ul>
+        <p v-if="list.length > 1 && kindFilter === 'credit'" class="mt-2 flex justify-between border-t border-default pt-2 text-sm">
+          <span>Summe der angezeigten Gutschriften</span>
+          <strong>{{ euro(listSum) }}</strong>
+        </p>
       </UCard>
 
       <UCard id="erfassen" class="lg:col-span-2">
@@ -314,10 +341,10 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
               <UInput v-model="form.supplierName" :maxlength="100" class="w-full" />
             </UFormField>
             <div class="grid grid-cols-2 gap-3">
-              <UFormField label="Rechnungsnummer">
+              <UFormField :label="form.kind === 'credit' ? 'Nummer der Gutschrift' : 'Rechnungsnummer'">
                 <UInput v-model="form.number" :maxlength="60" class="w-full" />
               </UFormField>
-              <UFormField label="Rechnungsdatum">
+              <UFormField :label="form.kind === 'credit' ? 'Datum der Gutschrift' : 'Rechnungsdatum'">
                 <UInput v-model="form.issueDate" type="date" class="w-full" />
               </UFormField>
               <UFormField :label="`Netto (${sign})`">
@@ -326,7 +353,7 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
               <UFormField :label="`Umsatzsteuer (${sign})`">
                 <UInput v-model="form.tax" inputmode="decimal" class="w-full" />
               </UFormField>
-              <UFormField label="Fällig am" hint="optional">
+              <UFormField :label="form.kind === 'credit' ? 'Erstattung bis' : 'Fällig am'" hint="optional">
                 <UInput v-model="form.dueDate" type="date" class="w-full" />
               </UFormField>
               <UFormField label="IBAN" hint="optional">

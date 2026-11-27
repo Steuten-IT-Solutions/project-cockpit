@@ -185,10 +185,11 @@ export function projectSharesFromBody(body: Body, projectIds: number[]): Project
 
 /** The editable fields of an incoming invoice; amounts as German text, gross = net + tax. */
 export function incomingFromBody(body: Body, projectIds: number[]): IncomingInput | string {
+  const kind = field(body, 'kind') === 'credit' ? 'credit' : 'invoice'
   const number = optional(body, 'number', 60)
-  if (number === null) return 'Bitte die Rechnungsnummer des Lieferanten eingeben.'
+  if (number === null) return kind === 'credit' ? 'Bitte die Nummer der Gutschrift eingeben.' : 'Bitte die Rechnungsnummer des Lieferanten eingeben.'
   const issueDate = isoDate(field(body, 'issueDate'))
-  if (issueDate === null) return 'Bitte das Rechnungsdatum angeben.'
+  if (issueDate === null) return kind === 'credit' ? 'Bitte das Datum der Gutschrift angeben.' : 'Bitte das Rechnungsdatum angeben.'
   const due = field(body, 'dueDate')
   const dueDate = due === '' || due === null || due === undefined ? null : isoDate(due)
   if (dueDate === null && due !== '' && due !== null && due !== undefined) return 'Das Fälligkeitsdatum ist ungültig.'
@@ -210,7 +211,6 @@ export function incomingFromBody(body: Body, projectIds: number[]): IncomingInpu
   }
   const category = String(field(body, 'category') ?? '')
   if (!(category in INCOMING_CATEGORIES)) return 'Bitte eine Kategorie wählen.'
-  const kind = field(body, 'kind') === 'credit' ? 'credit' : 'invoice'
   const related = idField(field(body, 'relatedId'))
   if (related === 'invalid') return 'Unbekannte Rechnung für die Gutschrift.'
   const projects = projectSharesFromBody(body, projectIds)
