@@ -314,10 +314,10 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
               <UInput v-model="form.supplierName" :maxlength="100" class="w-full" />
             </UFormField>
             <div class="grid grid-cols-2 gap-3">
-              <UFormField label="Rechnungsnummer">
+              <UFormField :label="form.kind === 'credit' ? 'Nummer der Gutschrift' : 'Rechnungsnummer'">
                 <UInput v-model="form.number" :maxlength="60" class="w-full" />
               </UFormField>
-              <UFormField label="Rechnungsdatum">
+              <UFormField :label="form.kind === 'credit' ? 'Datum der Gutschrift' : 'Rechnungsdatum'">
                 <UInput v-model="form.issueDate" type="date" class="w-full" />
               </UFormField>
               <UFormField :label="`Netto (${sign})`">
@@ -326,7 +326,7 @@ v-for="f in [['open', 'Offen'], ['paid', 'Bezahlt'], ['discarded', 'Verworfen'],
               <UFormField :label="`Umsatzsteuer (${sign})`">
                 <UInput v-model="form.tax" inputmode="decimal" class="w-full" />
               </UFormField>
-              <UFormField label="Fällig am" hint="optional">
+              <UFormField :label="form.kind === 'credit' ? 'Erstattung bis' : 'Fällig am'" hint="optional">
                 <UInput v-model="form.dueDate" type="date" class="w-full" />
               </UFormField>
               <UFormField label="IBAN" hint="optional">

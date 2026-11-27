@@ -230,6 +230,10 @@ describe('forms', () => {
 
   it('validates incoming invoices and time entries', () => {
     expect(incomingFromBody({ number: 'RE-1', issueDate: '2026-11-01', net: '100', tax: '19', category: 'hosting' }, [])).toMatchObject({ grossCents: 11900 })
+    // A credit note asks for its own number and date.
+    expect(incomingFromBody({ kind: 'credit', issueDate: '2026-11-01', net: '10', tax: '0', category: 'hosting' }, [])).toBe('Bitte die Nummer der Gutschrift eingeben.')
+    expect(incomingFromBody({ kind: 'credit', number: 'G-1', net: '10', tax: '0', category: 'hosting' }, [])).toBe('Bitte das Datum der Gutschrift angeben.')
+    expect(incomingFromBody({ kind: 'credit', number: 'G-1', issueDate: '2026-11-01', net: '10', tax: '0', category: 'hosting' }, [])).toMatchObject({ kind: 'credit', relatedId: null })
     expect(incomingFromBody({ number: 'RE-1', issueDate: '2026-11-01', net: '100', category: 'x' }, [])).toBe('Bitte eine Kategorie wählen.')
     const time = { workDate: '2026-11-26', customerId: '3', description: 'Arbeit', quantity: '1,5', unit: 'HUR', price: '90', vatRate: 0 }
     expect(timeFromBody(time, { customers: [3], projects: [], orders: [] }, true)).toMatchObject({ quantityMilli: 1500, unitPriceCents: 9000 })

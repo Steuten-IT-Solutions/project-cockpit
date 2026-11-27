@@ -141,10 +141,10 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
         </template>
         <form class="space-y-3" @submit.prevent="save">
           <div class="grid grid-cols-2 gap-3">
-            <UFormField label="Rechnungsnummer">
+            <UFormField :label="form.kind === 'credit' ? 'Nummer der Gutschrift' : 'Rechnungsnummer'">
               <UInput v-model="form.number" :maxlength="60" class="w-full" :disabled="data.invoice.status === 'discarded'" />
             </UFormField>
-            <UFormField label="Rechnungsdatum">
+            <UFormField :label="form.kind === 'credit' ? 'Datum der Gutschrift' : 'Rechnungsdatum'">
               <UInput v-model="form.issueDate" type="date" class="w-full" :disabled="data.invoice.status === 'discarded'" />
             </UFormField>
             <UFormField :label="`Netto (${sign})`">
@@ -153,7 +153,7 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
             <UFormField :label="`Umsatzsteuer (${sign})`">
               <UInput v-model="form.tax" inputmode="decimal" class="w-full" :disabled="data.invoice.status === 'discarded'" />
             </UFormField>
-            <UFormField label="Fällig am">
+            <UFormField :label="form.kind === 'credit' ? 'Erstattung bis' : 'Fällig am'">
               <UInput v-model="form.dueDate" type="date" class="w-full" :disabled="data.invoice.status === 'discarded'" />
             </UFormField>
             <UFormField label="IBAN">
@@ -192,7 +192,7 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
           <p class="text-sm">
             Brutto <strong>{{ euro(data.invoice.grossCents) }}</strong>
             <span v-if="data.invoice.currency !== 'EUR'" class="text-muted">
-              (Rechnung über {{ priceText((data.invoice.originalNetCents ?? 0) + (data.invoice.originalTaxCents ?? 0)) }} {{ data.invoice.currency }})
+              ({{ isCredit ? 'Gutschrift' : 'Rechnung' }} über {{ priceText((data.invoice.originalNetCents ?? 0) + (data.invoice.originalTaxCents ?? 0)) }} {{ data.invoice.currency }})
             </span>
           </p>
           <UButton v-if="data.invoice.status !== 'discarded'" type="submit" :loading="busy === 'save'">
