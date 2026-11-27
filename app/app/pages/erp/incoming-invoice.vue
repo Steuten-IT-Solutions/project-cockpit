@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { day, euro, ibanText, INCOMING_CATEGORIES, priceText, UNITS } from '#shared/lib/erp'
+import { day, euro, ibanText, INCOMING_CATEGORIES, priceText, type ShareForm, shareForms, sharesBody, splitCents, UNITS } from '#shared/lib/erp'
 import type { Choice, IncomingInvoice, Supplier } from '#shared/types/erp'
 
 // One incoming invoice: what the e-invoice says, the stored file, payment and corrections.
@@ -20,27 +20,34 @@ if (error.value?.statusCode === 404) {
 useHead({ title: computed(() => `${data.value?.invoice.supplierName ?? 'Eingangsrechnung'} · Cockpit`) })
 const { busy, run } = useAction()
 
-const NONE = 'none'
-const form = reactive({ number: '', issueDate: '', dueDate: '', net: '', tax: '', category: 'other', projectId: NONE, iban: '', note: '' })
+const form = reactive({ number: '', issueDate: '', dueDate: '', net: '', tax: '', category: 'other', iban: '', note: '' })
+const shares = ref<ShareForm[]>([])
 function fill() {
   const i = data.value?.invoice
   if (!i) return
   Object.assign(form, {
     number: i.number, issueDate: i.issueDate, dueDate: i.dueDate ?? '', net: priceText(i.netCents), tax: priceText(i.taxCents),
-    category: i.category, projectId: i.projectId !== null ? String(i.projectId) : NONE, iban: i.iban ?? '', note: i.note ?? '',
+    category: i.category, iban: i.iban ?? '', note: i.note ?? '',
   })
+  shares.value = shareForms(i.projects)
 }
 fill()
 watch(() => data.value?.invoice, fill)
 const categoryItems = Object.entries(INCOMING_CATEGORIES).map(([value, label]) => ({ value, label }))
-const projectItems = computed(() => [{ value: NONE, label: '– kein Projekt –' }, ...(data.value?.projects ?? []).map(p => ({ value: String(p.id), label: p.name }))])
+// The stored split in euros, as the evaluation counts it.
+const projectParts = computed(() => {
+  const i = data.value?.invoice
+  if (!i || i.projects.length < 2) return []
+  const cents = splitCents(i.netCents, i.projects.map(p => p.shareBp))
+  return i.projects.map((p, k) => ({ name: data.value!.projects.find(c => c.id === p.projectId)?.name ?? `Projekt ${p.projectId}`, cents: cents[k]! }))
+})
 const ibanChanged = computed(() => {
   const iban = data.value?.invoice.iban
   return iban != null && data.value!.otherIbans.length > 0 && !data.value!.otherIbans.includes(iban)
 })
 
 async function save() {
-  if (await run('save', () => cockpitSend('PUT', `/api/erp/incoming/${id.value}`, { ...form, projectId: form.projectId === NONE ? '' : form.projectId })) !== null) await refresh()
+  if (await run('save', () => cockpitSend('PUT', `/api/erp/incoming/${id.value}`, { ...form, projects: sharesBody(shares.value) })) !== null) await refresh()
 }
 const paidOn = ref('')
 watch(() => data.value?.today, (t) => { paidOn.value = t ?? '' }, { immediate: true })
@@ -143,10 +150,13 @@ v-if="ibanChanged" color="error" variant="subtle" icon="i-lucide-shield-alert"
             <UFormField label="Kategorie">
               <USelect v-model="form.category" :items="categoryItems" class="w-full" :disabled="data.invoice.status === 'discarded'" />
             </UFormField>
-            <UFormField label="Projekt">
-              <USelect v-model="form.projectId" :items="projectItems" class="w-full" :disabled="data.invoice.status === 'discarded'" />
-            </UFormField>
           </div>
+          <UFormField label="Projekt">
+            <ErpProjectShares v-model="shares" :projects="data.projects" :disabled="data.invoice.status === 'discarded'" />
+          </UFormField>
+          <p v-if="projectParts.length > 0" class="text-xs text-muted">
+            Netto je Projekt: <span v-for="(p, k) in projectParts" :key="p.name">{{ k > 0 ? ' · ' : '' }}{{ p.name }} {{ euro(p.cents) }}</span>
+          </p>
           <UFormField label="Notiz">
             <UInput v-model="form.note" :maxlength="500" class="w-full" :disabled="data.invoice.status === 'discarded'" />
           </UFormField>

@@ -128,7 +128,7 @@ export class MailFileRepository {
       return (await one<{ status: string }>(this.pool, 'SELECT status FROM incoming_mail_files WHERE id = ?', [id]))?.status === 'booked' ? 'ignored' : 'new'
     }
     try {
-      const result = await new IncomingRepository(this.pool).upload({ name: file.name, data: file.data }, null, 'other', null, engine, now)
+      const result = await new IncomingRepository(this.pool).upload({ name: file.name, data: file.data }, null, 'other', [], engine, now)
       await this.booked(id, result.id, now)
       if (result.warnings.length > 0) await exec(this.pool, 'UPDATE incoming_mail_files SET problem = ? WHERE id = ?', [result.warnings.join(' ').slice(0, 500), id])
       return 'booked'

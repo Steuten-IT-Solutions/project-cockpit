@@ -378,4 +378,34 @@ describe('ERP', () => {
     const einvoice = Buffer.from(await (await client.request(`/api/erp/invoices/${invoiceId}/pdf`)).arrayBuffer())
     expect(await suggest(einvoice, 'e.pdf', 'application/pdf')).toMatchObject({ einvoice: true, fields: null })
   })
+
+  it('splits an incoming invoice across projects', async () => {
+    await sql(`INSERT INTO projects (id, full_name, owner, name, html_url, is_private, is_archived, is_fork, default_branch, synced_at, hidden)
+      VALUES (2, 'Org/web', 'Org', 'web', 'https://github.com/Org/web', 1, 0, 0, 'main', NOW(), 0)`)
+    const year = new Date().getFullYear()
+    const form = new FormData()
+    form.append('file', new Blob([Buffer.from('%PDF-1.4\n% Server\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n')], { type: 'application/pdf' }), 'server.pdf')
+    const fields = { category: 'hosting', supplierName: 'Hoster', number: 'H-1', issueDate: `${year}-03-01`, net: '100,01', tax: '19,00',
+      projects: JSON.stringify([{ projectId: '1', share: '60' }, { projectId: '2', share: '40' }]) }
+    for (const [k, v] of Object.entries(fields)) form.append(k, v)
+    const created = await upload('/api/erp/incoming', form)
+    expect(created.status).toBe(200)
+    const id = created.json.id as number
+    const detail = () => client.json<{ invoice: { projectId: number | null, projects: { projectId: number, shareBp: number }[] } }>(`/api/erp/incoming/${id}`)
+    expect((await detail()).invoice).toMatchObject({ projectId: 1, projects: [{ projectId: 1, shareBp: 6000 }, { projectId: 2, shareBp: 4000 }] })
+
+    // The evaluation counts 60,01 € for app and 40,00 € for web: the parts add up to the net.
+    const expenses = async () => (await client.json<{ report: { projects: { name: string, expenses: number }[] } }>(`/api/erp/report?year=${year}`)).report.projects
+    const before = await expenses()
+    const of = (list: { name: string, expenses: number }[], name: string) => list.find(p => p.name === name)?.expenses ?? 0
+    expect(of(before, 'web')).toBe(4000)
+
+    const base = { number: 'H-1', issueDate: `${year}-03-01`, net: '100,01', tax: '19,00', category: 'hosting', iban: '', note: '' }
+    expect((await send('PUT', `/api/erp/incoming/${id}`, { ...base, projects: [{ projectId: '1', share: '70' }, { projectId: '2', share: '20' }] })).json.statusMessage).toContain('100 %')
+    expect((await send('PUT', `/api/erp/incoming/${id}`, { ...base, projects: [{ projectId: '2', share: '' }] })).status).toBe(200)
+    expect((await detail()).invoice).toMatchObject({ projectId: 2, projects: [{ projectId: 2, shareBp: 10000 }] })
+    const after = await expenses()
+    expect(of(after, 'web')).toBe(10001)
+    expect(of(after, 'app')).toBe(of(before, 'app') - 6001)
+  })
 })

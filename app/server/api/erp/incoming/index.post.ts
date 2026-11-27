@@ -1,4 +1,4 @@
-import { idField, incomingFromBody } from '../../../lib/erp/forms'
+import { idField, incomingFromBody, projectSharesFromBody } from '../../../lib/erp/forms'
 import { IncomingRepository, type ManualEntry } from '../../../lib/erp/incoming'
 import { InvoiceError } from '../../../lib/erp/invoices'
 import { MailFileRepository } from '../../../lib/erp/mailbox'
@@ -21,8 +21,8 @@ export default defineEventHandler(async (event) => {
   const category = body.category ?? 'other'
   if (!(category in INCOMING_CATEGORIES)) refuse('Bitte eine Kategorie wählen.')
   const projectIds = (await erp.master.projects()).map(p => p.id)
-  const projectId = idField(body.projectId)
-  if (projectId === 'invalid' || (projectId !== null && !projectIds.includes(projectId))) refuse('Unbekanntes Projekt.')
+  const projects = projectSharesFromBody(body, projectIds)
+  if (typeof projects === 'string') refuse(projects)
 
   // The typed-in fields count only when the file is no e-invoice; until then a
   // validation message is kept and shown only if they are needed.
@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
   const mailFileId = idField(body.mailFileId)
   const result = await erpAction(async () => {
     try {
-      return await new IncomingRepository(erp.pool).upload({ name: file.filename ?? 'rechnung', data: file.data }, manual, category, projectId, erp.engine, erp.now())
+      return await new IncomingRepository(erp.pool).upload({ name: file.filename ?? 'rechnung', data: file.data }, manual, category, projects, erp.engine, erp.now())
     }
     catch (e) {
       // The invoice is in the books already (the same file, or this supplier's invoice
