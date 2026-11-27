@@ -128,6 +128,10 @@ The brand colours are the two variables at the top of `website/assets/site.css`.
   notice states. Until both `www.` and the apex point to the server (A and, if present, AAAA)
   it serves HTTP only; after the DNS change run it again and it gets a Let's Encrypt
   certificate and switches to HTTPS.
+- **Further domains:** `.com`, `.info`, `.online` and `.org` (`WEB_REDIRECTS`) redirect, with
+  their `www.`, permanently to `https://www.steuten-it-solutions.de/` (Apache site
+  `cockpit-redirects`). Each gets its own certificate as soon as both names point to the server;
+  until then it redirects over HTTP only. Run `cockpit-setup website` again after DNS changes.
 - **Contact form:** the only dynamic part. Apache forwards `POST /kontakt/senden` (nothing else)
   to the Node cockpit, `app/server/routes/_website/kontakt.post.ts`, which answers only for the
   www host name, mails the message from `noreply@` to `info@` through sendmail (Reply-To: the
@@ -166,6 +170,11 @@ forwarding too (`rechnung@` sends as `invoice@`):
 | `belege@` | → `eingangsrechnung@` |
 | `noreply@` | → `christian.steuten@` (sender of cockpit alerts; bounces arrive there) |
 | `postmaster@`, `abuse@` | → `christian.steuten@` |
+
+The further domains in `MAIL_ALIAS_DOMAINS` (`.com`, `.info`, `.online`, `.org`) receive mail for
+the same addresses: `info@steuten-it-solutions.com` lands in `info@steuten-it-solutions.de`.
+There is no catch-all, and nobody sends as these domains. Their DNS records: `MX @ 10
+mail.steuten-it-solutions.de`, `TXT @ v=spf1 -all`, `TXT _dmarc v=DMARC1; p=reject;`.
 
 1. **Preconditions:** outbound port 25 open, A/AAAA of `mail.` point to the server, reverse DNS of
    the IPv4 (and IPv6) address is `mail.steuten-it-solutions.de`.
