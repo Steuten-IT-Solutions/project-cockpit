@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { codeAt } from '../../server/lib/totp'
 import { Client } from './client'
-import { BASE, USER, resetDatabase, startServer, stopServer } from './setup'
+import { BASE, USER, resetDatabase, sql, startServer, stopServer } from './setup'
 
 const totpNow = () => codeAt(USER.totp, Math.floor(Date.now() / 30000))
 
@@ -102,6 +102,31 @@ describe('login', () => {
     const client = new Client()
     await client.session()
     expect((await client.post('/api/login/code', { code: totpNow() })).status).toBe(409)
+  })
+
+  it('stores no session for requests that do not need one', async () => {
+    const sessions = async () => Number(((await sql('SELECT COUNT(*) AS n FROM web_sessions')) as { n: unknown }[])[0]!.n)
+    const before = await sessions()
+    // A bot asking for an API route without a cookie: refused, nothing stored, no cookie.
+    const api = await fetch(`${BASE}/api/dashboard`)
+    expect(api.status).toBe(401)
+    expect(api.headers.getSetCookie()).toEqual([])
+    expect(await sessions()).toBe(before)
+    // The login page hands out a CSRF token, so its session is stored.
+    const page = await fetch(`${BASE}/login`)
+    expect(page.headers.getSetCookie().join()).toContain('cockpit_session_dev=')
+    expect(await sessions()).toBe(before + 1)
+  })
+
+  it('counts parallel failures one by one', async () => {
+    const client = new Client()
+    await client.session()
+    // Ten wrong passwords at once for one account: only five may be checked, the rest
+    // must already see the block (before, all ten passed the count at the same time).
+    const statuses = await Promise.all(Array.from({ length: 10 }, () =>
+      client.post('/api/login', { username: 'parallel', password: 'wrong' }).then(r => r.status)))
+    expect(statuses.filter(s => s === 401)).toHaveLength(5)
+    expect(statuses.filter(s => s === 429)).toHaveLength(5)
   })
 
   it('blocks an account after five failures', async () => {

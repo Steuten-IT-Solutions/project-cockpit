@@ -1,0 +1,36 @@
+name: Audit
+
+# Known vulnerabilities in the dependencies that run on the server: the npm packages of the
+# Nuxt cockpit (app/) and the Composer packages of the PHP e-invoice engine. Runs every
+# Monday and on demand; a failed run means a package with a high or critical advisory, and
+# GitHub sends its usual e-mail about the failed workflow. Build tools (devDependencies) are
+# left out: they never run on the server.
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+
+      - name: npm audit (app, runtime packages)
+        working-directory: app
+        run: npm audit --omit=dev --audit-level=high
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          tools: composer
+
+      - name: composer audit (e-invoice engine)
+        run: composer audit --no-dev --locked

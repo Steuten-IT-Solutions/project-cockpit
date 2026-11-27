@@ -3,6 +3,7 @@ import { AuthLog, Throttle, UserRepository } from '../lib/auth'
 import { type CockpitConfig, parseConfig, type RawConfig } from '../lib/config'
 import { Crypto, deriveAppKey } from '../lib/crypto'
 import { database, databasePool } from '../lib/db'
+import { SerialQueue } from '../lib/serial'
 import { Session } from '../lib/session'
 
 // Shared services for the server routes. Files in server/utils are auto-imported
@@ -68,6 +69,10 @@ export async function requireUser(event: H3Event) {
 export async function commitSession(event: H3Event): Promise<void> {
   const session = requireSession(event)
   await session.save()
+  // A new session that was never needed is not stored, so it gets no cookie either.
+  if (!session.isStored) {
+    return
+  }
   setCookie(event, sessionCookieName(event), session.token, {
     httpOnly: true,
     secure: useRuntimeConfig(event).secureCookies,
@@ -92,3 +97,6 @@ export function clientIp(event: H3Event): string {
   }
   return socket
 }
+
+/** Password and code checks of the login, one at a time (see SerialQueue). */
+export const loginQueue = new SerialQueue()

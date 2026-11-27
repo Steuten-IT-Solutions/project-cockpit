@@ -1,0 +1,13 @@
+# Keeps the GitHub Actions of the workflows up to date. They are pinned to commit hashes (a
+# moved tag cannot slip other code into the deploy job, which holds the server's deploy key);
+# Dependabot proposes the new hash with its version once a month. Vulnerable npm and Composer
+# packages are reported by .github/workflows/audit.yml.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
