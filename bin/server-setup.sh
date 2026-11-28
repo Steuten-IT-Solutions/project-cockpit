@@ -238,6 +238,16 @@ Done. Next steps (README.md, "Own server"):
 EOF
 }
 
+# Waits up to 30 s until fail2ban answers on its socket.
+fail2ban_ready() {
+    local _
+    for _ in $(seq 1 30); do
+        fail2ban-client ping > /dev/null 2>&1 && return 0
+        sleep 1
+    done
+    return 1
+}
+
 # Hardening beyond the defaults, for new servers (called by "base") and existing ones.
 harden() {
     export DEBIAN_FRONTEND=noninteractive
@@ -274,11 +284,21 @@ EOF
         printf '\n[recidive]\nenabled = true\nbackend = auto\n' >> "$jails"
     fi
     # A jail fail2ban cannot start would stop all of them, SSH included: then go back.
-    if ! systemctl restart fail2ban || ! fail2ban-client ping > /dev/null 2>&1; then
+    # fail2ban needs a few seconds after the restart before it answers on its socket.
+    if ! { systemctl restart fail2ban && fail2ban_ready; }; then
+        echo "server-setup: fail2ban refused the extra jails; left as before. Its log:" >&2
+        journalctl -u fail2ban -n 20 --no-pager >&2 || true
         rm -f "$jails"
         systemctl restart fail2ban
-        echo "server-setup: fail2ban refused the extra jails; left as before. See: journalctl -u fail2ban" >&2
+        fail2ban_ready || echo "server-setup: fail2ban does not answer; check: systemctl status fail2ban" >&2
     fi
+
+    # Link-local name resolution (LLMNR) listens on port 5355 of every interface. The firewall
+    # blocks it, but nothing here needs it.
+    install -d -m 755 /etc/systemd/resolved.conf.d
+    printf '# Written by server-setup.sh (step "harden").\n[Resolve]\nLLMNR=no\nMulticastDNS=no\n' \
+        > /etc/systemd/resolved.conf.d/cockpit.conf
+    systemctl try-restart systemd-resolved
 
     # Security updates of libraries (e.g. OpenSSL) reach running programs only after a
     # restart: needrestart does that after every unattended upgrade, without asking.
