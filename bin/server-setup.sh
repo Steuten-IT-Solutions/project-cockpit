@@ -255,7 +255,10 @@ harden() {
 
     # Apache: no version in headers and error pages, no TRACE, and no folder listings anywhere
     # under /var/www (the mail host's ACME folder showed an empty listing on port 80).
-    cat > /etc/apache2/conf-available/cockpit-hardening.conf <<'EOF'
+    # The name sorts after Debian's security.conf (ServerTokens OS), which would win otherwise.
+    a2disconf -q cockpit-hardening > /dev/null 2>&1 || true
+    rm -f /etc/apache2/conf-available/cockpit-hardening.conf
+    cat > /etc/apache2/conf-available/zz-cockpit-hardening.conf <<'EOF'
 # Written by server-setup.sh (step "harden").
 ServerTokens Prod
 ServerSignature Off
@@ -264,7 +267,7 @@ TraceEnable Off
     Options -Indexes
 </Directory>
 EOF
-    a2enconf -q cockpit-hardening > /dev/null
+    a2enconf -q zz-cockpit-hardening > /dev/null
     apache2ctl configtest
     systemctl reload apache2
 
