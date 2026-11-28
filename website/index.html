@@ -5,49 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Steuten IT Solutions</title>
   <meta name="description" content="Steuten IT Solutions aus Meerbusch entwickelt Webseiten und Apps und berät zu Software und Hardware.">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#111618">
   <link rel="stylesheet" href="/assets/site.css">
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
 </head>
-<body>
+<body class="home">
+  <a class="skip" href="#inhalt">Zum Inhalt springen</a>
   <header class="site-header">
     <div class="wrap header-row">
       <a class="brand" href="/" aria-label="Steuten IT Solutions, Startseite">
-        <picture>
-          <source srcset="/assets/logo-light.svg" media="(prefers-color-scheme: dark)">
-          <img src="/assets/logo.svg" alt="Steuten IT Solutions" width="146" height="36">
-        </picture>
+        <img src="/assets/logo-light.svg" alt="Steuten IT Solutions" width="146" height="36">
       </a>
       <nav aria-label="Hauptnavigation">
         <a href="#leistungen">Leistungen</a>
         <a href="#projekte">Projekte</a>
-        <a href="#kontakt">Kontakt</a>
+        <a class="nav-cta" href="#kontakt">Kontakt</a>
       </nav>
     </div>
   </header>
 
-  <main>
+  <main id="inhalt">
     <section class="hero">
-      <div class="wrap">
-        <p class="eyebrow">IT-Dienstleistungen aus Meerbusch</p>
-        <h1>Webseiten, Apps und IT-Beratung aus einer Hand</h1>
-        <p class="lead">Steuten IT Solutions entwickelt Webseiten und Apps und berät Sie bei Fragen rund um Software und Hardware. Sie haben einen festen Ansprechpartner, der Ihr Projekt von der ersten Idee bis zum Betrieb begleitet.</p>
-        <a class="button" href="#kontakt">Kontakt aufnehmen</a>
+      <!-- Decoration only: slowly drifting light, a fine grid and the S of the logo. -->
+      <div class="hero-bg" aria-hidden="true">
+        <span class="glow glow-1"></span>
+        <span class="glow glow-2"></span>
+        <span class="glow glow-3"></span>
+        <span class="grid-lines"></span>
+      </div>
+      <div class="wrap hero-row">
+        <div class="hero-text">
+          <p class="eyebrow"><span class="dot" aria-hidden="true"></span>IT-Dienstleistungen aus Meerbusch</p>
+          <h1>Webseiten, Apps und IT-Beratung <span class="shine">aus einer Hand</span></h1>
+          <p class="lead">Steuten IT Solutions entwickelt Webseiten und Apps und berät Sie bei Fragen rund um Software und Hardware. Sie haben einen festen Ansprechpartner, der Ihr Projekt von der ersten Idee bis zum Betrieb begleitet.</p>
+          <div class="actions">
+            <a class="button" href="#kontakt">Projekt anfragen</a>
+            <a class="button button-ghost" href="#projekte">Projekte ansehen</a>
+          </div>
+        </div>
+        <div class="hero-phones" aria-hidden="true">
+          <div class="phone phone-back"><img src="/assets/projects/garden.webp" alt="" width="540" height="1169"></div>
+          <div class="phone phone-front"><img src="/assets/projects/marine.webp" alt="" width="540" height="1169"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats" aria-label="Auf einen Blick">
+      <div class="wrap stats-row">
+        <div class="stat reveal"><strong>4</strong><span>Apps und Webseiten im Betrieb</span></div>
+        <div class="stat reveal"><strong>1</strong><span>fester Ansprechpartner von der Idee bis zum Betrieb</span></div>
+        <div class="stat reveal"><strong>2026</strong><span>in Meerbusch gegründet</span></div>
       </div>
     </section>
 
     <section id="leistungen" class="section">
       <div class="wrap">
-        <h2>Leistungen</h2>
-        <div class="cards">
-          <article class="card">
+        <p class="kicker">Leistungen</p>
+        <h2>Was wir für Sie tun</h2>
+        <div class="cards services">
+          <article class="card glow-card reveal">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.5 8.5h19M6 6.3h.01M8.5 6.3h.01" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M9 12.5l-2 2 2 2M15 12.5l2 2-2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <h3>Webseiten</h3>
             <p>Moderne, schnelle Webseiten, die auf dem Smartphone genauso gut funktionieren wie am Computer.</p>
           </article>
-          <article class="card">
+          <article class="card glow-card reveal">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 18.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M9 7.5h6M9 10.5h6M9 13.5h3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             <h3>Apps</h3>
             <p>Web-Apps und Apps für Vereine, Unternehmen und eigene Ideen, von der Planung bis zum laufenden Betrieb.</p>
           </article>
-          <article class="card">
+          <article class="card glow-card reveal">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 21h8M12 15v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="9" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
             <h3>Beratung zu Soft- und Hardware</h3>
             <p>Unabhängige Beratung bei der Auswahl, Einrichtung und dem Einsatz von Software und Hardware.</p>
           </article>
@@ -55,47 +83,71 @@
       </div>
     </section>
 
-    <section id="projekte" class="section section-alt">
+    <section id="projekte" class="section">
       <div class="wrap">
-        <h2>Projekte</h2>
+        <p class="kicker">Projekte</p>
+        <h2>Im Einsatz</h2>
         <p class="section-lead">Eine Auswahl von Webseiten und Apps, die wir entwickelt haben und betreiben.</p>
-        <div class="cards projects">
-          <a class="card card-link" href="https://marinekompanie-lank.de/app">
-            <h3>App der Marinekompanie Lank</h3>
-            <p>Die App für die Mitglieder der Marinekompanie Lank.</p>
-            <span class="card-url">marinekompanie-lank.de/app</span>
+        <div class="projects">
+          <a class="project project-wide reveal" href="https://marinekompanie-lank.de/app">
+            <div class="project-text">
+              <h3>App der Marinekompanie Lank</h3>
+              <p>Die App für die Mitglieder der Marinekompanie Lank.</p>
+              <span class="card-url">marinekompanie-lank.de/app</span>
+            </div>
+            <div class="project-shot"><img src="/assets/projects/marine.webp" alt="Startseite der App der Marinekompanie Lank auf dem Smartphone" width="540" height="1169" loading="lazy"></div>
           </a>
-          <a class="card card-link" href="https://toolbox-hub.app">
-            <h3>ToolBox Hub</h3>
-            <p>Kostenlose Online-Werkzeuge für Entwickler, Designer und alle anderen, die direkt im Browser laufen.</p>
-            <span class="card-url">toolbox-hub.app</span>
+          <a class="project reveal" href="https://toolbox-hub.app">
+            <div class="project-text">
+              <h3>ToolBox Hub</h3>
+              <p>Kostenlose Online-Werkzeuge für Entwickler, Designer und alle anderen, die direkt im Browser laufen.</p>
+              <span class="card-url">toolbox-hub.app</span>
+            </div>
+            <div class="project-shot"><img src="/assets/projects/toolbox.webp" alt="Startseite von ToolBox Hub auf dem Smartphone" width="540" height="1169" loading="lazy"></div>
           </a>
-          <a class="card card-link" href="https://my-garden-planner.app">
-            <h3>Garden Planner</h3>
-            <p>Beete und Blumenkästen planen, gute Nachbarpflanzen finden, Aussaat und Gießen im Blick behalten.</p>
-            <span class="card-url">my-garden-planner.app</span>
+          <a class="project reveal" href="https://my-garden-planner.app">
+            <div class="project-text">
+              <h3>Garden Planner</h3>
+              <p>Beete und Blumenkästen planen, gute Nachbarpflanzen finden, Aussaat und Gießen im Blick behalten.</p>
+              <span class="card-url">my-garden-planner.app</span>
+            </div>
+            <div class="project-shot"><img src="/assets/projects/garden.webp" alt="Startseite des Garden Planner auf dem Smartphone" width="540" height="1169" loading="lazy"></div>
           </a>
-          <a class="card card-link" href="https://partyplaylist.app">
-            <h3>PartyPlaylist</h3>
-            <p>Gäste schlagen Songs vor und stimmen ab, für die perfekte Playlist auf jeder Feier.</p>
-            <span class="card-url">partyplaylist.app</span>
+          <a class="project reveal" href="https://partyplaylist.app">
+            <div class="project-text">
+              <h3>PartyPlaylist</h3>
+              <p>Gäste schlagen Songs vor und stimmen ab, für die perfekte Playlist auf jeder Feier.</p>
+              <span class="card-url">partyplaylist.app</span>
+            </div>
+            <div class="project-shot"><img src="/assets/projects/party.webp" alt="Startseite von PartyPlaylist auf dem Smartphone" width="540" height="1169" loading="lazy"></div>
           </a>
         </div>
       </div>
     </section>
 
-    <section id="ueber" class="section">
-      <div class="wrap narrow">
-        <h2>Über uns</h2>
-        <p>Steuten IT Solutions wurde 2026 von Christian Steuten in Meerbusch gegründet. Wir entwickeln Webseiten und Apps und beraten zu Software und Hardware, mit kurzen Wegen und einem festen Ansprechpartner für Ihr Projekt.</p>
+    <section id="ablauf" class="section">
+      <div class="wrap">
+        <p class="kicker">Ablauf</p>
+        <h2>Von der Idee bis zum Betrieb</h2>
+        <ol class="steps">
+          <li class="step reveal"><span class="step-no" aria-hidden="true">01</span><h3>Gespräch</h3><p>Sie erzählen uns, was Sie vorhaben. Gemeinsam klären wir, was Ihr Projekt wirklich braucht.</p></li>
+          <li class="step reveal"><span class="step-no" aria-hidden="true">02</span><h3>Konzept</h3><p>Sie bekommen einen klaren Vorschlag mit Umfang und Kosten, bevor die Arbeit beginnt.</p></li>
+          <li class="step reveal"><span class="step-no" aria-hidden="true">03</span><h3>Umsetzung</h3><p>Wir entwickeln in kurzen Schritten und zeigen Ihnen Zwischenstände, damit Sie früh mitreden können.</p></li>
+          <li class="step reveal"><span class="step-no" aria-hidden="true">04</span><h3>Betrieb</h3><p>Nach dem Start kümmern wir uns um Updates und Betrieb und bleiben Ihr Ansprechpartner.</p></li>
+        </ol>
       </div>
     </section>
 
-    <section id="kontakt" class="section section-alt">
-      <div class="wrap narrow">
-        <h2>Kontakt</h2>
-        <p>Schreiben Sie uns, wir melden uns zeitnah bei Ihnen. Oder direkt per E-Mail an <a href="mailto:info@steuten-it-solutions.de">info@steuten-it-solutions.de</a>.</p>
-        <form class="contact-form" action="/kontakt/senden" method="post">
+    <section id="kontakt" class="section">
+      <div class="wrap contact-row">
+        <div class="contact-intro reveal">
+          <p class="kicker">Über uns</p>
+          <h2>Kurze Wege, ein Ansprechpartner</h2>
+          <p>Steuten IT Solutions wurde 2026 von Christian Steuten in Meerbusch gegründet. Wir entwickeln Webseiten und Apps und beraten zu Software und Hardware, mit kurzen Wegen und einem festen Ansprechpartner für Ihr Projekt.</p>
+          <p>Schreiben Sie uns, wir melden uns zeitnah bei Ihnen. Oder direkt per E-Mail an <a href="mailto:info@steuten-it-solutions.de">info@steuten-it-solutions.de</a>.</p>
+        </div>
+        <form class="contact-form panel reveal" action="/kontakt/senden" method="post">
+          <h2 class="form-title">Kontakt</h2>
           <label for="name">Name</label>
           <input id="name" name="name" type="text" autocomplete="name" maxlength="100" required>
 
