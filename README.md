@@ -121,12 +121,19 @@ the new Nuxt cockpit; see `app/README.md`, "Deployment" and "Cutover checklist".
 plain HTML and one stylesheet, no scripts, no cookies, nothing loaded from other hosts, plus a
 contact form (see below). Pages are
 folders with an `index.html` (`/impressum/`, `/datenschutz/`); `404.html` is the error page.
-The brand colours are the two variables at the top of `website/assets/site.css`.
+The design (dark, anthracite like the logo) is defined by the variables at the top of
+`website/assets/site.css`; all motion is CSS only and off for visitors who prefer reduced motion.
 
 - **Check:** `bin/check-website.sh` (CI job `website`) fails on open placeholders
   (`{{OFFEN: …}}`), inline scripts or styles, resources loaded from other hosts (links to
   other sites are fine) and broken internal links, so an unfinished page cannot be deployed.
 - **Deployment:** part of every build (`/srv/cockpit/app/website`).
+- **App screenshots:** `website/assets/projects/*.webp` are refreshed every Monday by
+  `.github/workflows/website-screenshots.yml` (`bin/website-screenshots.py`, phone view, German).
+  A picture is only replaced when it looks noticeably different; then the workflow commits to
+  `main` itself and starts `deploy.yml` (fully automatic, as Christian decided). If an app does
+  not answer or shows an unexpected page, the run fails and nothing changes. Run it by hand under
+  Actions → "Website screenshots" → "Run workflow". To add an app, add it to `APPS` in the script.
 - **Server:** `cockpit-setup website` writes the Apache site `cockpit-website` (no PHP, strict
   CSP, HSTS) and logs to `/var/log/website/`, deleted after at most 7 days, as the privacy
   notice states. Until both `www.` and the apex point to the server (A and, if present, AAAA)

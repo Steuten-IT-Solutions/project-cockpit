@@ -1,0 +1,55 @@
+name: Website screenshots
+
+# Refreshes the app screenshots on the company website once a week (bin/website-screenshots.py).
+# Christian chose fully automatic updates: when a picture changed noticeably, this workflow
+# commits it to main itself and starts the deployment. A commit made with GITHUB_TOKEN does not
+# trigger other workflows, so deploy.yml is started explicitly (it runs CI first, as always).
+# If an app is down or shows an unexpected page, the script fails and nothing is changed;
+# GitHub then reports the failed run by e-mail.
+
+on:
+  schedule:
+    - cron: '17 4 * * 1' # Mondays 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: website-screenshots
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+
+      - name: Install browser
+        run: |
+          python3 -m pip install --quiet playwright pillow
+          python3 -m playwright install --with-deps chromium
+
+      - name: Take screenshots
+        run: python3 bin/website-screenshots.py
+
+      - name: Check website
+        run: bin/check-website.sh
+
+      - name: Commit and deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- website/assets/projects; then
+            echo "No picture changed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add website/assets/projects
+          git commit -m "chore(website): refresh app screenshots"
+          git push origin HEAD:main
+          gh workflow run deploy.yml --ref main
