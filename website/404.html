@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Seite nicht gefunden · Steuten IT Solutions</title>
   <meta name="robots" content="noindex">
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#111618">
   <link rel="stylesheet" href="/assets/site.css">
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
 </head>
@@ -14,7 +12,10 @@
   <header class="site-header">
     <div class="wrap header-row">
       <a class="brand" href="/" aria-label="Steuten IT Solutions, Startseite">
-        <img src="/assets/logo-light.svg" alt="Steuten IT Solutions" width="146" height="36">
+        <picture>
+          <source srcset="/assets/logo-light.svg" media="(prefers-color-scheme: dark)">
+          <img src="/assets/logo.svg" alt="Steuten IT Solutions" width="146" height="36">
+        </picture>
       </a>
     </div>
   </header>
